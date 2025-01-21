@@ -68,7 +68,7 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	private <T extends NativeCompileSpec> WorkResult doCompile(T spec, PlatformToolProvider platformToolProvider) {
 		Class<T> specType = Cast.uncheckedCast(spec.getClass());
 		Compiler<T> baseCompiler = platformToolProvider.newCompiler(specType);
-		Compiler<T> perSourceCompiler = newCompiler(baseCompiler, perSourceOptions::forFile, () -> (T) createCompileSpec());
+		Compiler<T> perSourceCompiler = newPerSourceCompiler(baseCompiler, perSourceOptions::forFile, () -> (T) createCompileSpec());
 		Compiler<T> incrementalCompiler = getIncrementalCompiler().createCompiler(perSourceCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
 		return loggingCompiler.execute(spec);
@@ -85,8 +85,16 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 		}
 	}
 
+	@Inject
+	public CppCompileTask(ObjectFactory objects) {
+		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
+	}
+
+	//region Per-source Options
+	private final AllSourceOptions<CompileOptions> perSourceOptions;
+
 	// Create a per-source compiler
-	private <T extends NativeCompileSpec> Compiler<T> newCompiler(Compiler<T> delegateCompiler, Function<? super File, ? extends AllSourceOptions<CompileOptions>.Key> mapper, Factory<T> specFactory) {
+	private <T extends NativeCompileSpec> Compiler<T> newPerSourceCompiler(Compiler<T> delegateCompiler, Function<? super File, ? extends AllSourceOptions<CompileOptions>.Key> mapper, Factory<T> specFactory) {
 		return new Compiler<>() {
 			@Override
 			public WorkResult execute(T defaultSpec) {
@@ -107,6 +115,43 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 						perSourceSpecs.computeIfAbsent(k, __ -> new ArrayList<>()).add(sourceFile);
 					}
 				}
+
+				// TODO: Align the OperationLogger so one start then one done for all sub-spec
+				int expectedRuns = perSourceSpecs.size() + ((!defaultSpec.getSourceFiles().isEmpty() || !defaultSpec.getRemovedSourceFiles().isEmpty()) ? 1 : 0);
+				BuildOperationLogger logger = new BuildOperationLogger() {
+					private int i = 0;
+					private final BuildOperationLogger delegate = defaultSpec.getOperationLogger();
+
+					@Override
+					public void start() {
+						if (i++ == 0) {
+							delegate.start();
+						}
+					}
+
+					@Override
+					public void operationSuccess(String description, String output) {
+						delegate.operationSuccess(description, output);
+					}
+
+					@Override
+					public void operationFailed(String description, String output) {
+						delegate.operationFailed(description, output);
+					}
+
+					@Override
+					public void done() {
+						if (i == expectedRuns) {
+							delegate.done();
+						}
+					}
+
+					@Override
+					public String getLogLocation() {
+						return delegate.getLogLocation();
+					}
+				};
+				defaultSpec.setOperationLogger(logger);
 
 				// Execute the default bucket
 				//   it will delete the "file to remove" while the per-source bucket will only compile
@@ -158,13 +203,6 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 				return result;
 			}
 		};
-	}
-
-	private final AllSourceOptions<CompileOptions> perSourceOptions;
-
-	@Inject
-	public CppCompileTask(ObjectFactory objects) {
-		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
 	}
 
 	@Nested // Required to track changes to the per-source options
@@ -269,6 +307,7 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	public interface CompileOptions {
 		ListProperty<String> getCompilerArgs();
 	}
+	//endregion
 
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
 		@Inject
