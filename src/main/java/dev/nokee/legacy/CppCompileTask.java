@@ -1,21 +1,16 @@
 package dev.nokee.legacy;
 
-import org.apache.commons.io.FileUtils;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
-import org.gradle.api.tasks.CacheableTask;
-import org.gradle.api.tasks.Nested;
-import org.gradle.api.tasks.WorkResult;
-import org.gradle.api.tasks.WorkResults;
+import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
-import org.gradle.internal.Factory;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.language.base.internal.compile.Compiler;
-import org.gradle.language.base.internal.compile.VersionAwareCompiler;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
@@ -26,22 +21,17 @@ import org.gradle.nativeplatform.internal.BuildOperationLoggingCompilerDecorator
 import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
-import org.gradle.nativeplatform.toolchain.internal.OutputCleaningCompiler;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
-import org.gradle.util.GradleVersion;
 import org.gradle.work.InputChanges;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.function.Function;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static dev.nokee.commons.names.CppNames.compileTaskName;
@@ -96,9 +86,26 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 		}
 	}
 
+	private final GradleIssue29492Fix issue29492;
+
 	@Inject
 	public CppCompileTask(ObjectFactory objects) {
+		this.issue29492 = objects.newInstance(GradleIssue29492Fix.class).attachSource(super.getSource()::from);
 		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
+	}
+
+	@InputFiles
+	@SkipWhenEmpty
+	@IgnoreEmptyDirectories
+	@PathSensitive(PathSensitivity.RELATIVE)
+	@Override
+	public ConfigurableFileCollection getSource() {
+		return issue29492.getSource();
+	}
+
+	@Override
+	public void source(Object sourceFiles) {
+		issue29492.source(sourceFiles);
 	}
 
 	//region Per-source Options
