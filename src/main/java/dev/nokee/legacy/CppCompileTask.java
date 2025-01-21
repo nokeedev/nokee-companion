@@ -77,7 +77,7 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	private <T extends NativeCompileSpec> WorkResult doCompile(T spec, PlatformToolProvider platformToolProvider) {
 		Class<T> specType = Cast.uncheckedCast(spec.getClass());
 		Compiler<T> baseCompiler = platformToolProvider.newCompiler(specType);
-		Compiler<T> perSourceCompiler = newPerSourceCompiler(baseCompiler, perSourceOptions::forFile, () -> (T) createCompileSpec());
+		Compiler<T> perSourceCompiler = new PerSourceCompiler<>(baseCompiler, perSourceOptions::forFile, () -> (T) createCompileSpec());
 		Compiler<T> transactionalCompiler = newTransactionalCompiler(perSourceCompiler, outputFileDir(baseCompiler));
 		Compiler<T> incrementalCompiler = getIncrementalCompiler().createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
@@ -230,118 +230,6 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	//region Per-source Options
 	private final AllSourceOptions<CompileOptions> perSourceOptions;
 
-	// Create a per-source compiler
-	private <T extends NativeCompileSpec> Compiler<T> newPerSourceCompiler(Compiler<T> delegateCompiler, Function<? super File, ? extends AllSourceOptions<CompileOptions>.Key> mapper, Factory<T> specFactory) {
-		return new Compiler<>() {
-			@Override
-			public WorkResult execute(T defaultSpec) {
-				assert defaultSpec.getSourceFilesForPch().isEmpty() : "not tested, hence failing";
-				WorkResult result = WorkResults.didWork(false);
-
-				// Extract the source files to recompile (under incremental scenario, only the recompile files will be available)
-				List<File> sourceFiles = new ArrayList<>(defaultSpec.getSourceFiles());
-				defaultSpec.setSourceFiles(Collections.emptyList()); // reset the default bucket source files
-
-				// Build the bucket source collections
-				Map<AllSourceOptions<CompileOptions>.Key, Collection<File>> perSourceSpecs = new LinkedHashMap<>();
-				for (File sourceFile : sourceFiles) {
-					AllSourceOptions<CompileOptions>.Key k = mapper.apply(sourceFile);
-					if (k == null) { // if default bucket
-						defaultSpec.getSourceFiles().add(sourceFile);
-					} else { // else another bucket
-						perSourceSpecs.computeIfAbsent(k, __ -> new ArrayList<>()).add(sourceFile);
-					}
-				}
-
-				// TODO: Align the OperationLogger so one start then one done for all sub-spec
-				int expectedRuns = perSourceSpecs.size() + ((!defaultSpec.getSourceFiles().isEmpty() || !defaultSpec.getRemovedSourceFiles().isEmpty()) ? 1 : 0);
-				BuildOperationLogger logger = new BuildOperationLogger() {
-					private int i = 0;
-					private final BuildOperationLogger delegate = defaultSpec.getOperationLogger();
-
-					@Override
-					public void start() {
-						if (i++ == 0) {
-							delegate.start();
-						}
-					}
-
-					@Override
-					public void operationSuccess(String description, String output) {
-						delegate.operationSuccess(description, output);
-					}
-
-					@Override
-					public void operationFailed(String description, String output) {
-						delegate.operationFailed(description, output);
-					}
-
-					@Override
-					public void done() {
-						if (i == expectedRuns) {
-							delegate.done();
-						}
-					}
-
-					@Override
-					public String getLogLocation() {
-						return delegate.getLogLocation();
-					}
-				};
-				defaultSpec.setOperationLogger(logger);
-
-				// Execute the default bucket
-				//   it will delete the "file to remove" while the per-source bucket will only compile
-				result = result.or(delegateCompiler.execute(defaultSpec));
-
-				// Execute each per-source bucket
-				for (Map.Entry<AllSourceOptions<CompileOptions>.Key, Collection<File>> entry : perSourceSpecs.entrySet()) {
-					T newSpec = copyFrom(defaultSpec);
-					newSpec.setSourceFiles(entry.getValue()); // set only the bucket source
-					newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
-
-					// Namespace the temporary directory (i.e. where the options.txt will be written)
-					newSpec.setTempDir(new File(newSpec.getTempDir(), String.valueOf(entry.getKey().hashCode())));
-
-					// Configure the bucket spec from the per-source options
-					newSpec.args(entry.getKey().get().getCompilerArgs().get());
-
-					// Execute all new spec (i.e. per-source bucket)
-					result = result.or(delegateCompiler.execute(newSpec));
-				}
-
-				return result;
-			}
-
-			// Hand rolled implementation
-			private T copyFrom(T spec) {
-				T result = Objects.requireNonNull(specFactory.create());
-				result.setTargetPlatform(spec.getTargetPlatform());
-				result.setTempDir(spec.getTempDir());
-				result.getArgs().addAll(spec.getArgs());
-				result.getSystemArgs().addAll(spec.getSystemArgs());
-				result.setOperationLogger(spec.getOperationLogger());
-
-				result.setObjectFileDir(spec.getObjectFileDir());
-				result.getIncludeRoots().addAll(spec.getIncludeRoots());
-				result.getSystemIncludeRoots().addAll(spec.getSystemIncludeRoots());
-				result.setSourceFiles(spec.getSourceFiles());
-				result.setRemovedSourceFiles(spec.getRemovedSourceFiles());
-				result.setMacros(spec.getMacros());
-				result.setPositionIndependentCode(spec.isPositionIndependentCode());
-				result.setDebuggable(spec.isDebuggable());
-				result.setOptimized(spec.isOptimized());
-				result.setIncrementalCompile(spec.isIncrementalCompile());
-				result.setPrefixHeaderFile(spec.getPrefixHeaderFile());
-				result.setPreCompiledHeaderObjectFile(spec.getPreCompiledHeaderObjectFile());
-				result.setPreCompiledHeader(spec.getPreCompiledHeader());
-				result.setSourceFilesForPch(spec.getSourceFilesForPch());
-
-				return result;
-			}
-		};
-	}
-
 	@Nested // Required to track changes to the per-source options
 	protected List<Action<?>> getSourceActions() {
 		return perSourceOptions.entries.stream().map(it -> it.configureAction).collect(Collectors.toList());
@@ -354,7 +242,7 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 		return this;
 	}
 
-	private static class AllSourceOptions<T> {
+	public static class AllSourceOptions<T> {
 		// TODO: Use ActionSet
 		/*private*/ final List<Entry<T>> entries = new ArrayList<>();
 		private final Class<T> optionType;
@@ -378,7 +266,7 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 			}
 		}
 
-		private class Key {
+		public class Key {
 			private final int[] indices;
 
 			private Key(int[] indices) {
