@@ -1,0 +1,14 @@
+//gradle.addBuildListener(new BuildAdapter() {
+//	@Override
+//	void beforeSettings(Settings settings) {
+//		settings.pluginManagement {
+//			includeBuild(getBuildscript().sourceFile.parent)
+//		}
+//	}
+//})
+
+gradle.beforeSettings { settings ->
+	settings.pluginManagement {
+		includeBuild buildscript.sourceFile.parent
+	}
+}

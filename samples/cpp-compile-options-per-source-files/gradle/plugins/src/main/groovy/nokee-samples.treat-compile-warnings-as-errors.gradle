@@ -1,0 +1,10 @@
+tasks.withType(CppCompile).configureEach {
+	compilerArgs.addAll(toolChain.map { toolchain ->
+		if (toolchain instanceof GccCompatibleToolChain) {
+			return ['-Wall', '-Werror']
+		} else if (toolchain instanceof VisualCpp) {
+			return ['/WX']
+		}
+		return []
+	})
+}

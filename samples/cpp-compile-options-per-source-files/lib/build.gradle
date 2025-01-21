@@ -1,0 +1,14 @@
+plugins {
+	id 'cpp-library'
+	id 'dev.nokee.legacy-support'
+	id 'nokee-samples.treat-compile-warnings-as-errors'
+}
+
+library {
+	binaries.configureEach {
+		compileTask.get().source('src/main/cpp/lib.cpp') {
+			compilerArgs.add('-Wno-error=constant-conversion')
+		}
+	}
+}
+

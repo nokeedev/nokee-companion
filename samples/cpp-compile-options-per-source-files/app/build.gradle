@@ -1,0 +1,19 @@
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.legacy-support'
+	id 'nokee-samples.treat-compile-warnings-as-errors'
+}
+
+application {
+	dependencies {
+		implementation project(':lib')
+	}
+	binaries.configureEach {
+		compileTask.get().source(fileTree('src/main/cpp') { include '*-warnings.cpp' }) {
+			compilerArgs.add('-Wno-error=constant-conversion')
+		}
+		compileTask.get().source('src/main/cpp/another.cpp') {
+			compilerArgs.add('-DMY_MACRO=my-value')
+		}
+	}
+}

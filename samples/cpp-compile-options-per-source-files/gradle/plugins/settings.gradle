@@ -1,0 +1,3 @@
+gradle.rootProject {
+	apply plugin: 'groovy-gradle-plugin'
+}
