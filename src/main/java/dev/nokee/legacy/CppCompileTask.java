@@ -25,13 +25,16 @@ import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
+import org.gradle.util.GradleVersion;
 import org.gradle.work.InputChanges;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -88,7 +91,36 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	@Inject
 	public CppCompileTask(ObjectFactory objects) {
 		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
+
+		// On Gradle older than 8.11, replace the source with sorted source.
+		//   https://github.com/gradle/gradle/commit/aef36eb542ed2862eaf34cd1adfd0f469c230122
+		if (GradleVersion.current().compareTo(GradleVersion.version("8.11")) < 0) {
+			setSourceFiles(getIncrementalCompiler(), objects);
+		}
 	}
+
+	//region Fix source sorting (workaround)
+	private void setSourceFiles(IncrementalCompilerBuilder.IncrementalCompiler incrementalCompiler, ObjectFactory objects) {
+		try {
+			// access StateCollectingIncrementalCompiler#sourceFiles
+			Field StateCollectingIncrementalCompiler_sourceFiles = incrementalCompiler.getClass().getDeclaredField("sourceFiles");
+			StateCollectingIncrementalCompiler_sourceFiles.setAccessible(true);
+
+			// get current value of StateCollectingIncrementalCompiler#sourceFiles
+			FileCollection sourceFiles = (FileCollection) StateCollectingIncrementalCompiler_sourceFiles.get(incrementalCompiler);
+
+			// remove final on StateCollectingIncrementalCompiler#sourceFiles
+			Field StateCollectingIncrementalCompiler_sourceFiles_modifiers = Field.class.getDeclaredField("modifiers");
+			StateCollectingIncrementalCompiler_sourceFiles_modifiers.setAccessible(true);
+			StateCollectingIncrementalCompiler_sourceFiles.setInt(StateCollectingIncrementalCompiler_sourceFiles, StateCollectingIncrementalCompiler_sourceFiles.getModifiers() & ~Modifier.FINAL);
+
+			// override StateCollectingIncrementalCompiler#sourceFiles
+			StateCollectingIncrementalCompiler_sourceFiles.set(incrementalCompiler, objects.fileCollection().from((Callable<?>) () -> new TreeSet<>(sourceFiles.getFiles())).builtBy(sourceFiles));
+		} catch (NoSuchFieldException | IllegalAccessException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	//endregion
 
 	//region Per-source Options
 	private final AllSourceOptions<CompileOptions> perSourceOptions;
