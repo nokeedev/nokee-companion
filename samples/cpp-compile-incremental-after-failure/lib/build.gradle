@@ -1,4 +1,4 @@
 plugins {
 	id 'cpp-library'
-	id 'dev.nokee.legacy-support'
+	id 'dev.nokee.native-companion'
 }

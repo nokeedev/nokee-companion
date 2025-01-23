@@ -15,7 +15,7 @@ dependencies {
 gradlePlugin {
     plugins {
         legacy {
-            id = 'dev.nokee.legacy-support'
+            id = 'dev.nokee.native-companion'
             implementationClass = 'dev.nokee.legacy.LegacySupportPlugin'
         }
     }
