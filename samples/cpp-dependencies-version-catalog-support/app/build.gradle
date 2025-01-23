@@ -1,0 +1,21 @@
+plugins {
+	id 'cpp-application'
+	id 'cpp-unit-test'
+	id 'dev.nokee.legacy-support'
+}
+
+application {
+	dependencies {
+		// depends on single library
+		implementation libs.one
+
+		// depends on library bundles
+		implementation libs.bundles.libs
+	}
+}
+
+unitTest {
+	dependencies {
+		implementation libs.four
+	}
+}

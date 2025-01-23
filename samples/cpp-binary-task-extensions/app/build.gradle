@@ -1,0 +1,13 @@
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.legacy-support'
+}
+
+application {
+	binaries.configureEach {
+		println("binary ${compileTask.name}")
+		compileTask.configure {
+			println it
+		}
+	}
+}

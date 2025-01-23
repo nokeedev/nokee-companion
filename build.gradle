@@ -22,6 +22,8 @@ gradlePlugin {
 
 	dependencies {
 		implementation 'dev.nokee.commons:commons-names:latest.release'
+		implementation 'dev.nokee.commons:commons-backports:latest.release'
+		implementation 'dev.nokee.commons:commons-provider:latest.release'
 		implementation 'commons-io:commons-io:latest.release'
 	}
 }

@@ -5,6 +5,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.tasks.TaskContainer;
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilerBuilder;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.gradle.util.GradleVersion;
@@ -17,10 +18,12 @@ import java.util.concurrent.Callable;
 
 /*private*/ abstract /*final*/ class GradleIssue29744Fix implements Plugin<Project> {
 	private final ObjectFactory objects;
+	private final TaskContainer tasks;
 
 	@Inject
-	public GradleIssue29744Fix(ObjectFactory objects) {
+	public GradleIssue29744Fix(ObjectFactory objects, TaskContainer tasks) {
 		this.objects = objects;
+		this.tasks = tasks;
 	}
 
 	@Override
@@ -28,7 +31,7 @@ import java.util.concurrent.Callable;
 		// On Gradle older than 8.11, replace the source with sorted source.
 		//   https://github.com/gradle/gradle/commit/aef36eb542ed2862eaf34cd1adfd0f469c230122
 		if (GradleVersion.current().compareTo(GradleVersion.version("8.11")) < 0) {
-			project.getTasks().withType(AbstractNativeCompileTask.class).configureEach(new FixAction());
+			tasks.withType(AbstractNativeCompileTask.class).configureEach(new FixAction());
 		}
 	}
 

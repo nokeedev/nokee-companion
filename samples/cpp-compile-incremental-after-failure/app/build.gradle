@@ -1,0 +1,10 @@
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.legacy-support'
+}
+
+application {
+	dependencies {
+		implementation project(':lib')
+	}
+}

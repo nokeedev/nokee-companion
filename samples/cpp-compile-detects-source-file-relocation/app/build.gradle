@@ -1,0 +1,5 @@
+plugins {
+    id 'cpp-application'
+    id 'cpp-unit-test'
+    id 'dev.nokee.legacy-support'
+}

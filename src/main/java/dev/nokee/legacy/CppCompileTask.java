@@ -22,6 +22,7 @@ import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
+import org.gradle.work.Incremental;
 import org.gradle.work.InputChanges;
 
 import javax.annotation.Nullable;
@@ -86,26 +87,43 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 		}
 	}
 
-	private final GradleIssue29492Fix issue29492;
+	// For gradle/gradle#29492
+	ConfigurableFileCollection source;
+
+	// For header normalization on Windows
+	FileCollection headerDependencies;
+
+	private final GradleIssueXXXHeaderNormalizationWindowsFix issueXXX;
 
 	@Inject
 	public CppCompileTask(ObjectFactory objects) {
-		this.issue29492 = objects.newInstance(GradleIssue29492Fix.class).attachSource(super.getSource()::from);
+		this.source = super.getSource();
+		this.headerDependencies = super.getHeaderDependencies();
+
+		this.issueXXX = objects.newInstance(GradleIssueXXXHeaderNormalizationWindowsFix.class, super.getHeaderDependencies());
 		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
 	}
 
+	@Override
 	@InputFiles
 	@SkipWhenEmpty
 	@IgnoreEmptyDirectories
 	@PathSensitive(PathSensitivity.RELATIVE)
-	@Override
 	public ConfigurableFileCollection getSource() {
-		return issue29492.getSource();
+		return source;
 	}
 
 	@Override
 	public void source(Object sourceFiles) {
-		issue29492.source(sourceFiles);
+		source.from(sourceFiles);
+	}
+
+	@Override
+	@InputFiles
+	@Incremental
+	@PathSensitive(PathSensitivity.NAME_ONLY)
+	protected FileCollection getHeaderDependencies() {
+		return headerDependencies;
 	}
 
 	//region Per-source Options

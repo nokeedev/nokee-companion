@@ -1,0 +1,9 @@
+[libraries]
+one = { module = "dev.nokee.samples:lib1", version = "1.0" }
+two = { module = "dev.nokee.samples:lib2", version = "1.0" }
+three = { module = "dev.nokee.samples:lib3", version = "1.0" }
+four = { module = "dev.nokee.samples:lib4", version = "1.0" }
+
+
+[bundles]
+libs = ["two", "three"]
