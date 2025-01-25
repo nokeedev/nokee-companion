@@ -1,7 +1,6 @@
 package dev.nokee.legacy;
 
 import org.gradle.api.Action;
-import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.model.ObjectFactory;
@@ -71,16 +70,17 @@ public abstract /*final*/ class CompileTasks {
 		return elementsProvider;
 	}
 
-	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
+	/*private*/ static abstract /*final*/ class Rule extends FeaturePreviews.Plugin {
 		private final TaskContainer tasks;
 
 		@Inject
 		public Rule(TaskContainer tasks) {
+			super("compile-tasks-extension");
 			this.tasks = tasks;
 		}
 
 		@Override
-		public void apply(Project project) {
+		protected void doApply(Project project) {
 			project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					final CompileTasks compileTasks = ((ExtensionAware) binary).getExtensions().create("compileTasks", CompileTasks.class);

@@ -16,18 +16,21 @@ import java.lang.reflect.Modifier;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
 
-/*private*/ abstract /*final*/ class GradleIssue29744Fix implements Plugin<Project> {
+import static dev.nokee.legacy.FeaturePreviews.featurePreviews;
+
+/*private*/ abstract /*final*/ class GradleIssue29744Fix extends FeaturePreviews.Plugin {
 	private final ObjectFactory objects;
 	private final TaskContainer tasks;
 
 	@Inject
 	public GradleIssue29744Fix(ObjectFactory objects, TaskContainer tasks) {
+		super("fix-for-gradle-29744");
 		this.objects = objects;
 		this.tasks = tasks;
 	}
 
 	@Override
-	public void apply(Project project) {
+	protected void doApply(Project project) {
 		// On Gradle older than 8.11, replace the source with sorted source.
 		//   https://github.com/gradle/gradle/commit/aef36eb542ed2862eaf34cd1adfd0f469c230122
 		if (GradleVersion.current().compareTo(GradleVersion.version("8.11")) < 0) {

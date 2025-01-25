@@ -4,7 +4,6 @@ import groovy.lang.Closure;
 import groovy.lang.GroovyObject;
 import org.codehaus.groovy.runtime.HandleMetaClass;
 import org.gradle.api.Action;
-import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.tasks.TaskContainer;
@@ -51,17 +50,18 @@ public final class CppBinaryTaskExtensions {
 		return (TaskProvider<CreateStaticLibrary>) ((ExtensionAware) binary).getExtensions().getByName("createTask");
 	}
 
-	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
+	/*private*/ static abstract /*final*/ class Rule extends FeaturePreviews.Plugin {
 		private final TaskContainer tasks;
 
 		@Inject
 		public Rule(TaskContainer tasks) {
+			super("binary-task-extensions");
 			this.tasks = tasks;
 		}
 
 		@Override
 		@SuppressWarnings("UnstableApiUsage")
-		public void apply(Project project) {
+		protected void doApply(Project project) {
 			project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					final TaskProvider<CppCompile> compileTask = tasks.named(compileTaskName(binary), CppCompile.class);

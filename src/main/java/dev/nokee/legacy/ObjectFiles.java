@@ -21,6 +21,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
+import static dev.nokee.legacy.FeaturePreviews.featurePreviews;
+
 /*private*/ final class ObjectFiles {
 	// Conceptually, objectFiles are either an extensions or derived from AbstractNativeCompileTask#getObjectFileDir
 	//  or we could consider any FileCollection getObjects()/getObjectFiles()
@@ -40,12 +42,14 @@ import java.util.concurrent.Callable;
 		return result;
 	}
 
-	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
+	/*private*/ static abstract /*final*/ class Rule extends FeaturePreviews.Plugin {
 		@Inject
-		public Rule() {}
+		public Rule() {
+			super("native-task-object-files-extension");
+		}
 
 		@Override
-		public void apply(Project project) {
+		protected void doApply(Project project) {
 			project.getTasks().withType(AbstractNativeCompileTask.class).configureEach(new Action<>() {
 				private /*static*/ String objectFileExtension(AbstractNativeCompileTask task) {
 					NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) task.getToolChain().get();

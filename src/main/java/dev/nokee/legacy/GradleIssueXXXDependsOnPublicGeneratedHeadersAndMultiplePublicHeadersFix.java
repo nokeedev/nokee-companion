@@ -2,7 +2,6 @@ package dev.nokee.legacy;
 
 import dev.nokee.commons.names.CppNames;
 import org.gradle.api.Action;
-import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.file.ProjectLayout;
@@ -20,7 +19,7 @@ import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 
-/*private*/ abstract /*final*/ class GradleIssueXXXDependsOnPublicGeneratedHeadersAndMultiplePublicHeadersFix implements Plugin<Project> {
+/*private*/ abstract /*final*/ class GradleIssueXXXDependsOnPublicGeneratedHeadersAndMultiplePublicHeadersFix extends FeaturePreviews.Plugin {
 	private final ConfigurationContainer configurations;
 	private final ObjectFactory objects;
 	private final TaskContainer tasks;
@@ -28,6 +27,7 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 
 	@Inject
 	public GradleIssueXXXDependsOnPublicGeneratedHeadersAndMultiplePublicHeadersFix(ConfigurationContainer configurations, ObjectFactory objects, TaskContainer tasks, ProjectLayout layout) {
+		super("fix-for-public-headers");
 		this.configurations = configurations;
 		this.objects = objects;
 		this.tasks = tasks;
@@ -35,7 +35,7 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 	}
 
 	@Override
-	public void apply(Project project) {
+	protected void doApply(Project project) {
 		// because CppLibraryPlugin wait after project evaluation to configure plugin headers
 		project.getPluginManager().withPlugin("cpp-library", ignored(() -> {
 			project.afterEvaluate(ignored(() -> {
