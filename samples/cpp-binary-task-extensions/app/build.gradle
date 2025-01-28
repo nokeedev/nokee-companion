@@ -1,13 +1,17 @@
 plugins {
 	id 'cpp-application'
-	id 'dev.nokee.native-companion'
 }
 
 application {
-	binaries.configureEach {
-		println("binary ${compileTask.name}")
-		compileTask.configure {
-			println it
-		}
+	dependencies {
+		implementation project(':lib')
 	}
+
+	//region Just for demonstration purpose
+	binaries.configureEach {
+		compileTask.get().compilerArgs.addAll([/*...*/])
+		linkTask.get().linkerArgs.addAll([/*...*/])
+		installTask.get().lib([/*...*/])
+	}
+	//endregion
 }

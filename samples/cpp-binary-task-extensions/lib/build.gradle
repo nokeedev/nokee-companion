@@ -1,0 +1,18 @@
+plugins {
+	id 'cpp-library'
+}
+
+library {
+	linkages = [Linkage.SHARED, Linkage.STATIC]
+
+	//region Just for demonstration purpose
+	binaries.configureEach(CppSharedLibrary) {
+		compileTask.get().compilerArgs.addAll([/*...*/])
+		linkTask.get().linkerArgs.addAll([/*...*/])
+	}
+	binaries.configureEach(CppStaticLibrary) {
+		compileTask.get().compilerArgs.addAll([/*...*/])
+		createTask.get().staticLibArgs.addAll([/*...*/])
+	}
+	//endregion
+}
