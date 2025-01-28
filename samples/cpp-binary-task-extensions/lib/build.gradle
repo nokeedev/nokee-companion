@@ -3,7 +3,7 @@ plugins {
 }
 
 library {
-	linkages = [Linkage.SHARED, Linkage.STATIC]
+	linkage = [Linkage.SHARED, Linkage.STATIC]
 
 	//region Just for demonstration purpose
 	binaries.configureEach(CppSharedLibrary) {
