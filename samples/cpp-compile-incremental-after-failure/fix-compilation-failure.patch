@@ -1,0 +1,11 @@
+diff --git a/app/src/main/cpp/a-source-with-warnings.cpp b/app/src/main/cpp/a-source-with-warnings.cpp
+index a7ba870..0728c92 100644
+--- a/app/src/main/cpp/a-source-with-warnings.cpp
++++ b/app/src/main/cpp/a-source-with-warnings.cpp
+@@ -1,5 +1,5 @@
+ #include <stdint.h>
+
+ int8_t func1() {
+-	return 42  // missing semi-colon expected to simulate compilation failure
++	return 42;
+ }

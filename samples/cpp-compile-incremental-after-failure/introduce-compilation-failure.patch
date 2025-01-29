@@ -1,0 +1,22 @@
+diff --git a/app/src/main/cpp/a-source-with-warnings.cpp b/app/src/main/cpp/a-source-with-warnings.cpp
+index 80836b6..a7ba870 100644
+--- a/app/src/main/cpp/a-source-with-warnings.cpp
++++ b/app/src/main/cpp/a-source-with-warnings.cpp
+@@ -1,5 +1,5 @@
+ #include <stdint.h>
+
+ int8_t func1() {
+-	return 420UL;
++	return 42  // missing semi-colon expected to simulate compilation failure
+ }
+diff --git a/app/src/main/cpp/another-source-with-warnings.cpp b/app/src/main/cpp/another-source-with-warnings.cpp
+index d610981..99ab01d 100644
+--- a/app/src/main/cpp/another-source-with-warnings.cpp
++++ b/app/src/main/cpp/another-source-with-warnings.cpp
+@@ -1,5 +1,5 @@
+ #include <stdint.h>
+
+ int8_t func2() {
+-	return 420UL;
++	return 42;
+ }
