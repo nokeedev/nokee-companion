@@ -43,7 +43,9 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 					configurations.named(cppApiElementsConfigurationName(library)).configure(apiElements -> {
 						final Provider<File> publicHeaders = objects.fileCollection().builtBy(library.getPublicHeaderDirs()).from((Callable<?>) () -> {
 							final Set<File> files = library.getPublicHeaderDirs().getFiles();
-							if (files.size() != 1) {
+							if (files.isEmpty()) {
+								throw new UnsupportedOperationException(String.format("The C++ library plugin currently requires at least one public header directory, however there are no directories configured."));
+							} else if (files.size() != 1) {
 								final TaskProvider<Sync> syncTask = tasks.register(CppNames.of(library).taskName("sync", "publicHeaders").toString(), Sync.class, task -> {
 									task.setDescription("Assemble the C++ API elements (e.g. public headers).");
 									task.setDestinationDir(project.file(layout.getBuildDirectory().dir("exported-headers/" + library.getName())));
