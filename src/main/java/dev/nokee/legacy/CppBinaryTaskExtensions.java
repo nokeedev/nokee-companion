@@ -5,7 +5,9 @@ import groovy.lang.GroovyObject;
 import org.codehaus.groovy.runtime.HandleMetaClass;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
+import org.gradle.api.Task;
 import org.gradle.api.plugins.ExtensionAware;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.cpp.CppBinary;
@@ -21,6 +23,7 @@ import org.gradle.nativeplatform.tasks.LinkExecutable;
 import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
 
 import javax.inject.Inject;
+import java.util.function.Function;
 
 import static dev.nokee.commons.names.CppNames.*;
 
@@ -50,6 +53,14 @@ public final class CppBinaryTaskExtensions {
 		return (TaskProvider<CreateStaticLibrary>) ((ExtensionAware) binary).getExtensions().getByName("createTask");
 	}
 
+	private static <T extends Task, OBJ> Provider<T> extensions(Object binary, String name, Function<OBJ, Provider<T>> getter) {
+		Provider<T> result = (Provider<T>) ((ExtensionAware) binary).getExtensions().findByName(name);
+		if (result == null) {
+			result = getter.apply((OBJ) binary);
+		}
+		return result;
+	}
+
 	/*private*/ static abstract /*final*/ class Rule extends FeaturePreviews.Plugin {
 		private final TaskContainer tasks;
 
@@ -69,8 +80,8 @@ public final class CppBinaryTaskExtensions {
 
 					HandleMetaClass metaClass = new HandleMetaClass(((GroovyObject) binary).getMetaClass());
 					metaClass.setProperty("getCompileTask", new Closure(null) {
-						private TaskProvider<CppCompile> doCall() {
-							return compileTask((CppBinary) getDelegate());
+						private Object doCall() {
+							return extensions(getDelegate(), "compileTask", CppBinary::getCompileTask);
 						}
 					});
 
@@ -78,24 +89,24 @@ public final class CppBinaryTaskExtensions {
 						final TaskProvider<LinkExecutable> linkTask = tasks.named(linkTaskName(binary), LinkExecutable.class);
 						((ExtensionAware) binary).getExtensions().add("linkTask", linkTask);
 						metaClass.setProperty("getLinkTask", new Closure(null) {
-							private TaskProvider<LinkExecutable> doCall() {
-								return linkTask((ComponentWithExecutable) getDelegate());
+							private Object doCall() {
+								return extensions(getDelegate(), "linkTask", ComponentWithExecutable::getLinkTask);
 							}
 						});
 					} else if (binary instanceof ComponentWithSharedLibrary) {
 						final TaskProvider<LinkSharedLibrary> linkTask = tasks.named(linkTaskName(binary), LinkSharedLibrary.class);
 						((ExtensionAware) binary).getExtensions().add("linkTask", linkTask);
 						metaClass.setProperty("getLinkTask", new Closure(null) {
-							private TaskProvider<LinkSharedLibrary> doCall() {
-								return linkTask((ComponentWithSharedLibrary) getDelegate());
+							private Object doCall() {
+								return extensions(getDelegate(), "linkTask", ComponentWithSharedLibrary::getLinkTask);
 							}
 						});
 					} else if (binary instanceof ComponentWithStaticLibrary) {
 						final TaskProvider<CreateStaticLibrary> createTask = tasks.named(createTaskName(binary), CreateStaticLibrary.class);
 						((ExtensionAware) binary).getExtensions().add("createTask", createTask);
 						metaClass.setProperty("getCreateTask", new Closure(null) {
-							private TaskProvider<CreateStaticLibrary> doCall() {
-								return createTask((ComponentWithStaticLibrary) getDelegate());
+							private Object doCall() {
+								return extensions(getDelegate(), "createTask", ComponentWithStaticLibrary::getCreateTask);
 							}
 						});
 					}
@@ -104,8 +115,8 @@ public final class CppBinaryTaskExtensions {
 						final TaskProvider<InstallExecutable> installTask = tasks.named(installTaskName(binary), InstallExecutable.class);
 						((ExtensionAware) binary).getExtensions().add("installTask", installTask);
 						metaClass.setProperty("installTask", new Closure(null) {
-							private TaskProvider<InstallExecutable> doCall() {
-								return installTask((ComponentWithInstallation) getDelegate());
+							private Object doCall() {
+								return extensions(getDelegate(), "installTask", ComponentWithInstallation::getInstallTask);
 							}
 						});
 					}
