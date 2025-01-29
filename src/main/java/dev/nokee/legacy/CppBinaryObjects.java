@@ -28,7 +28,16 @@ import static dev.nokee.commons.names.CppNames.compileTaskName;
 import static dev.nokee.commons.names.CppNames.linkTaskName;
 import static dev.nokee.commons.provider.CollectionElementTransformer.transformEach;
 
+/**
+ * Represents the shadow property for {@link CppBinary#getObjects()}.
+ */
 public final class CppBinaryObjects {
+	/**
+	 * Returns the shadow property of {@link CppBinary#getObjects()}.
+	 *
+	 * @param binary  the binary with the objects
+	 * @return the property
+	 */
 	public static ShadowProperty<FileCollection> objectsOf(ComponentWithObjectFiles binary) {
 		return new ShadowProperty<>(binary, "objects", binary::getObjects);
 	}

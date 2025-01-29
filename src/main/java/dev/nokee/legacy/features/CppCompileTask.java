@@ -1,12 +1,12 @@
-package dev.nokee.legacy;
+package dev.nokee.legacy.features;
 
+import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
@@ -15,7 +15,6 @@ import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
-import org.gradle.language.cpp.tasks.CppCompile;
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilerBuilder;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.gradle.nativeplatform.internal.BuildOperationLoggingCompilerDecorator;
@@ -34,10 +33,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static dev.nokee.commons.names.CppNames.compileTaskName;
-import static dev.nokee.legacy.TransactionalCompiler.outputFileDir;
+import static dev.nokee.legacy.features.TransactionalCompiler.outputFileDir;
 
 @CacheableTask
-public abstract /*final*/ class CppCompileTask extends CppCompile {
+/*private*/ abstract /*final*/ class CppCompileTask extends CppCompile {
 	@Override
 	protected void compile(InputChanges inputs) {
 		BuildOperationLogger operationLogger = this.getOperationLoggerFactory().newOperationLogger(this.getName(), this.getTemporaryDir());
@@ -102,7 +101,7 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 		this.source = super.getSource();
 		this.headerDependencies = super.getHeaderDependencies();
 
-		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
+		this.perSourceOptions = new AllSourceOptions<>(Options.class, objects);
 
 		getIncrementalAfterFailure().convention(false);
 	}
@@ -130,7 +129,7 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	}
 
 	//region Per-source Options
-	private final AllSourceOptions<CompileOptions> perSourceOptions;
+	private final AllSourceOptions<Options> perSourceOptions;
 
 	@Nested // Required to track changes to the per-source options
 	protected List<Action<?>> getSourceActions() {
@@ -138,7 +137,8 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	}
 
 	// TODO: We may need to disallow lambda action. We should validate.
-	public CppCompileTask source(Object source, Action<? super CompileOptions> action) {
+	@Override
+	public CppCompileTask source(Object source, Action<? super Options> action) {
 		getSource().from(source);
 		perSourceOptions.put(source, action);
 		return this;
@@ -234,10 +234,6 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 				return realizedFiles.contains(file);
 			}
 		}
-	}
-
-	public interface CompileOptions {
-		ListProperty<String> getCompilerArgs();
 	}
 	//endregion
 

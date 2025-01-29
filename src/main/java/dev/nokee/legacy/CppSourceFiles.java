@@ -15,11 +15,26 @@ import javax.inject.Inject;
 
 import static dev.nokee.commons.names.CppNames.compileTaskName;
 
+/**
+ * Represents the shadow property for {@link CppBinary#getCppSource()} and {@link CppComponent#getCppSource()}.
+ */
 public final class CppSourceFiles {
+	/**
+	 * Returns the shadow property of {@link CppBinary#getCppSource()}.
+	 *
+	 * @param binary  the binary with C++ source.
+	 * @return the property
+	 */
 	public static ShadowProperty<FileCollection> cppSourceOf(CppBinary binary) {
 		return new ShadowProperty<>(binary, "cppSource", binary::getCppSource);
 	}
 
+	/**
+	 * Returns the shadow property of {@link CppComponent#getCppSource()}.
+	 *
+	 * @param component  the component with C++ source.
+	 * @return the property
+	 */
 	public static ShadowProperty<FileCollection> cppSourceOf(CppComponent component) {
 		return new ShadowProperty<>(component, "cppSource", component::getCppSource);
 	}

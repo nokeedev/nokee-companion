@@ -1,5 +1,6 @@
-package dev.nokee.legacy;
+package dev.nokee.legacy.features;
 
+import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
@@ -13,20 +14,19 @@ import java.util.concurrent.Callable;
 
 // Avoid <WinSock.h> vs <winsock.h> vs <Windows.h> vs <windows.h>
 //   important on case insensitive file system
-/*private*/ abstract /*final*/ class GradleIssueXXXHeaderNormalizationWindowsFix extends FeaturePreviews.Plugin {
+/*private*/ abstract /*final*/ class CanonalizeHeaderDependenciesFeature implements Plugin<Project> {
 	private static final boolean IS_FILE_SYSTEM_CASE_INSENSITIVE = !new File("a").equals(new File("A"));
 	private final TaskContainer tasks;
 	private final ObjectFactory objects;
 
 	@Inject
-	public GradleIssueXXXHeaderNormalizationWindowsFix(TaskContainer tasks, ObjectFactory objects) {
-		super("fix-headers-dependencies-for-case-insensitive");
+	public CanonalizeHeaderDependenciesFeature(TaskContainer tasks, ObjectFactory objects) {
 		this.tasks = tasks;
 		this.objects = objects;
 	}
 
 	@Override
-	protected void doApply(Project project) {
+	public void apply(Project project) {
 		if (IS_FILE_SYSTEM_CASE_INSENSITIVE) {
 			tasks.withType(CppCompileTask.class).configureEach(task -> {
 				final FileCollection headerDependencies = task.headerDependencies;

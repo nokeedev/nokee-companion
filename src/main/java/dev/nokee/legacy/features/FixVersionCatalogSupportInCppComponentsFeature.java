@@ -1,7 +1,8 @@
-package dev.nokee.legacy;
+package dev.nokee.legacy.features;
 
 import dev.nokee.commons.backports.DependencyBucket;
 import org.gradle.api.Action;
+import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.model.ObjectFactory;
@@ -14,19 +15,18 @@ import javax.inject.Inject;
 
 import static dev.nokee.commons.names.CppNames.implementationConfigurationName;
 
-/*private*/ abstract /*final*/ class GradleIssueVersionCatalogueFix extends FeaturePreviews.Plugin {
+/*private*/ abstract /*final*/ class FixVersionCatalogSupportInCppComponentsFeature implements Plugin<Project> {
 	private final ConfigurationContainer configurations;
 	private final ObjectFactory objects;
 
 	@Inject
-	public GradleIssueVersionCatalogueFix(ConfigurationContainer configurations, ObjectFactory objects) {
-		super("fix-for-version-catalog");
+	public FixVersionCatalogSupportInCppComponentsFeature(ConfigurationContainer configurations, ObjectFactory objects) {
 		this.configurations = configurations;
 		this.objects = objects;
 	}
 
 	@Override
-	protected void doApply(Project project) {
+	public void apply(Project project) {
 		project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
 			final DependencyBucket.Factory dependencyBucketFactory = objects.newInstance(DependencyBucket.Factory.class);
 

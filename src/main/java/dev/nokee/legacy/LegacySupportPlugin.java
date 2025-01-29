@@ -5,6 +5,7 @@ import org.gradle.api.Project;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.PluginAware;
+import org.gradle.api.provider.ProviderFactory;
 
 import javax.inject.Inject;
 
@@ -25,19 +26,21 @@ import javax.inject.Inject;
 	}
 
 	private void doApply(Project project) {
-		project.getPluginManager().apply(ObjectFiles.Rule.class);
-		project.getPluginManager().apply(CompileTasks.Rule.class);
-		project.getPluginManager().apply(CppSourceFiles.Rule.class);
-		project.getPluginManager().apply(CppCompileTask.Rule.class);
-		project.getPluginManager().apply(CppBinaryObjects.Rule.class);
-		project.getPluginManager().apply(CppBinaryTaskExtensions.Rule.class);
+		FeaturePreviews feature = FeaturePreviews.featurePreviews(project);
 
-		project.getPluginManager().apply(GradleIssue29492Fix.class);
-		project.getPluginManager().apply(GradleIssue29744Fix.class);
-		project.getPluginManager().apply(GradleIssueXXXDependsOnPublicGeneratedHeadersAndMultiplePublicHeadersFix.class);
-		project.getPluginManager().apply(GradleIssueXXXHeaderNormalizationWindowsFix.class);
-		project.getPluginManager().apply(GradleIssueVersionCatalogueFix.class);
-		project.getPluginManager().apply(GradleIssueIncrementalCompilationAfterFailureFix.class);
+		feature.apply("native-task-object-files-extension");
+		feature.apply("compile-tasks-extension");
+		project.getPluginManager().apply(CppSourceFiles.Rule.class);
+		project.getPluginManager().apply("native-companion.replace-cpp-compile-task");
+		project.getPluginManager().apply(CppBinaryObjects.Rule.class);
+		feature.apply("binary-task-extensions");
+
+		feature.apply("fix-for-gradle-29492");
+		feature.apply("fix-for-gradle-29744");
+		feature.apply("fix-for-public-headers");
+		feature.apply("fix-headers-dependencies-for-case-insensitive");
+		feature.apply("fix-for-version-catalog");
+		feature.apply("incremental-compilation-after-failure");
 		// TODO: Source include (cxx)
 		// TODO: includes .i/.ii
 
@@ -47,4 +50,28 @@ import javax.inject.Inject;
 		//   dup configuration
 		//   etc.
     }
+
+	/*private*/ static abstract /*final*/ class FeaturePreviews {
+		private final Project project;
+		private final ProviderFactory providers;
+
+		@Inject
+		public FeaturePreviews(Project project, ProviderFactory providers) {
+			this.project = project;
+			this.providers = providers;
+		}
+
+		public void apply(String featureName) {
+			boolean enabled = providers.gradleProperty("dev.nokee.native-companion." + featureName + ".enabled")
+				.orElse(providers.gradleProperty("dev.nokee.native-companion.all-features.enabled"))
+				.map(Boolean::valueOf).getOrElse(false);
+			if (enabled) {
+				project.getPluginManager().apply("native-companion.features." + featureName);
+			}
+		}
+
+		public static FeaturePreviews featurePreviews(Project project) {
+			return project.getObjects().newInstance(FeaturePreviews.class, project);
+		}
+	}
 }

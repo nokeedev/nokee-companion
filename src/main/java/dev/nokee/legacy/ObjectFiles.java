@@ -13,7 +13,6 @@ import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
 import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
 
-import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.util.ArrayList;
@@ -21,9 +20,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-import static dev.nokee.legacy.FeaturePreviews.featurePreviews;
-
-/*private*/ final class ObjectFiles {
+final class ObjectFiles {
 	// Conceptually, objectFiles are either an extensions or derived from AbstractNativeCompileTask#getObjectFileDir
 	//  or we could consider any FileCollection getObjects()/getObjectFiles()
 	public static Object of(Object self) {
@@ -39,17 +36,16 @@ import static dev.nokee.legacy.FeaturePreviews.featurePreviews;
 		if (result == null) {
 			return Collections.emptyList();
 		}
+
 		return result;
 	}
 
-	/*private*/ static abstract /*final*/ class Rule extends FeaturePreviews.Plugin {
+	/*private*/ static abstract /*final*/ class Feature implements Plugin<Project> {
 		@Inject
-		public Rule() {
-			super("native-task-object-files-extension");
-		}
+		public Feature() {}
 
 		@Override
-		protected void doApply(Project project) {
+		public void apply(Project project) {
 			project.getTasks().withType(AbstractNativeCompileTask.class).configureEach(new Action<>() {
 				private /*static*/ String objectFileExtension(AbstractNativeCompileTask task) {
 					NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) task.getToolChain().get();

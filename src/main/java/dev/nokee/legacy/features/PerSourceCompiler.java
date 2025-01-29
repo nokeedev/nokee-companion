@@ -1,10 +1,9 @@
-package dev.nokee.legacy;
+package dev.nokee.legacy.features;
 
+import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.WorkResults;
 import org.gradle.internal.UncheckedException;
-import org.gradle.internal.hash.HashValue;
-import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 
@@ -36,9 +35,9 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 		defaultSpec.setSourceFiles(Collections.emptyList()); // reset the default bucket source files
 
 		// Build the bucket source collections
-		Map<CppCompileTask.AllSourceOptions<CppCompileTask.CompileOptions>.Key, Collection<File>> perSourceSpecs = new LinkedHashMap<>();
+		Map<CppCompileTask.AllSourceOptions<CppCompile.Options>.Key, Collection<File>> perSourceSpecs = new LinkedHashMap<>();
 		for (File sourceFile : sourceFiles) {
-			CppCompileTask.AllSourceOptions<CppCompileTask.CompileOptions>.Key k = specProvider.forFile(sourceFile);
+			CppCompileTask.AllSourceOptions<CppCompile.Options>.Key k = specProvider.forFile(sourceFile);
 			if (k == null) { // if default bucket
 				defaultSpec.getSourceFiles().add(sourceFile);
 			} else { // else another bucket
@@ -51,7 +50,7 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 		result = result.or(delegateCompiler.execute(defaultSpec));
 
 		// Execute each per-source bucket
-		for (Map.Entry<CppCompileTask.AllSourceOptions<CppCompileTask.CompileOptions>.Key, Collection<File>> entry : perSourceSpecs.entrySet()) {
+		for (Map.Entry<CppCompileTask.AllSourceOptions<CppCompile.Options>.Key, Collection<File>> entry : perSourceSpecs.entrySet()) {
 			T newSpec = copyFrom(defaultSpec);
 			newSpec.setSourceFiles(entry.getValue()); // set only the bucket source
 			newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
@@ -109,7 +108,7 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 	}
 
 	public interface SpecProvider {
-		CppCompileTask.AllSourceOptions<CppCompileTask.CompileOptions>.Key forFile(File file);
+		CppCompileTask.AllSourceOptions<CppCompile.Options>.Key forFile(File file);
 	}
 
 	public interface CompileSpecFactory<T extends NativeCompileSpec> {
