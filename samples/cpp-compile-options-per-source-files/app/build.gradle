@@ -8,12 +8,17 @@ application {
 	dependencies {
 		implementation project(':lib')
 	}
+
+	//region Different ways to configure per-source options...
 	binaries.configureEach {
+		// ...via file tree
 		compileTask.get().source(fileTree('src/main/cpp') { include '*-warnings.cpp' }) {
 			compilerArgs.add('-Wno-error=constant-conversion')
 		}
+		// ...or for a specific file
 		compileTask.get().source('src/main/cpp/another.cpp') {
-			compilerArgs.add('-DMY_MACRO=my-value')
+			compilerArgs.add('-DUSE_NO_WARNING_CODE')
 		}
 	}
+	//endregion
 }

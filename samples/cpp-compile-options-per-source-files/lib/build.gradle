@@ -5,10 +5,13 @@ plugins {
 }
 
 library {
+	//region Disable warning for specific source file
 	binaries.configureEach {
+		compileTask.get().compilerArgs.add('-Wno-error=reorder-ctor')
+
 		compileTask.get().source('src/main/cpp/lib.cpp') {
 			compilerArgs.add('-Wno-error=constant-conversion')
 		}
 	}
+	//endregion
 }
-
