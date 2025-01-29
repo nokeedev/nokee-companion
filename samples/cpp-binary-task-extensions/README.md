@@ -1,27 +1,72 @@
+# C++ Binary Task Extensions
 
-```shell
-$ ./gradlew help
+Build authors have to resolve the binary tasks if they want to configure them.
+They can avoid them, but it requires a conscious and constant effort.
+We introduced `CppNames` (in `commons-names`) to help with the task.
+However, the DSL should simply expose `TaskProvider` which is the reason for this feature.
+
+We configured this project to show how build author normally interact with binary tasks.
+
+```shell {exemplar}
+$ ./gradlew assemble
+
+BUILD SUCCESSFUL
+$ awk '/region/,/endregion/' ./app/build.gradle
+	//region Just for demonstration purpose
+	binaries.configureEach {
+		compileTask.get().compilerArgs.addAll([/*...*/])
+		linkTask.get().linkerArgs.addAll([/*...*/])
+		installTask.get().lib([/*...*/])
+	}
+	//endregion
+$ awk '/region/,/endregion/' ./lib/build.gradle
+	//region Just for demonstration purpose
+	binaries.configureEach(CppSharedLibrary) {
+		compileTask.get().compilerArgs.addAll([/*...*/])
+		linkTask.get().linkerArgs.addAll([/*...*/])
+	}
+	binaries.configureEach(CppStaticLibrary) {
+		compileTask.get().compilerArgs.addAll([/*...*/])
+		createTask.get().staticLibArgs.addAll([/*...*/])
+	}
+	//endregion
 ```
 
+When using the [native-companion plugin](TODO):
+
+```shell {exemplar}
+$ patch < use-native-companion.patch
+patching file 'app/build.gradle'
+patching file gradle.properties
+patching file 'lib/build.gradle'
+patching file settings.gradle
 ```
-components.withType(CppExecutable) {
-	assert compileTask.name in ['compileDebugCpp', 'compileReleaseCpp']
-	compileTask.configure { /*...*/ }
 
-	assert linkTask.name in ['linkDebug', 'linkRelease']
-	linkTask.configure { /*...*/ }
+We can treat the task getter as returning `TaskProvider` and configure those tasks without realizing them:
 
-	assert installTask.name in ['installDebug', 'installRelease']
-	installTask.configure { /*...*/ }
-}
+```shell {exemplar}
+$ ./gradlew assemble
 
-components.withType(CppStaticLibrary) {
-	assert compileTask.name in ['compileDebugCpp', 'compileReleaseCpp']
-	compileTask.configure { /*...*/ }
-
-	assert createTask.name in ['createDebug', 'createRelease']
-	createTask.configure { /*...*/ }
-}
+BUILD SUCCESSFUL
+$ awk '/region/,/endregion/' ./app/build.gradle
+	//region Just for demonstration purpose
+	binaries.configureEach {
+		compileTask.configure { compilerArgs.addAll([/*...*/]) }
+		linkTask.configure { linkerArgs.addAll([/*...*/]) }
+		installTask.configure { lib([/*...*/]) }
+	}
+	//endregion
+$ awk '/region/,/endregion/' ./lib/build.gradle
+	//region Just for demonstration purpose
+	binaries.configureEach(CppSharedLibrary) {
+		compileTask.configure { compilerArgs.addAll([/*...*/]) }
+		linkTask.configure { linkerArgs.addAll([/*...*/]) }
+	}
+	binaries.configureEach(CppStaticLibrary) {
+		compileTask.configure { compilerArgs.addAll([/*...*/]) }
+		createTask.configure { staticLibArgs.addAll([/*...*/]) }
+	}
+	//endregion
 ```
 
 We are essentially replacing the return type of the task getter from `Provider` to `TaskProvider`.

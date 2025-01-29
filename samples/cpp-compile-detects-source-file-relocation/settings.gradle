@@ -1,6 +1,2 @@
-pluginManagement {
-    includeBuild 'fix-native-compile-inputs-when-moving-files-plugin'
-}
-
 rootProject.name = 'sample-fix-gradle-issue-29492'
 include('app')
