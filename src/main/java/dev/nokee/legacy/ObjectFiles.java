@@ -46,7 +46,7 @@ final class ObjectFiles {
 
 		@Override
 		public void apply(Project project) {
-			project.getTasks().withType(AbstractNativeCompileTask.class).configureEach(new Action<>() {
+			project.getTasks().withType(AbstractNativeCompileTask.class).configureEach(new Action<AbstractNativeCompileTask>() {
 				private /*static*/ String objectFileExtension(AbstractNativeCompileTask task) {
 					NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) task.getToolChain().get();
 					NativePlatformInternal nativePlatform = (NativePlatformInternal) task.getTargetPlatform().get();
