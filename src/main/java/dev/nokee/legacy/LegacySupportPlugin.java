@@ -2,14 +2,29 @@ package dev.nokee.legacy;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.initialization.Settings;
+import org.gradle.api.plugins.ExtensionAware;
+import org.gradle.api.plugins.PluginAware;
 
 import javax.inject.Inject;
 
-/*public*/ abstract /*final*/ class LegacySupportPlugin implements Plugin<Project> {
+/*public*/ abstract /*final*/ class LegacySupportPlugin<TargetType extends PluginAware & ExtensionAware> implements Plugin<TargetType> {
 	@Inject
 	public LegacySupportPlugin() {}
 
-    public void apply(Project project) {
+    public void apply(TargetType target) {
+		if (target instanceof Project) {
+			doApply((Project) target);
+		} else if (target instanceof Settings) {
+			doApply((Settings) target);
+		}
+	}
+
+	private void doApply(Settings settings) {
+		settings.getGradle().allprojects(project -> project.getPluginManager().apply("dev.nokee.native-companion"));
+	}
+
+	private void doApply(Project project) {
 		project.getPluginManager().apply(ObjectFiles.Rule.class);
 		project.getPluginManager().apply(CompileTasks.Rule.class);
 		project.getPluginManager().apply(CppSourceFiles.Rule.class);
