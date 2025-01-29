@@ -161,14 +161,14 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 			}
 
 			if (indices.isEmpty()) {
-				return DEFAULT; // no per-source options (bucket 1)
+				return null; // no per-source options (bucket 1)
 			} else {
 				// cacheable (bucket 2)
 				return new Key(indices.stream().mapToInt(Integer::intValue).toArray());
 			}
 		}
 
-		public class Key {
+		public class Key implements Iterable<Integer> {
 			private final int[] indices;
 
 			private Key(int[] indices) {
@@ -198,6 +198,11 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 					entries.get(index).configureAction.execute(result);
 				}
 				return result;
+			}
+
+			@Override
+			public Iterator<Integer> iterator() {
+				return Arrays.stream(indices).iterator();
 			}
 		}
 

@@ -2,11 +2,17 @@ package dev.nokee.legacy;
 
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.WorkResults;
+import org.gradle.internal.UncheckedException;
+import org.gradle.internal.hash.HashValue;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 
 import java.io.File;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
 final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T> {
@@ -40,43 +46,6 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 			}
 		}
 
-		// TODO: Align the OperationLogger so one start then one done for all sub-spec
-		int expectedRuns = perSourceSpecs.size() + ((!defaultSpec.getSourceFiles().isEmpty() || !defaultSpec.getRemovedSourceFiles().isEmpty()) ? 1 : 0);
-		BuildOperationLogger logger = new BuildOperationLogger() {
-			private int i = 0;
-			private final BuildOperationLogger delegate = defaultSpec.getOperationLogger();
-
-			@Override
-			public void start() {
-				if (i++ == 0) {
-					delegate.start();
-				}
-			}
-
-			@Override
-			public void operationSuccess(String description, String output) {
-				delegate.operationSuccess(description, output);
-			}
-
-			@Override
-			public void operationFailed(String description, String output) {
-				delegate.operationFailed(description, output);
-			}
-
-			@Override
-			public void done() {
-				if (i == expectedRuns) {
-					delegate.done();
-				}
-			}
-
-			@Override
-			public String getLogLocation() {
-				return delegate.getLogLocation();
-			}
-		};
-		defaultSpec.setOperationLogger(logger);
-
 		// Execute the default bucket
 		//   it will delete the "file to remove" while the per-source bucket will only compile
 		result = result.or(delegateCompiler.execute(defaultSpec));
@@ -88,7 +57,7 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 			newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
 
 			// Namespace the temporary directory (i.e. where the options.txt will be written)
-			newSpec.setTempDir(new File(newSpec.getTempDir(), String.valueOf(entry.getKey().hashCode())));
+			newSpec.setTempDir(new File(newSpec.getTempDir(), hash(entry.getKey())));
 
 			// Configure the bucket spec from the per-source options
 			newSpec.args(entry.getKey().get().getCompilerArgs().get());
@@ -98,6 +67,18 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 		}
 
 		return result;
+	}
+
+	private String hash(CppCompileTask.AllSourceOptions<?>.Key key) {
+		try {
+			MessageDigest messageDigest = MessageDigest.getInstance("MD5");
+			for (Integer i : key) {
+				messageDigest.update(ByteBuffer.allocate(4).putInt(i).array());
+			}
+			return new BigInteger(1, messageDigest.digest()).toString(36);
+		} catch (NoSuchAlgorithmException e) {
+			throw UncheckedException.throwAsUncheckedException(e);
+		}
 	}
 
 	// Hand rolled implementation
