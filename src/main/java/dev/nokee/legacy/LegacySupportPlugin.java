@@ -22,7 +22,7 @@ import javax.inject.Inject;
 		project.getPluginManager().apply(GradleIssueXXXDependsOnPublicGeneratedHeadersAndMultiplePublicHeadersFix.class);
 		project.getPluginManager().apply(GradleIssueXXXHeaderNormalizationWindowsFix.class);
 		project.getPluginManager().apply(GradleIssueVersionCatalogueFix.class);
-
+		project.getPluginManager().apply(GradleIssueIncrementalCompilationAfterFailureFix.class);
 		// TODO: Source include (cxx)
 		// TODO: includes .i/.ii
 

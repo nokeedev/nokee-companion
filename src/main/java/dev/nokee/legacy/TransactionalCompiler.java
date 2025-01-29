@@ -41,7 +41,7 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 
 			@Override
 			public void start() {
-				delegate.start();
+				// already happened...
 			}
 
 			@Override

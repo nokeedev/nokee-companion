@@ -7,6 +7,7 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
+import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
@@ -29,10 +30,7 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static dev.nokee.commons.names.CppNames.compileTaskName;
@@ -70,7 +68,10 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 		Class<T> specType = Cast.uncheckedCast(spec.getClass());
 		Compiler<T> baseCompiler = platformToolProvider.newCompiler(specType);
 		Compiler<T> perSourceCompiler = new PerSourceCompiler<>(baseCompiler, perSourceOptions::forFile, () -> (T) createCompileSpec());
-		Compiler<T> transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler));
+		Compiler<T> transactionalCompiler = perSourceCompiler;
+		if (getIncrementalAfterFailure().get()) {
+			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler));
+		}
 		Compiler<T> incrementalCompiler = incrementalCompiler(this).createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
 		return loggingCompiler.execute(spec);
@@ -87,6 +88,9 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 		}
 	}
 
+	@Internal
+	public abstract Property<Boolean> getIncrementalAfterFailure();
+
 	// For gradle/gradle#29492
 	ConfigurableFileCollection source;
 
@@ -102,6 +106,8 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 
 		this.issueXXX = objects.newInstance(GradleIssueXXXHeaderNormalizationWindowsFix.class, super.getHeaderDependencies());
 		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
+
+		getIncrementalAfterFailure().convention(false);
 	}
 
 	@Override
