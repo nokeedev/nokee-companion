@@ -97,14 +97,11 @@ public abstract /*final*/ class CppCompileTask extends CppCompile {
 	// For header normalization on Windows
 	FileCollection headerDependencies;
 
-	private final GradleIssueXXXHeaderNormalizationWindowsFix issueXXX;
-
 	@Inject
 	public CppCompileTask(ObjectFactory objects) {
 		this.source = super.getSource();
 		this.headerDependencies = super.getHeaderDependencies();
 
-		this.issueXXX = objects.newInstance(GradleIssueXXXHeaderNormalizationWindowsFix.class, super.getHeaderDependencies());
 		this.perSourceOptions = new AllSourceOptions<>(CompileOptions.class, objects);
 
 		getIncrementalAfterFailure().convention(false);
