@@ -32,6 +32,12 @@ public abstract /*final*/ class CompileTasks {
 	private final TaskContainer tasks;
 	private final Provider<Set<? extends Task>> elementsProvider;
 
+	/**
+	 * {@hidden}
+	 * @param tasks  internal use only
+	 * @param providers  internal use only
+	 * @param objects  internal use only
+	 */
 	@Inject
 	public CompileTasks(TaskContainer tasks, ProviderFactory providers, ObjectFactory objects) {
 		this.tasks = tasks;
@@ -94,12 +100,7 @@ public abstract /*final*/ class CompileTasks {
 		return ((ExtensionAware) binary).getExtensions().getByType(CompileTasks.class);
 	}
 
-	/**
-	 * Returns all compile tasks of this view as a provider.
-	 * The provider is live and contains task dependencies to all of this view's content.
-	 *
-	 * @return a provider to all tasks of this view
-	 */
+	/** {@return a live provider of all compile tasks of this view} */
 	public Provider<Set<? extends Task>> getElements() {
 		return elementsProvider;
 	}
