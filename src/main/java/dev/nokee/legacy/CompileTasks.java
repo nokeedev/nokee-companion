@@ -28,52 +28,19 @@ import static dev.nokee.commons.names.CppNames.compileTaskName;
  * Use {@link #forBinary(CppBinary)} to retrieve an instance from Java code.
  */
 public abstract /*final*/ class CompileTasks {
-	private final Set<String> knownElements = new HashSet<>();
-	private final TaskContainer tasks;
-	private final Provider<Set<? extends Task>> elementsProvider;
-
-	/**
-	 * {@hidden}
-	 * @param tasks  internal use only
-	 * @param providers  internal use only
-	 * @param objects  internal use only
-	 */
-	@Inject
-	public CompileTasks(TaskContainer tasks, ProviderFactory providers, ObjectFactory objects) {
-		this.tasks = tasks;
-
-		// TODO: Use commons
-		this.elementsProvider = providers.provider(() -> {
-			SetProperty<Task> result = objects.setProperty(Task.class);
-			for (String name : knownElements) {
-				result.add(tasks.named(name));
-			}
-			return result;
-		}).flatMap(it -> it);
-	}
-
 	/**
 	 * Add a known task to this view
 	 *
 	 * @param compileTask a known compile task
 	 */
-	public void addLater(TaskProvider<? extends Task> compileTask) {
-		knownElements.add(compileTask.getName());
-	}
+	public abstract void addLater(TaskProvider<? extends Task> compileTask);
 
 	/**
 	 * Configures each compile tasks presently (and futurely) known to this view.
 	 *
 	 * @param configureAction  the configure action to execute
 	 */
-	public void configureEach(Action<? super Task> configureAction) {
-		// TODO: Use commons actions
-		tasks.withType(AbstractNativeCompileTask.class).configureEach(task -> {
-			if (knownElements.contains(task.getName())) {
-				configureAction.execute(task);
-			}
-		});
-	}
+	public abstract void configureEach(Action<? super Task> configureAction);
 
 	/**
 	 * Configures each compile tasks presently (and futurely) known to this view of the specified type.
@@ -82,13 +49,7 @@ public abstract /*final*/ class CompileTasks {
 	 * @param configureAction  the configure action to execute
 	 * @param <S>  the task type
 	 */
-	public <S extends Task> void configureEach(Class<S> type, Action<? super S> configureAction) {
-		tasks.withType(type).configureEach(task -> {
-			if (knownElements.contains(task.getName())) {
-				configureAction.execute(task);
-			}
-		});
-	}
+	public abstract <S extends Task> void configureEach(Class<S> type, Action<? super S> configureAction);
 
 	/**
 	 * Returns the compile tasks view for the specified binary.
@@ -101,8 +62,79 @@ public abstract /*final*/ class CompileTasks {
 	}
 
 	/** {@return a live provider of all compile tasks of this view} */
-	public Provider<Set<? extends Task>> getElements() {
-		return elementsProvider;
+	public abstract Provider<Set<? extends Task>> getElements();
+
+	/*private*/ static abstract /*final*/ class CppBinaryCompileTasks extends CompileTasks {
+		private final Set<String> knownElements = new HashSet<>();
+		private final TaskContainer tasks;
+		private final Provider<Set<? extends Task>> elementsProvider;
+
+		@Inject
+		public CppBinaryCompileTasks(TaskContainer tasks, ProviderFactory providers, ObjectFactory objects) {
+			this.tasks = tasks;
+
+			// TODO: Use commons
+			this.elementsProvider = providers.provider(() -> {
+				SetProperty<Task> result = objects.setProperty(Task.class);
+				for (String name : knownElements) {
+					result.add(tasks.named(name));
+				}
+				return result;
+			}).flatMap(it -> it);
+		}
+
+		/**
+		 * Add a known task to this view
+		 *
+		 * @param compileTask a known compile task
+		 */
+		public void addLater(TaskProvider<? extends Task> compileTask) {
+			knownElements.add(compileTask.getName());
+		}
+
+		/**
+		 * Configures each compile tasks presently (and futurely) known to this view.
+		 *
+		 * @param configureAction  the configure action to execute
+		 */
+		public void configureEach(Action<? super Task> configureAction) {
+			// TODO: Use commons actions
+			tasks.withType(AbstractNativeCompileTask.class).configureEach(task -> {
+				if (knownElements.contains(task.getName())) {
+					configureAction.execute(task);
+				}
+			});
+		}
+
+		/**
+		 * Configures each compile tasks presently (and futurely) known to this view of the specified type.
+		 *
+		 * @param type  the task type to configure
+		 * @param configureAction  the configure action to execute
+		 * @param <S>  the task type
+		 */
+		public <S extends Task> void configureEach(Class<S> type, Action<? super S> configureAction) {
+			tasks.withType(type).configureEach(task -> {
+				if (knownElements.contains(task.getName())) {
+					configureAction.execute(task);
+				}
+			});
+		}
+
+		/**
+		 * Returns the compile tasks view for the specified binary.
+		 *
+		 * @param binary  the binary to get the view for
+		 * @return the compile tasks view
+		 */
+		public static CompileTasks forBinary(CppBinary binary) {
+			return ((ExtensionAware) binary).getExtensions().getByType(CompileTasks.class);
+		}
+
+		/** {@return a live provider of all compile tasks of this view} */
+		public Provider<Set<? extends Task>> getElements() {
+			return elementsProvider;
+		}
 	}
 
 	/*private*/ static abstract /*final*/ class Feature implements Plugin<Project> {
@@ -117,7 +149,7 @@ public abstract /*final*/ class CompileTasks {
 		public void apply(Project project) {
 			project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
-					final CompileTasks compileTasks = ((ExtensionAware) binary).getExtensions().create("compileTasks", CompileTasks.class);
+					final CompileTasks compileTasks = ((ExtensionAware) binary).getExtensions().create("compileTasks", CppBinaryCompileTasks.class);
 					compileTasks.addLater(tasks.named(compileTaskName(binary), CppCompile.class));
 				});
 			}));
