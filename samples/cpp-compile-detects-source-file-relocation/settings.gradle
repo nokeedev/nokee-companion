@@ -1,2 +1,6 @@
+plugins {
+	id 'dev.nokee.native-companion' version '1.0-milestone-1'
+}
+
 rootProject.name = 'sample-fix-gradle-issue-29492'
-include('app')
+include 'app'
