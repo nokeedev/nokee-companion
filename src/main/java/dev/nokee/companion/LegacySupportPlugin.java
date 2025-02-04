@@ -26,7 +26,8 @@ import javax.inject.Inject;
 	}
 
 	private void doApply(Project project) {
-		FeaturePreviews feature = FeaturePreviews.featurePreviews(project);
+		final NativeCompanionExtension extension = project.getExtensions().create("nativeCompanion", NativeCompanionExtension.class, project);
+		final FeaturePreviews feature = project.getObjects().newInstance(FeaturePreviews.class, extension);
 
 		feature.apply("native-task-object-files-extension");
 		feature.apply("compile-tasks-extension");
@@ -52,12 +53,12 @@ import javax.inject.Inject;
     }
 
 	/*private*/ static abstract /*final*/ class FeaturePreviews {
-		private final Project project;
+		private final NativeCompanionExtension extension;
 		private final ProviderFactory providers;
 
 		@Inject
-		public FeaturePreviews(Project project, ProviderFactory providers) {
-			this.project = project;
+		public FeaturePreviews(NativeCompanionExtension extension, ProviderFactory providers) {
+			this.extension = extension;
 			this.providers = providers;
 		}
 
@@ -66,12 +67,8 @@ import javax.inject.Inject;
 				.orElse(providers.gradleProperty("dev.nokee.native-companion.all-features.enabled"))
 				.map(Boolean::valueOf).getOrElse(false);
 			if (enabled) {
-				project.getPluginManager().apply("native-companion.features." + featureName);
+				extension.enableFeaturePreview(featureName);
 			}
-		}
-
-		public static FeaturePreviews featurePreviews(Project project) {
-			return project.getObjects().newInstance(FeaturePreviews.class, project);
 		}
 	}
 }
