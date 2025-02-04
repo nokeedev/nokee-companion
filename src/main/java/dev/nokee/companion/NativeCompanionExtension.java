@@ -1,18 +1,13 @@
 package dev.nokee.companion;
 
-import org.gradle.api.Project;
-
-import javax.inject.Inject;
-
-public class NativeCompanionExtension {
-	private final Project project;
-
-	@Inject
-	public NativeCompanionExtension(Project project) {
-		this.project = project;
-	}
-
-	public void enableFeaturePreview(String featureName) {
-		project.getPluginManager().apply("native-companion.features." + featureName);
-	}
+/**
+ * Represent all configurations supported by the {@literal dev.nokee.native-companion} plugin.
+ */
+public interface NativeCompanionExtension {
+	/**
+	 * Enables the specified feature.
+	 *
+	 * @param featureName  the feature name, see documentation
+	 */
+	void enableFeaturePreview(String featureName);
 }

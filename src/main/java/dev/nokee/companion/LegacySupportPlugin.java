@@ -26,7 +26,7 @@ import javax.inject.Inject;
 	}
 
 	private void doApply(Project project) {
-		final NativeCompanionExtension extension = project.getExtensions().create("nativeCompanion", NativeCompanionExtension.class, project);
+		final NativeCompanionExtension extension = project.getExtensions().create("nativeCompanion", Extension.class, project);
 		final FeaturePreviews feature = project.getObjects().newInstance(FeaturePreviews.class, extension);
 
 		feature.apply("native-task-object-files-extension");
@@ -51,6 +51,20 @@ import javax.inject.Inject;
 		//   dup configuration
 		//   etc.
     }
+
+	/*private*/ static abstract /*final*/ class Extension implements NativeCompanionExtension {
+		private final Project project;
+
+		@Inject
+		public Extension(Project project) {
+			this.project = project;
+		}
+
+		@Override
+		public void enableFeaturePreview(String featureName) {
+			project.getPluginManager().apply("native-companion.features." + featureName);
+		}
+	}
 
 	/*private*/ static abstract /*final*/ class FeaturePreviews {
 		private final NativeCompanionExtension extension;
