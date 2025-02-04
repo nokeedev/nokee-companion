@@ -86,7 +86,6 @@ public final class CppBinaryObjects {
 						// TODO: Test suite
 						// ... and rewire the object
 					}
-
 				});
 			}));
 		}
