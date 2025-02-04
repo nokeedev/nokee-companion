@@ -1,4 +1,4 @@
-package dev.nokee.legacy.features;
+package dev.nokee.companion.features;
 
 import org.apache.commons.io.FileUtils;
 import org.gradle.api.tasks.WorkResult;

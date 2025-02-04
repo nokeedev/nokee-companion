@@ -1,4 +1,4 @@
-package dev.nokee.legacy.features;
+package dev.nokee.companion.features;
 
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Action;
@@ -33,7 +33,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static dev.nokee.commons.names.CppNames.compileTaskName;
-import static dev.nokee.legacy.features.TransactionalCompiler.outputFileDir;
+import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 @CacheableTask
 /*private*/ abstract /*final*/ class CppCompileTask extends CppCompile {

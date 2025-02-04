@@ -1,4 +1,4 @@
-package dev.nokee.legacy.features;
+package dev.nokee.companion.features;
 
 import dev.nokee.commons.names.CppNames;
 import org.gradle.api.Action;

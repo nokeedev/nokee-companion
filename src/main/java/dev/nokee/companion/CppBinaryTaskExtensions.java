@@ -1,4 +1,4 @@
-package dev.nokee.legacy;
+package dev.nokee.companion;
 
 import groovy.lang.Closure;
 import groovy.lang.GroovyObject;

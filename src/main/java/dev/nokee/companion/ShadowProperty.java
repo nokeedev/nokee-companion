@@ -1,4 +1,4 @@
-package dev.nokee.legacy;
+package dev.nokee.companion;
 
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.ExtraPropertiesExtension;

@@ -1,4 +1,4 @@
-package dev.nokee.legacy.features;
+package dev.nokee.companion.features;
 
 import dev.nokee.commons.backports.DependencyBucket;
 import org.gradle.api.Action;

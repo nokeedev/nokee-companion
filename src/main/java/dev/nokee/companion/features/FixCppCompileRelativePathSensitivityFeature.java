@@ -1,4 +1,4 @@
-package dev.nokee.legacy.features;
+package dev.nokee.companion.features;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;

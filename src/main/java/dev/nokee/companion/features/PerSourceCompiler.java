@@ -1,4 +1,4 @@
-package dev.nokee.legacy.features;
+package dev.nokee.companion.features;
 
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.tasks.WorkResult;

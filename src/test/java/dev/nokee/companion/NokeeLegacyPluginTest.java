@@ -1,4 +1,4 @@
-package dev.nokee.legacy;
+package dev.nokee.companion;
 
 import org.gradle.testfixtures.ProjectBuilder;
 import org.gradle.api.Project;
