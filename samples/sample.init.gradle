@@ -2,7 +2,7 @@ gradle.beforeSettings { settings ->
 	// Only for root build, which will be the sample project
 	if (settings.gradle.parent == null) {
 		settings.pluginManagement {
-			includeBuild buildscript.sourceFile.parent
+			includeBuild buildscript.sourceFile.parentFile.parent
 		}
 	}
 }
