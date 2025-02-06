@@ -1,0 +1,21 @@
+plugins {
+	id 'cpp-library'
+	id 'maven-publish'
+	id 'dev.nokee.native-companion'
+}
+
+group = 'nokee-samples'
+version = '1.0'
+
+//region Configure multiple public header directories
+library {
+	publicHeaders.from('../includes/list')
+	publicHeaders.from('../includes/utilities')
+}
+//endregion
+
+publishing {
+	repositories {
+		maven { url = '../repo' }
+	}
+}

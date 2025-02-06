@@ -1,0 +1,44 @@
+plugins {
+	id 'cpp-library'
+	id 'maven-publish'
+	id 'dev.nokee.native-companion'
+}
+
+group = 'nokee-samples'
+version = '1.1'
+
+import javax.inject.Inject
+abstract class UnzipTask extends DefaultTask {
+	@InputFile
+	abstract RegularFileProperty getZipFile()
+
+	@OutputDirectory
+	abstract DirectoryProperty getDestinationDirectory()
+
+	@Inject
+	protected abstract ArchiveOperations getArchiveOperations()
+
+	@Inject
+	protected abstract FileSystemOperations getFileOperations()
+
+	@TaskAction
+	private void doAction() {
+		fileOperations.sync { spec ->
+			spec.from(archiveOperations.zipTree(zipFile))
+			spec.into(destinationDirectory)
+		}
+	}
+}
+
+library {
+	publicHeaders.from(tasks.register('unzipPublicHeaders', UnzipTask) {
+		zipFile = file('cpp-api-headers.zip')
+		destinationDirectory = layout.buildDirectory.dir('generated-headers/main')
+	})
+}
+
+publishing {
+	repositories {
+		maven { url = '../repo' }
+	}
+}
