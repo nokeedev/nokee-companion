@@ -13,7 +13,7 @@ import javax.inject.Inject;
 	@Inject
 	public LegacySupportPlugin() {}
 
-    public void apply(TargetType target) {
+	public void apply(TargetType target) {
 		if (target instanceof Project) {
 			doApply((Project) target);
 		} else if (target instanceof Settings) {
@@ -43,14 +43,14 @@ import javax.inject.Inject;
 		feature.apply("fix-for-version-catalog");
 		feature.apply("incremental-compilation-after-failure");
 		// TODO: Source include (cxx)
-		// TODO: includes .i/.ii
+		// TODO: includes .i/.ii & .hh
 
 		// TODO: Copy variant (or part of) - work around the lack of variants
 		//   dup compile task
 		//   dup link task
 		//   dup configuration
 		//   etc.
-    }
+	}
 
 	/*private*/ static abstract /*final*/ class Extension implements NativeCompanionExtension {
 		private final Project project;

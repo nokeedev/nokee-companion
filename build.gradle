@@ -1,5 +1,5 @@
 plugins {
-    id 'java-gradle-plugin'
+	id 'java-gradle-plugin'
 	id 'jvm-test-suite'
 	id 'nokeebuild.publishing'
 	id 'nokeebuild.signing'
@@ -12,7 +12,7 @@ version = '1.0-milestone-4'
 description = 'Quality-of-life enhancements for Gradle core native plugins.'
 
 repositories {
-    mavenCentral()
+	mavenCentral()
 }
 
 java {
@@ -30,12 +30,17 @@ tasks.named('javadoc', Javadoc) {
 }
 
 gradlePlugin {
-    plugins {
-        legacy {
-            id = 'dev.nokee.native-companion'
-            implementationClass = 'dev.nokee.legacy.LegacySupportPlugin'
-        }
-    }
+	website = 'https://nokee.dev'
+	vcsUrl = 'https://github.com/nokeedev/nokee-companion'
+	plugins {
+		legacy {
+			id = 'dev.nokee.native-companion'
+			implementationClass = 'dev.nokee.companion.LegacySupportPlugin'
+			displayName = 'Nokee Native Companion'
+			description = 'Provides quality-of-life enhancements for Gradle core native plugins.'
+			tags = ['c++', 'cpp', 'native', 'gradle-native', 'cpp-library', 'cpp-application']
+		}
+	}
 
 	dependencies {
 		implementation 'dev.nokee.commons:commons-names:latest.release'
