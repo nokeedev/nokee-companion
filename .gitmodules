@@ -1,0 +1,3 @@
+[submodule "sampledev-plugins"]
+	path = gradle/plugins/sampledev-plugins
+	url = git@gitlab.com:nokeedev-samples/sampledev-plugins.git
