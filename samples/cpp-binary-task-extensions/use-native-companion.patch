@@ -49,7 +49,7 @@ index d164157..2d6dac9 100644
 +++ b/settings.gradle
 @@ -1 +1,5 @@
 +plugins {
-+	id 'dev.nokee.native-companion'
++	id 'dev.nokee.native-companion' version '1.0-milestone-3'
 +}
 +
  include 'app', 'lib'

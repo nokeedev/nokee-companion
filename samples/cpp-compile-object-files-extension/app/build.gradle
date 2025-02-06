@@ -1,0 +1,22 @@
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.native-companion' version '1.0-milestone-3'
+}
+
+application {
+	binaries.configureEach {
+		compileTask.get().doLast { println 'executing compilation' }
+
+		//region Example of using objectFiles extension
+		tasks.register("list${name - 'main'}ObjectFiles") {
+			dependsOn compileTask.get().objectFiles // it holds task dependencies
+			doLast {
+				println "all object files ${compileTask.get()}"
+				compileTask.get().objectFiles.each {
+					println " -> $it"
+				}
+			}
+		}
+		//endregion
+	}
+}

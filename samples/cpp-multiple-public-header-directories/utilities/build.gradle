@@ -1,7 +1,7 @@
 plugins {
 	id 'cpp-library'
 	id 'maven-publish'
-	id 'dev.nokee.native-companion'
+	id 'dev.nokee.native-companion' version '1.0-milestone-3'
 }
 
 group = 'nokee-samples'
