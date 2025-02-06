@@ -6,3 +6,5 @@ build
 
 .idea
 .DS_Store
+
+**/repo/

@@ -71,3 +71,4 @@ $ find ./app/build/tmp/compileDebugCpp -name options.txt
 ```
 
 There are some limitation with the per-source options.
+In Java source code, use `dev.nokee.language.cpp.tasks.CppCompile` task type to access the per-source options.
