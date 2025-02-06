@@ -1,6 +1,14 @@
+buildscript {
+	dependencies {
+		classpath 'dev.nokee.templates:nokee-code-templates:latest.release'
+	}
+}
+
 plugins {
 	id 'java-gradle-plugin'
 	id 'jvm-test-suite'
+	id 'dev.nokee.samples.generators'
+	id 'dev.nokee.samples.copy-source'
 	id 'nokeebuild.publishing'
 	id 'nokeebuild.signing'
 	id 'nokeebuild.use-latest-java-lts-in-test-suites'
@@ -84,3 +92,125 @@ testing {
 
 gradlePlugin.testSourceSets.add(sourceSets.functionalTest)
 gradlePlugin.testSourceSets.add(sourceSets.samplesTest)
+
+import dev.gradleplugins.fixtures.sources.NativeElements
+import dev.nokee.docs.samples.generators.copysource.CppLibraryTemplate
+import dev.nokee.docs.samples.generators.copysource.SourceCopyTask
+
+project.getTasks().withType(SourceCopyTask).configureEach {
+	templatesDir = file('../../nokee-samples/native-samples/samples-dev/src/templates')
+}
+
+
+import dev.nokee.templates.CppApp
+
+import java.nio.file.FileSystems
+import java.nio.file.FileSystem
+
+def cppUtilsLib = CppLibraryTemplate.of("cpp-lib-with-api-dep", "utilities")
+def cppListLib = CppLibraryTemplate.of("cpp-lib", "list")
+def cppMessageLib = CppLibraryTemplate.of("cpp-message-api", "message")
+
+
+samples {
+	samples.configureEach { sampleDir = file("samples/${it.name}") }
+	samples.register('cpp-binary-task-extensions') {
+		copySource {
+			project(".").buildRoot()
+			appProject("app").fromTemplate("cpp-app")
+			appProject("app").fromTemplate(cppMessageLib)
+			appProject("app").fromTemplate("cpp-message-static")
+			libProject("lib").fromTemplate(cppUtilsLib)
+			libProject("lib").fromTemplate(cppListLib)
+		}
+	}
+	samples.register('cpp-compile-detects-source-file-relocation') {
+//		copySource {
+//			project(".").buildRoot()
+//			appProject("app").fromTemplate("cpp-app")
+//			appProject("app").fromTemplate(cppMessageLib)
+//			appProject("app").fromTemplate("cpp-message-static")
+//			libProject("utilities").fromTemplate(cppUtilsLib)
+//			libProject("list").fromTemplate(cppListLib)
+//		}
+	}
+	samples.register('cpp-compile-incremental-after-failure') {
+
+	}
+	samples.register('cpp-compile-object-files-extension') {
+		copySource {
+			project(".").buildRoot()
+			appProject("app").fromTemplate("cpp-app")
+			appProject("app").fromTemplate(cppMessageLib)
+			appProject("app").fromTemplate("cpp-message-static")
+			appProject("app").fromTemplate(cppUtilsLib)
+			appProject("app").fromTemplate(cppListLib)
+		}
+	}
+	samples.register('cpp-compile-options-per-source-files') {
+		copySource {
+			project(".").buildRoot()
+			appProject("app").fromTemplate("cpp-app")
+			appProject("app").fromTemplate(cppMessageLib)
+			appProject("app").fromTemplate("cpp-message-static")
+			libProject("lib").fromTemplate(cppUtilsLib)
+			libProject("lib").fromTemplate(cppListLib)
+		}
+	}
+	samples.register('cpp-dependencies-version-catalog-support') {
+
+	}
+	samples.register('cpp-dependency-on-generated-public-headers') {
+		elements {
+			def app = new CppApp()
+			app.withoutImplementation().writeToProject(location.resolve('app'))
+			app.getLibs().with {
+				it.get(NativeElements::privateHeaders).writeToProject(location.resolve('lib'))
+				it.get(NativeElements::sources).writeToProject(location.resolve('lib'))
+
+				URI uri = URI.create("jar:file:" + location.resolve('lib/cpp-api-headers.zip'))
+				try (FileSystem zipfs = FileSystems.newFileSystem(uri, [create: 'true'])) {
+					it.get(NativeElements::publicHeaders).writeToSourceDir(zipfs.getPath("/"))
+				}
+			}
+		}
+	}
+	// TODO: Rename this sample
+	samples.register('cpp-header-dependencies-normalization') {
+//		copySource {
+//			project(".").buildRoot()
+//			appProject("app").fromTemplate("cpp-app")
+//			appProject("app").fromTemplate(cppMessageLib)
+//			appProject("app").fromTemplate("cpp-message-static")
+//			libProject("lib").fromTemplate(cppUtilsLib)
+//			libProject("lib").fromTemplate(cppListLib)
+//		}
+	}
+	samples.register('cpp-multiple-compile-tasks') {
+
+	}
+	samples.register('cpp-multiple-public-header-directories') {
+		elements {
+			def app = new CppApp()
+			app.withoutImplementation().writeToProject(location.resolve('app'))
+			app.getMessage().asLib().with {
+				it.get(NativeElements::publicHeaders).writeToSourceDir(location.resolve('includes/message'))
+				it.get(NativeElements::privateHeaders).writeToProject(location.resolve('message'))
+				it.get(NativeElements::sources).writeToProject(location.resolve('message'))
+			}
+			app.getUtilities().asLib().with {
+				it.get(NativeElements::publicHeaders).writeToSourceDir(location.resolve('includes/utilities'))
+				it.get(NativeElements::privateHeaders).writeToProject(location.resolve('utilities'))
+				it.get(NativeElements::sources).writeToProject(location.resolve('utilities'))
+			}
+			app.getList().asLib().with {
+				it.get(NativeElements::publicHeaders).writeToSourceDir(location.resolve('includes/list'))
+				it.get(NativeElements::privateHeaders).writeToProject(location.resolve('utilities'))
+				it.get(NativeElements::sources).writeToProject(location.resolve('utilities'))
+			}
+		}
+	}
+	samples.register('cpp-source-patterns') {
+
+	}
+}
