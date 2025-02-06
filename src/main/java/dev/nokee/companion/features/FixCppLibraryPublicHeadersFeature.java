@@ -15,7 +15,6 @@ import org.gradle.language.cpp.CppLibrary;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.util.Set;
 import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
@@ -41,24 +40,36 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 			project.afterEvaluate(ignored(() -> {
 				project.getComponents().withType(CppLibrary.class).configureEach(library -> {
 					configurations.named(cppApiElementsConfigurationName(library)).configure(apiElements -> {
-						final Provider<File> publicHeaders = objects.fileCollection().builtBy(library.getPublicHeaderDirs()).from((Callable<?>) () -> {
-							final Set<File> files = library.getPublicHeaderDirs().getFiles();
-							if (files.isEmpty()) {
-								throw new UnsupportedOperationException(String.format("The C++ library plugin currently requires at least one public header directory, however there are no directories configured."));
-							} else if (files.size() != 1) {
-								final TaskProvider<Sync> syncTask = tasks.register(CppNames.of(library).taskName("sync", "publicHeaders").toString(), Sync.class, task -> {
+						final Provider<File> exportedHeaders = project.provider(() -> {
+							final String taskName = CppNames.of(library).taskName("sync", "publicHeaders").toString();
+
+							TaskProvider<Sync> syncTask = null;
+							if (tasks.getNames().contains(taskName)) {
+								syncTask = tasks.named(taskName, Sync.class);
+							} else {
+								syncTask = tasks.register(taskName, Sync.class, task -> {
 									task.setDescription("Assemble the C++ API elements (e.g. public headers).");
 									task.setDestinationDir(project.file(layout.getBuildDirectory().dir("exported-headers/" + library.getName())));
 									task.from(library.getPublicHeaderDirs());
 								});
-								return syncTask.map(Sync::getDestinationDir);
 							}
-							return files.iterator().next();
-						}).getElements().map(it -> it.iterator().next().getAsFile());
+							return syncTask.map(Sync::getDestinationDir);
+						}).flatMap(it -> it);
 
+						final Provider<File> publicHeader = library.getPublicHeaderDirs().getElements().map(files -> {
+							if (files.isEmpty()) {
+								throw new UnsupportedOperationException(String.format("The C++ library plugin currently requires at least one public header directory, however there are no directories configured."));
+							} else if (files.size() == 1) {
+								return files.iterator().next().getAsFile();
+							} else {
+								return null; // force orElse
+							}
+						});
+
+						final Provider<File> publicHeaders = publicHeader.orElse(exportedHeaders);
 						apiElements.outgoing(outgoing -> {
 							outgoing.getArtifacts().clear();
-							outgoing.artifact(publicHeaders);
+							outgoing.artifact(publicHeaders, artifact -> artifact.builtBy((Callable<?>) () -> publicHeader.isPresent() ? library.getPublicHeaderDirs() : exportedHeaders));
 						});
 					});
 				});
