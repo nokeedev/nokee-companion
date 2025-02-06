@@ -1,5 +1,5 @@
 plugins {
-	id 'dev.nokee.native-companion' version '1.0-milestone-3'
+	id 'dev.nokee.native-companion' version '1.0-milestone-4'
 }
 
 include 'app', 'lib'
