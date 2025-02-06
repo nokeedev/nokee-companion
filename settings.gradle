@@ -1,1 +1,6 @@
+pluginManagement {
+	includeBuild 'gradle/plugins/sampledev-plugins'
+	includeBuild 'gradle/plugins/nokeebuild-plugins'
+}
+
 rootProject.name = 'nokee-companion'
