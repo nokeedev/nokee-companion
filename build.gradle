@@ -1,5 +1,10 @@
 plugins {
     id 'java-gradle-plugin'
+	id 'jvm-test-suite'
+	id 'nokeebuild.publishing'
+	id 'nokeebuild.signing'
+	id 'nokeebuild.use-latest-java-lts-in-test-suites'
+	id 'nokeebuild.use-junit-platform-in-test-suites'
 }
 
 group = 'dev.nokee'
@@ -24,12 +29,6 @@ tasks.named('javadoc', Javadoc) {
 	}
 }
 
-dependencies {
-    testImplementation libs.junit.jupiter
-
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
 gradlePlugin {
     plugins {
         legacy {
@@ -41,31 +40,42 @@ gradlePlugin {
 	dependencies {
 		implementation 'dev.nokee.commons:commons-names:latest.release'
 		implementation 'dev.nokee.commons:commons-backports:latest.release'
-		implementation 'dev.nokee.commons:commons-provider:latest.release'
 		implementation 'commons-io:commons-io:latest.release'
 	}
 }
 
-sourceSets {
-    functionalTest {
-    }
-}
+testing {
+	suites {
+		functionalTest(JvmTestSuite) {
+			dependencies {
+				implementation gradleTestKit()
+				implementation 'commons-io:commons-io:latest.release'
+				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
+				implementation 'dev.nokee.templates:nokee-code-templates:latest.release'
+				implementation 'dev.gradleplugins:gradle-runner-kit:latest.release'
+				implementation 'org.jetbrains:annotations:26.0.2'
+			}
+		}
+		samplesTest(JvmTestSuite) {
+			targets.all {
+				testTask.configure {
+					samples.samples.all {
+						systemProperty it.name, it.sampleDir.get().asFile.absolutePath
+					}
+				}
+			}
 
-configurations.functionalTestImplementation.extendsFrom(configurations.testImplementation)
-configurations.functionalTestRuntimeOnly.extendsFrom(configurations.testRuntimeOnly)
-
-tasks.register('functionalTest', Test) {
-    testClassesDirs = sourceSets.functionalTest.output.classesDirs
-    classpath = sourceSets.functionalTest.runtimeClasspath
-    useJUnitPlatform()
+			dependencies {
+				implementation gradleTestKit()
+				implementation 'commons-io:commons-io:latest.release'
+				implementation 'dev.gradleplugins.exemplar:commons-exemplar:latest.release'
+				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
+				implementation libs.hamcrest.core
+				implementation 'dev.gradleplugins:gradle-runner-kit:latest.release'
+			}
+		}
+	}
 }
 
 gradlePlugin.testSourceSets.add(sourceSets.functionalTest)
-
-tasks.named('check') {
-    dependsOn(tasks.functionalTest)
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
-}
+gradlePlugin.testSourceSets.add(sourceSets.samplesTest)
