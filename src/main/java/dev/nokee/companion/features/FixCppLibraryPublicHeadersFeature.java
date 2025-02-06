@@ -15,6 +15,7 @@ import org.gradle.language.cpp.CppLibrary;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
@@ -56,11 +57,12 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 							return syncTask.map(Sync::getDestinationDir);
 						}).flatMap(it -> it);
 
-						final Provider<File> publicHeader = library.getPublicHeaderDirs().getElements().map(files -> {
+						final Provider<File> publicHeader = project.provider(() -> {
+							Set<File> files = library.getPublicHeaderDirs().getFiles();
 							if (files.isEmpty()) {
 								throw new UnsupportedOperationException(String.format("The C++ library plugin currently requires at least one public header directory, however there are no directories configured."));
 							} else if (files.size() == 1) {
-								return files.iterator().next().getAsFile();
+								return files.iterator().next();
 							} else {
 								return null; // force orElse
 							}
