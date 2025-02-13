@@ -97,6 +97,54 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		getOptions().getOptimized().set(optimize);
 	}
 
+	@Internal
+	@Override
+	public Map<String, String> getMacros() {
+		return new AbstractMap<String, String>() {
+			private final MapProperty<String, String> macros = getOptions().getPreprocessorOptions().getDefinedMacros();
+			@Override
+			public Set<Entry<String, String>> entrySet() {
+				return macros.get().entrySet();
+			}
+
+			@Override
+			public String getOrDefault(Object key, String defaultValue) {
+				return macros.getting(key.toString()).getOrElse(defaultValue);
+			}
+
+			@Override
+			public String get(Object key) {
+				return macros.getting(key.toString()).getOrNull();
+			}
+
+			@Override
+			public String put(String key, String value) {
+				macros.put(key, value);
+				return null; // can't honor the contract
+			}
+
+			@Override
+			public void putAll(Map<? extends String, ? extends String> m) {
+				macros.putAll(m);
+			}
+
+			@Override
+			public Collection<String> values() {
+				return macros.get().values();
+			}
+
+			@Override
+			public Set<String> keySet() {
+				return macros.keySet().get();
+			}
+		};
+	}
+
+	@Override
+	public void setMacros(Map<String, String> macros) {
+		getOptions().getPreprocessorOptions().getDefinedMacros().set(macros);
+	}
+
 	@Override
 	protected void compile(InputChanges inputs) {
 		BuildOperationLogger operationLogger = this.getOperationLoggerFactory().newOperationLogger(this.getName(), this.getTemporaryDir());
@@ -107,7 +155,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		spec.include(getIncludes());
 		spec.systemInclude(getSystemIncludes());
 		spec.source(getSource());
-		spec.setMacros(getMacros());
+		spec.setMacros(getOptions().getPreprocessorOptions().getDefinedMacros().get());
 		spec.args(getCompilerArgs().get());
 		for (CommandLineArgumentProvider argProvider : getOptions().getCompilerArgumentProviders().get()) {
 			argProvider.asArguments().forEach(spec.getArgs()::add);
@@ -171,6 +219,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		getOptions().getDebuggable().convention(super.isDebuggable());
 		getOptions().getOptimized().convention(super.isOptimized());
 		getOptions().getPositionIndependentCode().convention(super.isPositionIndependentCode());
+		getOptions().getPreprocessorOptions().getDefinedMacros().set(super.getMacros());
 	}
 
 	@Override
@@ -192,6 +241,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	@Incremental
 	@PathSensitive(PathSensitivity.NAME_ONLY)
 	protected FileCollection getHeaderDependencies() {
+		super.setMacros(options.getPreprocessorOptions().getDefinedMacros().get());
 		return headerDependencies;
 	}
 

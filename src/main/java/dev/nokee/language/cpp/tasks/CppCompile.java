@@ -1,9 +1,11 @@
 package dev.nokee.language.cpp.tasks;
 
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
+import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
 import org.gradle.api.Action;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.Nested;
 
 /**
  * Compiles C++ source files into object files.
@@ -46,5 +48,11 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 		 */
 		@Input
 		Property<Boolean> getPositionIndependentCode();
+
+		/**
+		 * {@return the preprocessor options for all compilation units}
+		 */
+		@Nested
+		PreprocessorOptions getPreprocessorOptions();
 	}
 }
