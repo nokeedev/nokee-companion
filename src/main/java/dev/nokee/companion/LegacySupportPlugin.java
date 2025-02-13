@@ -44,6 +44,8 @@ import javax.inject.Inject;
 		feature.apply("fix-headers-dependencies-for-case-insensitive");
 		feature.apply("fix-for-version-catalog");
 		feature.apply("incremental-compilation-after-failure");
+
+		feature.apply("multiplatform-publication");
 		// TODO: Source include (cxx)
 		// TODO: includes .i/.ii & .hh
 

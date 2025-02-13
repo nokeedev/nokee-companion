@@ -1,0 +1,45 @@
+plugins {
+	id 'cpp-library'
+	id 'java-base'
+	id 'maven-publish'
+	id 'dev.nokee.native-companion'
+}
+
+group = 'native-samples'
+version = '1.2'
+
+sourceSets {
+	jni {
+		java {
+			srcDir 'src/main/java'
+		}
+		tasks.register(jarTaskName, Jar) {
+			from java.classesDirectory
+		}
+		configurations.consumable(runtimeElementsConfigurationName) {
+			attributes {
+				attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
+			}
+			outgoing {
+				artifact(tasks.named(jarTaskName))
+			}
+		}
+	}
+}
+
+library {
+	baseName = 'greeter'
+	privateHeaders.from('src/main/headers')
+	privateHeaders.from(tasks.named(sourceSets.jni.compileJavaTaskName, JavaCompile).flatMap { it.javaCompiler }.map { [it.metadata.installationPath.dir('include'), it.metadata.installationPath.dir('include/darwin')] })
+	publicHeaders.from(tasks.named(sourceSets.jni.compileJavaTaskName, JavaCompile).flatMap { it.options.headerOutputDirectory })
+}
+
+//region Add JNI runtime elements to C++ bridge component
+components.cpp.addVariantsFromConfiguration(configurations.getByName(sourceSets.jni.runtimeElementsConfigurationName)) {}
+//endregion
+
+publishing {
+	repositories {
+		maven { url = '../repo' }
+	}
+}

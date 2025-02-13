@@ -1,0 +1,6 @@
+pluginManagement {
+	includeBuild 'gradle/plugins'
+}
+
+rootProject.name = 'publishing-sample'
+include 'app', 'lib'

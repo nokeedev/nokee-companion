@@ -58,6 +58,7 @@ Here's summary of all features available:
 - _(disabled)_ [**fix-headers-dependencies-for-case-insensitive**](#feature-fix-headers-dependencies-for-case-insensitive):
 - _(disabled)_ [**fix-for-version-catalog**](#feature-fix-for-version-catalog):
 - _(disabled)_ [**incremental-compilation-after-failure**](#feature-incremental-compilation-after-failure):
+- _(disabled)_ [**multiplatform-publishing**](#feature-multiplatform-publishing):
 
 ### Feature: native-task-object-files-extension
 
@@ -79,3 +80,4 @@ Here's summary of all features available:
 
 ### Feature: incremental-compilation-after-failure
 
+### Feature: multiplatform-publishing

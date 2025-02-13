@@ -1,0 +1,27 @@
+plugins {
+	id 'application'
+}
+
+repositories {
+	maven { url = '../repo' }
+}
+
+application {
+	mainClass = 'com.example.app.Main'
+
+	dependencies {
+		implementation 'native-samples:lib:1.2'
+	}
+}
+
+def nativeLibraries = configurations.resolvable('nativeLibraries') {
+	extendsFrom(configurations.implementation)
+	attributes {
+		attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.NATIVE_RUNTIME))
+		attribute(CppBinary.OPTIMIZED_ATTRIBUTE, true) // release only
+	}
+}
+tasks.named('run', JavaExec) {
+	dependsOn(nativeLibraries.get()) // ensure a dependency in case user want to consume project directly
+	it.systemProperty('java.library.path', nativeLibraries.get().collect { it.parent }.join(File.pathSeparator))
+}

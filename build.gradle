@@ -54,6 +54,7 @@ gradlePlugin {
 		implementation 'dev.nokee.commons:commons-names:latest.release'
 		implementation 'dev.nokee.commons:commons-backports:latest.release'
 		implementation 'commons-io:commons-io:latest.release'
+		implementation 'dev.nokee.multiplatform-publishing:dev.nokee.multiplatform-publishing.gradle.plugin'
 	}
 }
 
@@ -93,19 +94,20 @@ testing {
 gradlePlugin.testSourceSets.add(sourceSets.functionalTest)
 gradlePlugin.testSourceSets.add(sourceSets.samplesTest)
 
+
 import dev.gradleplugins.fixtures.sources.NativeElements
 import dev.nokee.docs.samples.generators.copysource.CppLibraryTemplate
 import dev.nokee.docs.samples.generators.copysource.SourceCopyTask
+import dev.nokee.platform.jni.fixtures.GreeterAppWithJniLibrary
+import dev.nokee.templates.CppApp
 
 project.getTasks().withType(SourceCopyTask).configureEach {
 	templatesDir = file('../../nokee-samples/native-samples/samples-dev/src/templates')
 }
 
 
-import dev.nokee.templates.CppApp
-
-import java.nio.file.FileSystems
 import java.nio.file.FileSystem
+import java.nio.file.FileSystems
 
 def cppUtilsLib = CppLibraryTemplate.of("cpp-lib-with-api-dep", "utilities")
 def cppListLib = CppLibraryTemplate.of("cpp-lib", "list")
@@ -212,5 +214,19 @@ samples {
 	}
 	samples.register('cpp-source-patterns') {
 
+	}
+	samples.register('cpp-additional-publishing-attributes') {
+		elements {
+			def app = new CppApp()
+			app.withoutImplementation().writeToProject(location.resolve('app'))
+			app.libs.writeToProject(location.resolve('lib'))
+		}
+	}
+	samples.register('cpp-additional-publishing-variants') {
+		elements {
+			def app = new GreeterAppWithJniLibrary('greeter')
+			app.application.writeToProject(location.resolve('app'))
+			app.library.writeToProject(location.resolve('lib'))
+		}
 	}
 }

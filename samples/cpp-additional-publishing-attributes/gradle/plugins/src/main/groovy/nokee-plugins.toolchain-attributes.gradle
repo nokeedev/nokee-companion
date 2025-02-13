@@ -1,0 +1,26 @@
+import static dev.nokee.commons.names.CppNames.*
+
+// Configure toolchain attribute on outgoingVariants
+def BUILT_WITH_TOOLCHAIN_ATTRIBUTE = Attribute.of('native-samples.built-with-toolchain', String)
+components.withType(CppLibrary.class).configureEach { component ->
+	component.binaries.configureEach(CppBinary) { binary ->
+		// Modifying ConfigurableComponentWithLinkUsage#getLinkAttributes() has no effect on the published artifacts.
+		//   We must rely on multiplatform-publishing instead.
+		project.getConfigurations().named(linkElementsConfigurationName(binary)).configure {
+			attributes {
+				attribute(BUILT_WITH_TOOLCHAIN_ATTRIBUTE, binary.toolChain.name)
+			}
+		}
+	}
+}
+project.components.withType(CppBinary.class).configureEach { binary ->
+	if (!(binary instanceof TestComponent)) {
+		// Modifying ConfigurableComponentWithRuntimeUsage#getRuntimeAttributes() has no effect on the published artifacts.
+		//   We must rely on multiplatform-publishing instead.
+		project.getConfigurations().named(runtimeElementsConfigurationName(binary)).configure {
+			attributes {
+				attribute(BUILT_WITH_TOOLCHAIN_ATTRIBUTE, binary.toolChain.name)
+			}
+		}
+	}
+}
