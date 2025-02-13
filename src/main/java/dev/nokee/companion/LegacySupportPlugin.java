@@ -1,5 +1,6 @@
 package dev.nokee.companion;
 
+import dev.nokee.commons.gradle.Plugins;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.initialization.Settings;
@@ -22,18 +23,19 @@ import javax.inject.Inject;
 	}
 
 	private void doApply(Settings settings) {
-		settings.getGradle().allprojects(project -> project.getPluginManager().apply("dev.nokee.native-companion"));
+		settings.getGradle().allprojects(project -> Plugins.forProject(project).apply("dev.nokee.native-companion"));
 	}
 
 	private void doApply(Project project) {
 		final NativeCompanionExtension extension = project.getExtensions().create("nativeCompanion", Extension.class, project);
 		final FeaturePreviews feature = project.getObjects().newInstance(FeaturePreviews.class, extension);
+		final Plugins<Project> plugins = Plugins.forProject(project);
 
 		feature.apply("native-task-object-files-extension");
 		feature.apply("compile-tasks-extension");
-		project.getPluginManager().apply(CppSourceFiles.Rule.class);
-		project.getPluginManager().apply("native-companion.replace-cpp-compile-task");
-		project.getPluginManager().apply(CppBinaryObjects.Rule.class);
+		plugins.apply(CppSourceFiles.Rule.class);
+		plugins.apply("native-companion.replace-cpp-compile-task");
+		plugins.apply(CppBinaryObjects.Rule.class);
 		feature.apply("binary-task-extensions");
 
 		feature.apply("fix-for-gradle-29492");
@@ -53,16 +55,16 @@ import javax.inject.Inject;
 	}
 
 	/*private*/ static abstract /*final*/ class Extension implements NativeCompanionExtension {
-		private final Project project;
+		private final Plugins<Project> plugins;
 
 		@Inject
 		public Extension(Project project) {
-			this.project = project;
+			this.plugins = Plugins.forProject(project);
 		}
 
 		@Override
 		public void enableFeaturePreview(String featureName) {
-			project.getPluginManager().apply("native-companion.features." + featureName);
+			plugins.apply("native-companion.features." + featureName);
 		}
 	}
 

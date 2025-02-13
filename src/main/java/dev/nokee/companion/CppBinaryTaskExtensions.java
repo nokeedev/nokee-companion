@@ -1,9 +1,9 @@
 package dev.nokee.companion;
 
+import dev.nokee.commons.gradle.Plugins;
 import groovy.lang.Closure;
 import groovy.lang.GroovyObject;
 import org.codehaus.groovy.runtime.HandleMetaClass;
-import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
@@ -96,7 +96,7 @@ public final class CppBinaryTaskExtensions {
 		@Override
 		@SuppressWarnings("UnstableApiUsage")
 		public void apply(Project project) {
-			project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
+			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					final TaskProvider<CppCompile> compileTask = tasks.named(compileTaskName(binary), CppCompile.class);
 					((ExtensionAware) binary).getExtensions().add("compileTask", compileTask);
@@ -146,11 +146,7 @@ public final class CppBinaryTaskExtensions {
 
 					((GroovyObject) binary).setMetaClass(metaClass);
 				});
-			}));
-		}
-
-		private static <T> Action<T> ignored(Runnable runnable) {
-			return __ -> runnable.run();
+			});
 		}
 	}
 }

@@ -1,5 +1,6 @@
 package dev.nokee.companion;
 
+import dev.nokee.commons.gradle.Plugins;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -147,16 +148,12 @@ public abstract /*final*/ class CompileTasks {
 
 		@Override
 		public void apply(Project project) {
-			project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
+			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					final CompileTasks compileTasks = ((ExtensionAware) binary).getExtensions().create("compileTasks", CppBinaryCompileTasks.class);
 					compileTasks.addLater(tasks.named(compileTaskName(binary), CppCompile.class));
 				});
-			}));
-		}
-
-		private static <T> Action<T> ignored(Runnable runnable) {
-			return __ -> runnable.run();
+			});
 		}
 	}
 }

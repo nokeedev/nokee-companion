@@ -1,5 +1,6 @@
 package dev.nokee.companion.features;
 
+import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
@@ -243,7 +244,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		@Override
 		public void apply(Project project) {
-			project.getPlugins().withType(CppBasePlugin.class, __ -> {
+			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppComponent.class, component -> {
 					component.getBinaries().whenElementKnown(CppBinary.class, binary -> {
 						project.getTasks().replace(compileTaskName(binary), CppCompileTask.class);

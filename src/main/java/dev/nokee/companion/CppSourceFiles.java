@@ -1,6 +1,6 @@
 package dev.nokee.companion;
 
-import org.gradle.api.Action;
+import dev.nokee.commons.gradle.Plugins;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
@@ -51,7 +51,7 @@ public final class CppSourceFiles {
 
 		@Override
 		public void apply(Project project) {
-			project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
+			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppComponent.class).configureEach(component -> {
 					component.getBinaries().configureEach(binary -> {
 						cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOf(component)));
@@ -68,11 +68,7 @@ public final class CppSourceFiles {
 						}
 					});
 				});
-			}));
-		}
-
-		private static <T> Action<T> ignored(Runnable runnable) {
-			return __ -> runnable.run();
+			});
 		}
 	}
 }

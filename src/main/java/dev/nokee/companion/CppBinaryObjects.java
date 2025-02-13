@@ -1,7 +1,7 @@
 package dev.nokee.companion;
 
+import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.names.CppNames;
-import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Transformer;
@@ -56,7 +56,7 @@ public final class CppBinaryObjects {
 
 		@Override
 		public void apply(Project project) {
-			project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
+			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					final FileCollection objs = objects.fileCollection().from((Callable<?>) () -> {
 						final CompileTasks compileTasks = (CompileTasks) ((ExtensionAware) binary).getExtensions().findByName("compileTasks");
@@ -87,16 +87,12 @@ public final class CppBinaryObjects {
 						// ... and rewire the object
 					}
 				});
-			}));
+			});
 		}
 
 		// TODO: Use transformEach for nokee-commons
 		private /*static*/ <OUT, IN> Transformer<Iterable<OUT>, ? super Iterable<? extends IN>> transformEach(Transformer<OUT, IN> mapper) {
 			return it -> StreamSupport.stream(it.spliterator(), false).map(mapper::transform).collect(Collectors.toList());
-		}
-
-		private static <T> Action<T> ignored(Runnable runnable) {
-			return __ -> runnable.run();
 		}
 	}
 }

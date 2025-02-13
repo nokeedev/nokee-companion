@@ -1,13 +1,14 @@
 package dev.nokee.companion.features;
 
+import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.names.CppNames;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.file.ProjectLayout;
-import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.Sync;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
@@ -22,26 +23,26 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 
 /*private*/ abstract /*final*/ class FixCppLibraryPublicHeadersFeature implements Plugin<Project> {
 	private final ConfigurationContainer configurations;
-	private final ObjectFactory objects;
 	private final TaskContainer tasks;
 	private final ProjectLayout layout;
+	private final ProviderFactory providers;
 
 	@Inject
-	public FixCppLibraryPublicHeadersFeature(ConfigurationContainer configurations, ObjectFactory objects, TaskContainer tasks, ProjectLayout layout) {
+	public FixCppLibraryPublicHeadersFeature(ConfigurationContainer configurations, TaskContainer tasks, ProjectLayout layout, ProviderFactory providers) {
 		this.configurations = configurations;
-		this.objects = objects;
 		this.tasks = tasks;
 		this.layout = layout;
+		this.providers = providers;
 	}
 
 	@Override
 	public void apply(Project project) {
 		// because CppLibraryPlugin wait after project evaluation to configure plugin headers
-		project.getPluginManager().withPlugin("cpp-library", ignored(() -> {
+		Plugins.forProject(project).whenPluginApplied("cpp-library", () -> {
 			project.afterEvaluate(ignored(() -> {
 				project.getComponents().withType(CppLibrary.class).configureEach(library -> {
 					configurations.named(cppApiElementsConfigurationName(library)).configure(apiElements -> {
-						final Provider<File> exportedHeaders = project.provider(() -> {
+						final Provider<File> exportedHeaders = providers.provider(() -> {
 							final String taskName = CppNames.of(library).taskName("sync", "publicHeaders").toString();
 
 							TaskProvider<Sync> syncTask = null;
@@ -57,7 +58,7 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 							return syncTask.map(Sync::getDestinationDir);
 						}).flatMap(it -> it);
 
-						final Provider<File> publicHeader = project.provider(() -> {
+						final Provider<File> publicHeader = providers.provider(() -> {
 							Set<File> files = library.getPublicHeaderDirs().getFiles();
 							if (files.isEmpty()) {
 								throw new UnsupportedOperationException(String.format("The C++ library plugin currently requires at least one public header directory, however there are no directories configured."));
@@ -76,7 +77,7 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 					});
 				});
 			}));
-		}));
+		});
 	}
 
 	private static <T> Action<T> ignored(Runnable runnable) {

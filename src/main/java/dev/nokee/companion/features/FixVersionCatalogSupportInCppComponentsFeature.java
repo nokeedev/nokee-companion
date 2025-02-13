@@ -1,6 +1,7 @@
 package dev.nokee.companion.features;
 
 import dev.nokee.commons.backports.DependencyBucket;
+import dev.nokee.commons.gradle.Plugins;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -27,7 +28,7 @@ import static dev.nokee.commons.names.CppNames.implementationConfigurationName;
 
 	@Override
 	public void apply(Project project) {
-		project.getPlugins().withType(CppBasePlugin.class, ignored(() -> {
+		Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 			final DependencyBucket.Factory dependencyBucketFactory = objects.newInstance(DependencyBucket.Factory.class);
 
 			project.getComponents().withType(CppComponent.class).configureEach(component -> {
@@ -41,7 +42,7 @@ import static dev.nokee.commons.names.CppNames.implementationConfigurationName;
 			project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 				dependencyBucketFactory.create("implementation").asExtension(binary.getDependencies()).of(configurations.getByName(implementationConfigurationName(binary)));
 			});
-		}));
+		});
 	}
 
 	private static <T> Action<T> ignored(Runnable runnable) {
