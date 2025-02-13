@@ -2,6 +2,9 @@ package dev.nokee.companion.features;
 
 import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.gradle.tasks.options.OptionsAware;
+import dev.nokee.commons.gradle.tasks.options.SourceBucket;
+import dev.nokee.commons.gradle.tasks.options.SourceOptions;
+import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import org.gradle.api.Action;
@@ -9,6 +12,8 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileVisitDetails;
+import org.gradle.api.file.FileVisitor;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
 import org.gradle.api.tasks.*;
@@ -40,13 +45,23 @@ import static dev.nokee.commons.names.CppNames.compileTaskName;
 import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 @CacheableTask
-/*private*/ abstract /*final*/ class CppCompileTask extends CppCompile implements OptionsAware {
-	public static abstract class DefaultTaskOptions implements OptionsAware.Options, CppCompile.Options {
+/*private*/ abstract /*final*/ class CppCompileTask extends CppCompile implements OptionsAware, SourceOptionsAware<NativeCompileOptions> {
+	public static abstract class DefaultTaskOptions implements OptionsAware.Options, CppCompile.Options, SourceOptionsAware.Options<NativeCompileOptions> {
 		private final ListProperty<String> compilerArgs;
 
 		@Inject
 		public DefaultTaskOptions(ListProperty<String> compilerArgs) {
 			this.compilerArgs = compilerArgs;
+		}
+
+		@Override
+		public Provider<NativeCompileOptions> forSource(File file) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public Provider<Iterable<SourceOptions<NativeCompileOptions>>> forAllSources() {
+			throw new UnsupportedOperationException();
 		}
 
 		@Internal
@@ -208,7 +223,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	FileCollection headerDependencies;
 
 	@Inject
-	public CppCompileTask(ObjectFactory objects) {
+	public CppCompileTask(ObjectFactory objects, ProviderFactory providers) {
 		this.source = super.getSource();
 		this.headerDependencies = super.getHeaderDependencies();
 
@@ -220,6 +235,35 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		getOptions().getOptimized().convention(super.isOptimized());
 		getOptions().getPositionIndependentCode().convention(super.isPositionIndependentCode());
 		getOptions().getPreprocessorOptions().getDefinedMacros().set(super.getMacros());
+
+		getOptions().getBuckets().finalizeValueOnRead();
+		getOptions().getBuckets().addAll(providers.provider(() -> {
+			return perSourceOptions.entries.stream().map(it -> {
+				return new SourceBucket() {
+					@Input
+					public Set<String> getFiles() {
+						Set<String> result = new LinkedHashSet<>();
+						it.sources.getAsFileTree().visit(new FileVisitor() {
+							@Override
+							public void visitDir(FileVisitDetails dirDetails) {
+								// ignore
+							}
+
+							@Override
+							public void visitFile(FileVisitDetails details) {
+								result.add(details.getRelativePath().toString());
+							}
+						});
+						return result;
+					}
+
+					@Nested
+					public Action<?> getAction() {
+						return it.configureAction;
+					}
+				};
+			}).collect(Collectors.toList());
+		}));
 	}
 
 	@Override
@@ -266,7 +310,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		/*private*/ final List<Entry<T>> entries = new ArrayList<>();
 		private final Class<T> optionType;
 		private final ObjectFactory objects;
-		private final Key DEFAULT = new Key(new int[0]);
 
 		@Nullable
 		public Key forFile(File file) {
@@ -334,7 +377,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		// TODO: Just be an action
 		public static final class Entry<T> {
-			private FileCollection sources;
+			private final FileCollection sources;
 			private Set<File> realizedFiles;
 			private final Action<? super T> configureAction;
 
@@ -346,7 +389,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			public boolean contains(File file) {
 				if (realizedFiles == null) {
 					realizedFiles = sources.getFiles();
-					sources = null;
 				}
 				return realizedFiles.contains(file);
 			}
