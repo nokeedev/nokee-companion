@@ -10,8 +10,7 @@ import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.ListProperty;
-import org.gradle.api.provider.Property;
+import org.gradle.api.provider.*;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
@@ -63,6 +62,39 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	@Override
 	public DefaultTaskOptions getOptions() {
 		return options;
+	}
+
+	@Internal
+	@Override
+	public boolean isPositionIndependentCode() {
+		return getOptions().getPositionIndependentCode().get();
+	}
+
+	@Override
+	public void setPositionIndependentCode(boolean positionIndependentCode) {
+		getOptions().getPositionIndependentCode().set(positionIndependentCode);
+	}
+
+	@Internal
+	@Override
+	public boolean isDebuggable() {
+		return getOptions().getDebuggable().get();
+	}
+
+	@Override
+	public void setDebuggable(boolean debug) {
+		getOptions().getDebuggable().set(debug);
+	}
+
+	@Internal
+	@Override
+	public boolean isOptimized() {
+		return getOptions().getOptimized().get();
+	}
+
+	@Override
+	public void setOptimized(boolean optimize) {
+		getOptions().getOptimized().set(optimize);
 	}
 
 	@Override
@@ -136,6 +168,9 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		getIncrementalAfterFailure().convention(false);
 		this.options = objects.newInstance(DefaultTaskOptions.class, getCompilerArgs());
+		getOptions().getDebuggable().convention(super.isDebuggable());
+		getOptions().getOptimized().convention(super.isOptimized());
+		getOptions().getPositionIndependentCode().convention(super.isPositionIndependentCode());
 	}
 
 	@Override

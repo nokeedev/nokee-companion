@@ -2,6 +2,8 @@ package dev.nokee.language.cpp.tasks;
 
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import org.gradle.api.Action;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 
 /**
  * Compiles C++ source files into object files.
@@ -27,5 +29,22 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 	 * Compile options for C++ compilation.
 	 */
 	public interface Options extends NativeCompileOptions {
+		/**
+		 * {@return the property to configure the optimization for all compilation units}
+		 */
+		@Input
+		Property<Boolean> getOptimized();
+
+		/**
+		 * {@return the property to configure the debuggability for all compilation units}
+		 */
+		@Input
+		Property<Boolean> getDebuggable();
+
+		/**
+		 * {@return the property to configure the position independence for all compilation units}
+		 */
+		@Input
+		Property<Boolean> getPositionIndependentCode();
 	}
 }
