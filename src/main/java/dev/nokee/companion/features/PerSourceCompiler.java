@@ -6,6 +6,7 @@ import org.gradle.api.tasks.WorkResults;
 import org.gradle.internal.UncheckedException;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
+import org.gradle.process.CommandLineArgumentProvider;
 
 import java.io.File;
 import java.math.BigInteger;
@@ -60,6 +61,9 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 
 			// Configure the bucket spec from the per-source options
 			newSpec.args(entry.getKey().get().getCompilerArgs().get());
+			for (CommandLineArgumentProvider argumentProvider : entry.getKey().get().getCompilerArgumentProviders().get()) {
+				argumentProvider.asArguments().forEach(newSpec.getArgs()::add);
+			}
 
 			// Execute all new spec (i.e. per-source bucket)
 			result = result.or(delegateCompiler.execute(newSpec));

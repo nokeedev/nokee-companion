@@ -1,6 +1,7 @@
 package dev.nokee.companion.features;
 
 import dev.nokee.commons.gradle.Plugins;
+import dev.nokee.commons.gradle.tasks.options.OptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import org.gradle.api.Action;
@@ -9,6 +10,7 @@ import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
@@ -24,6 +26,7 @@ import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
+import org.gradle.process.CommandLineArgumentProvider;
 import org.gradle.work.Incremental;
 import org.gradle.work.InputChanges;
 
@@ -38,7 +41,30 @@ import static dev.nokee.commons.names.CppNames.compileTaskName;
 import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 @CacheableTask
-/*private*/ abstract /*final*/ class CppCompileTask extends CppCompile {
+/*private*/ abstract /*final*/ class CppCompileTask extends CppCompile implements OptionsAware {
+	public static abstract class DefaultTaskOptions implements OptionsAware.Options, CppCompile.Options {
+		private final ListProperty<String> compilerArgs;
+
+		@Inject
+		public DefaultTaskOptions(ListProperty<String> compilerArgs) {
+			this.compilerArgs = compilerArgs;
+		}
+
+		@Internal
+		@Override
+		public ListProperty<String> getCompilerArgs() {
+			return compilerArgs;
+		}
+	}
+
+	private final DefaultTaskOptions options;
+
+	@Nested
+	@Override
+	public DefaultTaskOptions getOptions() {
+		return options;
+	}
+
 	@Override
 	protected void compile(InputChanges inputs) {
 		BuildOperationLogger operationLogger = this.getOperationLoggerFactory().newOperationLogger(this.getName(), this.getTemporaryDir());
@@ -51,6 +77,9 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		spec.source(getSource());
 		spec.setMacros(getMacros());
 		spec.args(getCompilerArgs().get());
+		for (CommandLineArgumentProvider argProvider : getOptions().getCompilerArgumentProviders().get()) {
+			argProvider.asArguments().forEach(spec.getArgs()::add);
+		}
 		spec.setPositionIndependentCode(isPositionIndependentCode());
 		spec.setDebuggable(isDebuggable());
 		spec.setOptimized(isOptimized());
@@ -106,6 +135,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		this.perSourceOptions = new AllSourceOptions<>(NativeCompileOptions.class, objects);
 
 		getIncrementalAfterFailure().convention(false);
+		this.options = objects.newInstance(DefaultTaskOptions.class, getCompilerArgs());
 	}
 
 	@Override

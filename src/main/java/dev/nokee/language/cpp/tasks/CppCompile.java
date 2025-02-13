@@ -17,4 +17,15 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 	 * @return this task
 	 */
 	public abstract CppCompile source(Object sourceFiles, Action<? super NativeCompileOptions> configureAction);
+
+	/**
+	 * {@return the task options for this task}
+	 */
+	public abstract Options getOptions();
+
+	/**
+	 * Compile options for C++ compilation.
+	 */
+	public interface Options extends NativeCompileOptions {
+	}
 }
