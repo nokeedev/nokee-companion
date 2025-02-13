@@ -2,6 +2,7 @@ package dev.nokee.companion.features;
 
 import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.language.cpp.tasks.CppCompile;
+import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -102,7 +103,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		this.source = super.getSource();
 		this.headerDependencies = super.getHeaderDependencies();
 
-		this.perSourceOptions = new AllSourceOptions<>(Options.class, objects);
+		this.perSourceOptions = new AllSourceOptions<>(NativeCompileOptions.class, objects);
 
 		getIncrementalAfterFailure().convention(false);
 	}
@@ -130,7 +131,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	}
 
 	//region Per-source Options
-	private final AllSourceOptions<Options> perSourceOptions;
+	private final AllSourceOptions<NativeCompileOptions> perSourceOptions;
 
 	@Nested // Required to track changes to the per-source options
 	protected List<Action<?>> getSourceActions() {
@@ -139,7 +140,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 	// TODO: We may need to disallow lambda action. We should validate.
 	@Override
-	public CppCompileTask source(Object source, Action<? super Options> action) {
+	public CppCompileTask source(Object source, Action<? super NativeCompileOptions> action) {
 		getSource().from(source);
 		perSourceOptions.put(source, action);
 		return this;

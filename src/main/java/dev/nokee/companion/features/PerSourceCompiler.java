@@ -1,6 +1,6 @@
 package dev.nokee.companion.features;
 
-import dev.nokee.language.cpp.tasks.CppCompile;
+import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.WorkResults;
 import org.gradle.internal.UncheckedException;
@@ -35,9 +35,9 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 		defaultSpec.setSourceFiles(Collections.emptyList()); // reset the default bucket source files
 
 		// Build the bucket source collections
-		Map<CppCompileTask.AllSourceOptions<CppCompile.Options>.Key, Collection<File>> perSourceSpecs = new LinkedHashMap<>();
+		Map<CppCompileTask.AllSourceOptions<NativeCompileOptions>.Key, Collection<File>> perSourceSpecs = new LinkedHashMap<>();
 		for (File sourceFile : sourceFiles) {
-			CppCompileTask.AllSourceOptions<CppCompile.Options>.Key k = specProvider.forFile(sourceFile);
+			CppCompileTask.AllSourceOptions<NativeCompileOptions>.Key k = specProvider.forFile(sourceFile);
 			if (k == null) { // if default bucket
 				defaultSpec.getSourceFiles().add(sourceFile);
 			} else { // else another bucket
@@ -50,7 +50,7 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 		result = result.or(delegateCompiler.execute(defaultSpec));
 
 		// Execute each per-source bucket
-		for (Map.Entry<CppCompileTask.AllSourceOptions<CppCompile.Options>.Key, Collection<File>> entry : perSourceSpecs.entrySet()) {
+		for (Map.Entry<CppCompileTask.AllSourceOptions<NativeCompileOptions>.Key, Collection<File>> entry : perSourceSpecs.entrySet()) {
 			T newSpec = copyFrom(defaultSpec);
 			newSpec.setSourceFiles(entry.getValue()); // set only the bucket source
 			newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
@@ -108,7 +108,7 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 	}
 
 	public interface SpecProvider {
-		CppCompileTask.AllSourceOptions<CppCompile.Options>.Key forFile(File file);
+		CppCompileTask.AllSourceOptions<NativeCompileOptions>.Key forFile(File file);
 	}
 
 	public interface CompileSpecFactory<T extends NativeCompileSpec> {
