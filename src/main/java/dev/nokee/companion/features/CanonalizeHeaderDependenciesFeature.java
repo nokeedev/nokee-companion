@@ -1,9 +1,7 @@
 package dev.nokee.companion.features;
 
-import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.Task;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.tasks.properties.LifecycleAwareValue;
 import org.gradle.api.model.ObjectFactory;
@@ -14,6 +12,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+
+import static dev.nokee.commons.gradle.ActionUtils.ignored;
 
 // Avoid <WinSock.h> vs <winsock.h> vs <Windows.h> vs <windows.h>
 //   important on case insensitive file system
@@ -51,12 +51,12 @@ import java.util.concurrent.Callable;
 					}
 				});
 
-				task.doLast(new Action<Task>() {
+				task.doLast(ignored(new Runnable() {
 					@Override
-					public void execute(Task task) {
+					public void run() {
 						((LifecycleAwareValue) headerDependencies).cleanupValue();
 					}
-				});
+				}));
 			});
 		}
 	}

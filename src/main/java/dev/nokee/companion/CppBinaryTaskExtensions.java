@@ -78,6 +78,7 @@ public final class CppBinaryTaskExtensions {
 	}
 
 	private static <T extends Task, OBJ> Provider<T> extensions(Object binary, String name, Function<OBJ, Provider<T>> getter) {
+		@SuppressWarnings("unchecked")
 		Provider<T> result = (Provider<T>) ((ExtensionAware) binary).getExtensions().findByName(name);
 		if (result == null) {
 			result = getter.apply((OBJ) binary);

@@ -16,7 +16,6 @@ import org.gradle.api.publish.maven.tasks.PublishToMavenLocal;
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository;
 import org.gradle.api.publish.plugins.PublishingPlugin;
 import org.gradle.api.publish.tasks.GenerateModuleMetadata;
-import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.bundling.Zip;
 import org.gradle.language.cpp.CppBinary;
@@ -34,7 +33,9 @@ import javax.inject.Inject;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static dev.nokee.commons.gradle.DoNothingAction.doNothing;
+import static dev.nokee.commons.gradle.ActionUtils.doNothing;
+import static dev.nokee.commons.gradle.ActionUtils.ignored;
+import static dev.nokee.commons.gradle.SpecUtils.named;
 import static dev.nokee.commons.names.CppNames.*;
 import static dev.nokee.commons.names.ElementName.componentName;
 import static dev.nokee.commons.names.PublishingTaskNames.*;
@@ -142,16 +143,6 @@ import static dev.nokee.commons.names.PublishingTaskNames.*;
 				});
 			});
 		}
-
-		// TODO: Move to nokee-commons
-		private static <T> Action<T> ignored(Runnable runnable) {
-			return new Action<T>() {
-				@Override
-				public void execute(T ignored) {
-					runnable.run();
-				}
-			};
-		}
 	}
 
 	/*private*/ abstract static /*final*/ class DisableGradleCoreCppPublicationsRule implements Plugin<Project> {
@@ -170,10 +161,10 @@ import static dev.nokee.commons.names.PublishingTaskNames.*;
 				plugins.whenPluginApplied(CppBasePlugin.class, () -> {
 					project.getExtensions().configure("publishing", (PublishingExtension publishing) -> {
 						publishing.getPublications().withType(MavenPublication.class).configureEach(cpp(project, publication -> {
-							tasks.withType(PublishToMavenLocal.class).configureEach(named(publishPublicationToAnyRepositories(publication), disabled()));
-							tasks.withType(PublishToMavenRepository.class).configureEach(named(publishPublicationToAnyRepositories(publication), disabled()));
-							tasks.withType(GenerateMavenPom.class).configureEach(named(generatePomFileTaskName(publication)::equals, disabled()));
-							tasks.withType(GenerateModuleMetadata.class).configureEach(named(generateMetadataFileTaskName(publication)::equals, disabled()));
+							tasks.withType(PublishToMavenLocal.class).configureEach(named(publishPublicationToAnyRepositories(publication)).whenSatisfied(disabled()));
+							tasks.withType(PublishToMavenRepository.class).configureEach(named(publishPublicationToAnyRepositories(publication)).whenSatisfied(disabled()));
+							tasks.withType(GenerateMavenPom.class).configureEach(named(generatePomFileTaskName(publication)::equals).whenSatisfied(disabled()));
+							tasks.withType(GenerateModuleMetadata.class).configureEach(named(generateMetadataFileTaskName(publication)::equals).whenSatisfied(disabled()));
 						}));
 					});
 				});
@@ -200,15 +191,6 @@ import static dev.nokee.commons.names.PublishingTaskNames.*;
 				final SoftwareComponent component = project.getComponents().findByName(publication.getName());
 				if (component instanceof CppComponent || component instanceof CppBinary) {
 					action.execute(publication);
-				}
-			};
-		}
-
-		// TODO: Move to nokee-commons
-		private static <T extends Named> Action<T> named(Spec<? super String> nameFilter, Action<? super T> action) {
-			return it -> {
-				if (nameFilter.isSatisfiedBy(it.getName())) {
-					action.execute(it);
 				}
 			};
 		}

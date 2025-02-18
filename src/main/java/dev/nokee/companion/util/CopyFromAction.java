@@ -3,10 +3,6 @@ package dev.nokee.companion.util;
 import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Action;
-import org.gradle.api.Transformer;
-import org.gradle.api.file.FileCollection;
-import org.gradle.api.file.FileSystemLocation;
-import org.gradle.api.file.FileSystemLocationProperty;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.TaskProvider;
@@ -17,10 +13,12 @@ import org.gradle.nativeplatform.toolchain.VisualCpp;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
+import static dev.nokee.commons.gradle.provider.ProviderUtils.elementsOf;
+import static dev.nokee.commons.gradle.provider.ProviderUtils.locationOnly;
 
 public class CopyFromAction<T extends AbstractNativeCompileTask> implements Action<T> {
 	private final Provider<T> other;
@@ -92,16 +90,6 @@ public class CopyFromAction<T extends AbstractNativeCompileTask> implements Acti
 			}
 			return builder.toString();
 		}).collect(Collectors.toList());
-	}
-
-	// TODO: Move to nokee-commons
-	private static <T> Transformer<Provider<Set<FileSystemLocation>>, T> elementsOf(Transformer<FileCollection, T> mapper) {
-		return it -> mapper.transform(it).getElements();
-	}
-
-	// TODO: Move to nokee-commons
-	private static <T, OUT extends FileSystemLocation> Transformer<Provider<OUT>, T> locationOnly(Transformer<FileSystemLocationProperty<OUT>, T> mapper) {
-		return it -> mapper.transform(it).getLocationOnly();
 	}
 
 	public static <T extends AbstractNativeCompileTask> Action<T> copyFrom(TaskProvider<T> otherTask) {

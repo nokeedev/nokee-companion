@@ -21,6 +21,8 @@ import javax.inject.Inject;
 import java.util.HashSet;
 import java.util.Set;
 
+import static dev.nokee.commons.gradle.provider.ProviderUtils.flatten;
+import static dev.nokee.commons.gradle.SpecUtils.named;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
 
 /**
@@ -74,14 +76,13 @@ public abstract /*final*/ class CompileTasks {
 		public CppBinaryCompileTasks(TaskContainer tasks, ProviderFactory providers, ObjectFactory objects) {
 			this.tasks = tasks;
 
-			// TODO: Use commons
-			this.elementsProvider = providers.provider(() -> {
+			this.elementsProvider = flatten(providers.provider(() -> {
 				SetProperty<Task> result = objects.setProperty(Task.class);
 				for (String name : knownElements) {
 					result.add(tasks.named(name));
 				}
 				return result;
-			}).flatMap(it -> it);
+			}));
 		}
 
 		/**
@@ -99,12 +100,7 @@ public abstract /*final*/ class CompileTasks {
 		 * @param configureAction  the configure action to execute
 		 */
 		public void configureEach(Action<? super Task> configureAction) {
-			// TODO: Use commons actions
-			tasks.withType(AbstractNativeCompileTask.class).configureEach(task -> {
-				if (knownElements.contains(task.getName())) {
-					configureAction.execute(task);
-				}
-			});
+			tasks.withType(AbstractNativeCompileTask.class).configureEach(named(knownElements::contains).whenSatisfied(configureAction));
 		}
 
 		/**
@@ -115,11 +111,7 @@ public abstract /*final*/ class CompileTasks {
 		 * @param <S>  the task type
 		 */
 		public <S extends Task> void configureEach(Class<S> type, Action<? super S> configureAction) {
-			tasks.withType(type).configureEach(task -> {
-				if (knownElements.contains(task.getName())) {
-					configureAction.execute(task);
-				}
-			});
+			tasks.withType(type).configureEach(named(knownElements::contains).whenSatisfied(configureAction));
 		}
 
 		/**

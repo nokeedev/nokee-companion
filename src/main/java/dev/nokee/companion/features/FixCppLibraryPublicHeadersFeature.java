@@ -2,7 +2,6 @@ package dev.nokee.companion.features;
 
 import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.names.CppNames;
-import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ConfigurationContainer;
@@ -19,6 +18,8 @@ import java.io.File;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
+import static dev.nokee.commons.gradle.ActionUtils.ignored;
+import static dev.nokee.commons.gradle.provider.ProviderUtils.flatten;
 import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 
 /*private*/ abstract /*final*/ class FixCppLibraryPublicHeadersFeature implements Plugin<Project> {
@@ -42,7 +43,7 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 			project.afterEvaluate(ignored(() -> {
 				project.getComponents().withType(CppLibrary.class).configureEach(library -> {
 					configurations.named(cppApiElementsConfigurationName(library)).configure(apiElements -> {
-						final Provider<File> exportedHeaders = providers.provider(() -> {
+						final Provider<File> exportedHeaders = flatten(providers.provider(() -> {
 							final String taskName = CppNames.of(library).taskName("sync", "publicHeaders").toString();
 
 							TaskProvider<Sync> syncTask = null;
@@ -56,12 +57,12 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 								});
 							}
 							return syncTask.map(Sync::getDestinationDir);
-						}).flatMap(it -> it);
+						}));
 
 						final Provider<File> publicHeader = providers.provider(() -> {
 							Set<File> files = library.getPublicHeaderDirs().getFiles();
 							if (files.isEmpty()) {
-								throw new UnsupportedOperationException(String.format("The C++ library plugin currently requires at least one public header directory, however there are no directories configured."));
+								throw new UnsupportedOperationException("The C++ library plugin currently requires at least one public header directory, however there are no directories configured.");
 							} else if (files.size() == 1) {
 								return files.iterator().next();
 							} else {
@@ -78,9 +79,5 @@ import static dev.nokee.commons.names.CppNames.cppApiElementsConfigurationName;
 				});
 			}));
 		});
-	}
-
-	private static <T> Action<T> ignored(Runnable runnable) {
-		return __ -> runnable.run();
 	}
 }

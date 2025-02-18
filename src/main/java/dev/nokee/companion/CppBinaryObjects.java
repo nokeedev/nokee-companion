@@ -4,7 +4,6 @@ import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.names.CppNames;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.Transformer;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
@@ -24,9 +23,8 @@ import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 
 import javax.inject.Inject;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
+import static dev.nokee.commons.gradle.TransformerUtils.traverse;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
 import static dev.nokee.commons.names.CppNames.linkTaskName;
 
@@ -61,7 +59,7 @@ public final class CppBinaryObjects {
 					final FileCollection objs = objects.fileCollection().from((Callable<?>) () -> {
 						final CompileTasks compileTasks = (CompileTasks) ((ExtensionAware) binary).getExtensions().findByName("compileTasks");
 						if (compileTasks != null) {
-							return compileTasks.getElements().map(transformEach(ObjectFiles::of));
+							return compileTasks.getElements().map(traverse(ObjectFiles::of));
 						}
 						return tasks.named(compileTaskName(binary), CppCompile.class).map(ObjectFiles::of);
 					});
@@ -88,11 +86,6 @@ public final class CppBinaryObjects {
 					}
 				});
 			});
-		}
-
-		// TODO: Use transformEach for nokee-commons
-		private /*static*/ <OUT, IN> Transformer<Iterable<OUT>, ? super Iterable<? extends IN>> transformEach(Transformer<OUT, IN> mapper) {
-			return it -> StreamSupport.stream(it.spliterator(), false).map(mapper::transform).collect(Collectors.toList());
 		}
 	}
 }

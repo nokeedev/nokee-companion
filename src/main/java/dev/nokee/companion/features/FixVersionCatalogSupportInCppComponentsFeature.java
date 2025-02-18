@@ -2,7 +2,6 @@ package dev.nokee.companion.features;
 
 import dev.nokee.commons.backports.DependencyBucket;
 import dev.nokee.commons.gradle.Plugins;
-import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.ConfigurationContainer;
@@ -43,9 +42,5 @@ import static dev.nokee.commons.names.CppNames.implementationConfigurationName;
 				dependencyBucketFactory.create("implementation").asExtension(binary.getDependencies()).of(configurations.getByName(implementationConfigurationName(binary)));
 			});
 		});
-	}
-
-	private static <T> Action<T> ignored(Runnable runnable) {
-		return __ -> runnable.run();
 	}
 }
