@@ -1,6 +1,9 @@
 buildscript {
 	dependencies {
-		classpath 'dev.nokee.templates:nokee-code-templates:latest.release'
+		classpath 'dev.nokee.templates:nokee-code-templates:latest.integration'
+	}
+	repositories {
+		mavenLocal()
 	}
 }
 
@@ -21,6 +24,8 @@ description = 'Quality-of-life enhancements for Gradle core native plugins.'
 
 repositories {
 	mavenCentral()
+	gradlePluginPortal()
+	mavenLocal()
 }
 
 java {
@@ -51,10 +56,13 @@ gradlePlugin {
 	}
 
 	dependencies {
-		implementation 'dev.nokee.commons:commons-names:latest.release'
-		implementation 'dev.nokee.commons:commons-backports:latest.release'
-		implementation 'commons-io:commons-io:latest.release'
-		implementation 'dev.nokee.multiplatform-publishing:dev.nokee.multiplatform-publishing.gradle.plugin'
+		implementation libs.nokee.commons.names
+		implementation libs.nokee.commons.backports
+		implementation libs.nokee.commons.gradle
+
+		implementation libs.apache.commons.io
+
+		implementation libs.nokee.plugins.multiplatform.publishing
 	}
 }
 
@@ -65,9 +73,14 @@ testing {
 				implementation gradleTestKit()
 				implementation 'commons-io:commons-io:latest.release'
 				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
-				implementation 'dev.nokee.templates:nokee-code-templates:latest.release'
+				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
 				implementation 'dev.gradleplugins:gradle-runner-kit:latest.release'
 				implementation 'org.jetbrains:annotations:26.0.2'
+				implementation libs.hamcrest.core
+				implementation 'dev.nokee.commons:commons-names:latest.release'
+				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.release')
+				implementation testFixtures('dev.gradleplugins:gradle-runner-kit:latest.release')
+				implementation 'dev.nokee.commons:commons-hamcrest:latest.release'
 			}
 		}
 		samplesTest(JvmTestSuite) {
@@ -82,7 +95,7 @@ testing {
 			dependencies {
 				implementation gradleTestKit()
 				implementation 'commons-io:commons-io:latest.release'
-				implementation 'dev.gradleplugins.exemplar:commons-exemplar:latest.release'
+				implementation 'dev.gradleplugins.exemplar:commons-exemplar:latest.integration'
 				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
 				implementation libs.hamcrest.core
 				implementation 'dev.gradleplugins:gradle-runner-kit:latest.release'

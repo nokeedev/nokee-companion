@@ -3,3 +3,8 @@ junit-jupiter = "5.11.4"
 
 [libraries]
 hamcrest-core = { module = "org.hamcrest:hamcrest", version = "2.2" }
+nokee-commons-names = { module = "dev.nokee.commons:commons-names", version = "1.3" }
+nokee-commons-gradle = { module = "dev.nokee.commons:commons-gradle", version = "1.1" }
+nokee-commons-backports = { module = "dev.nokee.commons:commons-backports", version = "1.1" }
+nokee-plugins-multiplatform-publishing = { module = "dev.nokee.multiplatform-publishing:dev.nokee.multiplatform-publishing.gradle.plugin", version = "1.0-milestone-1" }
+apache-commons-io = { module = "commons-io:commons-io", version = "2.18.0" }
