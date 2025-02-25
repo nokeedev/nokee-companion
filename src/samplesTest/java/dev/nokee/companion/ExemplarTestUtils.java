@@ -58,6 +58,8 @@ public class ExemplarTestUtils {
 			tests.add(DynamicTest.dynamicTest("STEP: " + step.getExecutable() + " " + String.join(" ", step.getArguments()), new File("/Users/daniel/Projects/nokeedev/nokee-legacy/samples/cpp-compile-detects-source-file-relocation/README.md").toURI(), new Executable() {
 				@Override
 				public void execute() throws Throwable {
+					// TODO: Change for real filename
+					System.out.println(new File("/Users/daniel/Projects/nokeedev/nokee-legacy/samples/cpp-compile-detects-source-file-relocation/README.md").toURI());
 					assertThat("step executed successfully", stepResult.getOutcome(), equalTo(StepExecutionOutcome.EXECUTED));
 					assertThat(stepResult, matchesOutput(step, testDirectory));
 				}
