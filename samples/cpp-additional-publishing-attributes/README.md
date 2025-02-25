@@ -81,6 +81,8 @@ $ ./gradlew --console=verbose :lib:publish
 
 BUILD SUCCESSFUL
 $ ./gradlew --console=verbose :app:publish
+
+BUILD SUCCESSFUL
 ```
 
 Notice Gradle skips all `*Main*Publication*` tasks.

@@ -68,6 +68,15 @@ gradlePlugin {
 
 testing {
 	suites {
+		test {
+			dependencies {
+				implementation 'dev.gradleplugins:gradle-api:latest.release'
+				implementation libs.hamcrest.core
+				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'
+				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.release')
+				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
+			}
+		}
 		functionalTest(JvmTestSuite) {
 			dependencies {
 				implementation gradleTestKit()
@@ -240,6 +249,12 @@ samples {
 			def app = new GreeterAppWithJniLibrary('greeter')
 			app.application.writeToProject(location.resolve('app'))
 			app.library.writeToProject(location.resolve('lib'))
+		}
+	}
+	samples.register('cpp-compiler-argument-providers') {
+		elements {
+			def app = new CppApp()
+			app.writeToProject(location)
 		}
 	}
 }

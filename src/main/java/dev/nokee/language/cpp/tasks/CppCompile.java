@@ -4,11 +4,13 @@ import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
 import org.gradle.api.Action;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
 
+import java.io.File;
 import java.util.Map;
 
 /**
@@ -85,6 +87,14 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 		@Input
 		@Optional
 		Property<Boolean> getIncrementalAfterFailure();
+
+		/**
+		 * Returns the compile options for the specified C++ compilation unit.
+		 *
+		 * @param sourceFile  the C++ compilation unit
+		 * @return a provider to the compile options of a source file
+		 */
+		Provider<NativeCompileOptions> forSource(File sourceFile);
 	}
 
 	//region Legacy Properties
