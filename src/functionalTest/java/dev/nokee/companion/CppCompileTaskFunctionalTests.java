@@ -16,7 +16,7 @@ import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
 import static dev.gradleplugins.buildscript.syntax.Syntax.*;
 
 @GradleTaskUnderTest(":compile")
-public class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilationFunctionalTester, AbstractNativeLanguageIncrementalCompilationFunctionalTester, AbstractNativeLanguageCachingCompilationFunctionalTester, SourceOptionsAwareFunctionalTester, AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
+class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilationFunctionalTester, AbstractNativeLanguageIncrementalCompilationFunctionalTester, AbstractNativeLanguageCachingCompilationFunctionalTester, SourceOptionsAwareFunctionalTester, AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 	@GradleProject("project-without-source")
 	public static GradleBuildElement makeEmptyProject() throws IOException {
 		GradleBuildElement result = GradleBuildElement.empty();
