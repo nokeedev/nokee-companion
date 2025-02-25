@@ -20,9 +20,24 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-final class ObjectFiles {
+/**
+ * Represents object files of a target.
+ */
+public final class ObjectFiles {
 	// Conceptually, objectFiles are either an extensions or derived from AbstractNativeCompileTask#getObjectFileDir
 	//  or we could consider any FileCollection getObjects()/getObjectFiles()
+
+	/**
+	 * Returns the object files of the specified object.
+	 * Supported object are:
+	 * <ul>
+	 *     <li><code>objectFiles</code> extension</li>
+	 *     <li>{@link AbstractNativeCompileTask#getObjectFileDir()} matching {@literal .o} and {@literal .obj} files</li>
+	 * </ul>
+	 *
+	 * @param self  the object to retrieve the object files
+	 * @return the object files
+	 */
 	public static Object of(Object self) {
 		FileTree result = null;
 		if (self instanceof ExtensionAware) {
@@ -34,7 +49,7 @@ final class ObjectFiles {
 		}
 
 		if (result == null) {
-			return Collections.emptyList();
+			throw new IllegalArgumentException("object files cannot be retrieved from " + self);
 		}
 
 		return result;
