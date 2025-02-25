@@ -30,21 +30,23 @@ class TaskDependenciesCopyFromFunctionalTests {
 		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput();
 		build.getBuildFile().plugins(it -> {
 			it.id("dev.nokee.native-companion");
-			it.id("cpp-application");
 		});
 
 		build.getBuildFile().append(staticImportClass("dev.nokee.companion.util.CopyFromAction"));
-
-		new CppApp().writeToProject(testDirectory);
 	}
 
 	@Test
 	void doesNotDependOnCopiedTaskForNokeeCompile() {
+		new CppApp().writeToProject(testDirectory);
+		build.getBuildFile().plugins(it -> it.id("cpp-application"));
 		build.getBuildFile().append(groovyDsl("""
 			application {
-				binaries.configureEach {
+				binaries.configureEach { binary ->
 					def task = tasks.register("newCompileFor${name.capitalize()}", CppCompile)
 					task.configure(copyFrom(compileTask))
+					task.configure {
+						objectFileDir = layout.buildDirectory.dir("objs/${binary.name}")
+					}
 				}
 			}
 		""".stripIndent()));
@@ -55,12 +57,17 @@ class TaskDependenciesCopyFromFunctionalTests {
 
 	@Test
 	void doesNotDependOnCopiedTaskForCoreCompile() {
+		new CppApp().writeToProject(testDirectory);
+		build.getBuildFile().plugins(it -> it.id("cpp-application"));
 		build.getBuildFile().append(importClass("dev.nokee.language.cpp.tasks.CppCompile"));
 		build.getBuildFile().append(groovyDsl("""
 			application {
-				binaries.configureEach {
+				binaries.configureEach { binary ->
 					def task = tasks.register("newCompileFor${name.capitalize()}", CppCompile.clazz())
 					task.configure(copyFrom(compileTask))
+					task.configure {
+						objectFileDir = layout.buildDirectory.dir("objs/${binary.name}")
+					}
 				}
 			}
 		""".stripIndent()));
@@ -69,14 +76,35 @@ class TaskDependenciesCopyFromFunctionalTests {
 	}
 
 	@Test
-	void doesNotDependOnCopiedTaskForCoreLink() {
+	void doesNotDependOnCopiedTaskForCoreLinkExecutable() {
+		new CppApp().writeToProject(testDirectory);
+		build.getBuildFile().plugins(it -> it.id("cpp-application"));
 		build.getBuildFile().append(groovyDsl("""
 			application {
 				binaries.configureEach { binary ->
 					def task = tasks.register("newLinkFor${binary.name.capitalize()}", LinkExecutable)
 					task.configure(copyFrom(linkTask))
 					task.configure {
-						linkedFile = layout.buildDirectory.file("exe/${binary.name}/${project.name}")
+						linkedFile = layout.buildDirectory.file("libs/${binary.name}/${project.name}")
+					}
+				}
+			}
+		""".stripIndent()));
+		BuildResult result = runner.withTasks("newLinkForMainRelease").build();
+		assertThat(result.getExecutedTaskPaths(), contains(":compileReleaseCpp", ":newLinkForMainRelease"));
+	}
+
+	@Test
+	void doesNotDependOnCopiedTaskForCoreLinkSharedLibrary() {
+		new CppApp().getLibs().writeToProject(testDirectory);
+		build.getBuildFile().plugins(it -> it.id("cpp-library"));
+		build.getBuildFile().append(groovyDsl("""
+			library {
+				binaries.configureEach { binary ->
+					def task = tasks.register("newLinkFor${binary.name.capitalize()}", LinkSharedLibrary)
+					task.configure(copyFrom(linkTask))
+					task.configure {
+						linkedFile = layout.buildDirectory.file("libs/${binary.name}/${project.name}")
 					}
 				}
 			}
