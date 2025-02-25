@@ -53,7 +53,7 @@ public final class CppSourceFiles {
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppComponent.class).configureEach(component -> {
-					component.getBinaries().configureEach(binary -> {
+					component.getBinaries().whenElementKnown(binary -> {
 						cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOf(component)));
 					});
 				});
