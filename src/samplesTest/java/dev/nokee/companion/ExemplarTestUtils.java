@@ -8,10 +8,10 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.function.Executable;
 
 import java.io.File;
-import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 
 import static dev.nokee.companion.ExemplarMatchers.matchesOutput;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -31,13 +31,20 @@ public class ExemplarTestUtils {
 
 			@Override
 			public StepExecutionResult run(StepExecutionContext context) {
-				BuildResult result = null;
-				if (context.getCurrentStep().getOutput().orElse("").contains("FAILED")) {
-					result = runner.withArguments(context.getCurrentStep().getArguments()).buildAndFail();
-				} else {
-					result = runner.withArguments(context.getCurrentStep().getArguments()).build();
+				try {
+					BuildResult result = null;
+					List<String> args = new ArrayList<>(context.getCurrentStep().getArguments());
+					args.removeIf(arg -> arg.startsWith("--console="));
+					if (context.getCurrentStep().getOutput().orElse("").contains("FAILED")) {
+						result = runner.withArguments(args).buildAndFail();
+					} else {
+						result = runner.withArguments(args).build();
+					}
+					return StepExecutionResult.stepExecuted(result.getTasks().stream().anyMatch(it -> it.getOutcome().equals(TaskOutcome.FAILED)) ? -1 : 0, result.getOutput());
+				} catch (RuntimeException e) {
+					e.printStackTrace();
+					throw e;
 				}
-				return StepExecutionResult.stepExecuted(result.getTasks().stream().anyMatch(it -> it.getOutcome().equals(TaskOutcome.FAILED)) ? -1 : 0, result.getOutput());
 			}
 		}).build();
 		Exemplar exemplar = builder.fromDirectory(testDirectory.toFile()).build();
