@@ -17,7 +17,7 @@ import javax.inject.Inject;
 	@Override
 	public void apply(Project project) {
 		tasks.withType(CppCompileTask.class, task -> {
-			task.getIncrementalAfterFailure().convention(true);
+			task.getOptions().getIncrementalAfterFailure().convention(true);
 		});
 	}
 }
