@@ -1,14 +1,17 @@
 package dev.nokee.companion.util;
 
+import dev.nokee.commons.gradle.tasks.options.SourceConfiguration;
 import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Action;
+import org.gradle.api.Task;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
-import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
+import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.VisualCpp;
+import org.gradle.process.CommandLineArgumentProvider;
 
 import java.util.Collections;
 import java.util.List;
@@ -19,59 +22,138 @@ import java.util.stream.Collectors;
 
 import static dev.nokee.commons.gradle.provider.ProviderUtils.elementsOf;
 import static dev.nokee.commons.gradle.provider.ProviderUtils.locationOnly;
+import static java.util.Collections.emptyList;
 
-public class CopyFromAction<T extends AbstractNativeCompileTask> implements Action<T> {
-	private final Provider<T> other;
+/**
+ * Utility action that copies the configuration from a task to another.
+ *
+ * @param <T>  must be {@link AbstractNativeCompileTask}, {@link AbstractLinkTask} or {@link CppCompile}
+ */
+public class CopyFromAction<T extends Task> implements Action<T> {
+	private final Provider<? extends T> other;
 
-	private CopyFromAction(Provider<T> other) {
+	private CopyFromAction(Provider<? extends T> other) {
 		this.other = other;
 	}
 
 	@Override
 	public void execute(T task) {
+		if (task instanceof AbstractNativeCompileTask) {
+			doExecute((AbstractNativeCompileTask) task, other.map(AbstractNativeCompileTask.class::cast));
+		} else if (task instanceof AbstractLinkTask) {
+			doExecute((AbstractLinkTask) task, other.map(AbstractLinkTask.class::cast));
+		} else {
+			throw new UnsupportedOperationException("does not support copying specified task type");
+		}
+	}
+
+	private void doExecute(AbstractLinkTask task, Provider<? extends AbstractLinkTask> other) {
+		task.getDebuggable().convention(other.flatMap(AbstractLinkTask::getDebuggable));
+		task.getToolChain().convention(other.flatMap(AbstractLinkTask::getToolChain));
+		task.getTargetPlatform().convention(other.flatMap(AbstractLinkTask::getTargetPlatform));
+		task.getLibs().from(other.flatMap(elementsOf(AbstractLinkTask::getLibs)));
+		task.getLinkerArgs().addAll(other.flatMap(AbstractLinkTask::getLinkerArgs));
+		task.getSource().from(other.flatMap(elementsOf(AbstractLinkTask::getSource)));
+		// WARNING: User must set AbstractLinkTask#getLinkedFile()
+	}
+
+	private void doExecute(AbstractNativeCompileTask task, Provider<? extends AbstractNativeCompileTask> other) {
 		if (task instanceof CppCompile) {
-			((CppCompile) task).getOptions().getDebuggable().convention(other.flatMap(it -> ((CppCompile) it).getOptions().getDebuggable()));
-			((CppCompile) task).getOptions().getOptimized().convention(other.flatMap(it -> ((CppCompile) it).getOptions().getOptimized()));
-			((CppCompile) task).getOptions().getPositionIndependentCode().convention(other.flatMap(it -> ((CppCompile) it).getOptions().getPositionIndependentCode()));
-			((CppCompile) task).getOptions().getCompilerArgumentProviders().set(other.flatMap(it -> ((CppCompile) it).getOptions().getCompilerArgumentProviders()));
-			((CppCompile) task).getOptions().getPreprocessorOptions().getDefinedMacros().set(other.flatMap(it -> ((CppCompile) it).getOptions().getPreprocessorOptions().getDefinedMacros()));
+			((CppCompile) task).getOptions().getDebuggable().convention(other.flatMap(this::toDebuggable));
+			((CppCompile) task).getOptions().getOptimized().convention(other.flatMap(this::toOptimized));
+			((CppCompile) task).getOptions().getPositionIndependentCode().convention(other.flatMap(this::toPositionIndependentCode));
+			((CppCompile) task).getOptions().getCompilerArgumentProviders().addAll(other.flatMap(this::toCompilerArgumentProviders).orElse(emptyList()));
+			((CppCompile) task).getOptions().getPreprocessorOptions().getDefinedMacros().putAll(other.flatMap(this::toDefinedMacros));
+			((CppCompile) task).getOptions().getIncrementalAfterFailure().convention(other.flatMap(this::toIncrementalAfterFailure));
 
 			if (((CppCompile) task).getOptions() instanceof SourceOptionsAware.Options) {
-				((SourceOptionsAware.Options<?>) ((CppCompile) task).getOptions()).getBuckets().set(other.flatMap(it -> ((SourceOptionsAware.Options<?>) ((CppCompile) it).getOptions()).getBuckets()));
+				((SourceOptionsAware<?>) task).getSourceOptions().from(() -> other.flatMap(this::toSourceOptions).orElse(emptyList()));
 			}
 		} else {
 			final ProviderFactory providers = task.getProject().getProviders();
 
 			// Override those properties as late as possible
 			//  Note that a user won't be able to modify those values, however, we should be disallowing changes anyway.
-			task.dependsOn(setProperty(task::setDebuggable, other.flatMap(it -> providers.provider(it::isDebuggable))));
-			task.dependsOn(setProperty(task::setOptimized, other.flatMap(it -> providers.provider(it::isOptimized))));
-			task.dependsOn(setProperty(task::setPositionIndependentCode, other.flatMap(it -> providers.provider(it::isPositionIndependentCode))));
+			task.dependsOn(setProperty(task::setDebuggable, other.flatMap(this::toDebuggable)));
+			task.dependsOn(setProperty(task::setOptimized, other.flatMap(this::toOptimized)));
+			task.dependsOn(setProperty(task::setPositionIndependentCode, other.flatMap(this::toPositionIndependentCode)));
 
-			// TODO: Should we set or addAll?
 			// Add macros as flag because CppCompile#macros is not a Gradle property.
 			task.getCompilerArgs().addAll(task.getToolChain().zip(other.flatMap(it -> providers.provider(it::getMacros)), CopyFromAction::toMacroFlags));
 		}
 
-		// TODO: Should we set or addAll?
-		task.getCompilerArgs().set(other.flatMap(AbstractNativeCompileTask::getCompilerArgs).orElse(Collections.emptyList()));
+		task.getCompilerArgs().addAll(other.flatMap(AbstractNativeCompileTask::getCompilerArgs).orElse(emptyList()));
 
-		// TODO: Should we setFrom or from?
-		task.getIncludes().setFrom(other.flatMap(elementsOf(AbstractNativeCompileTask::getSource)));
+		task.getSource().from(other.flatMap(elementsOf(AbstractNativeCompileTask::getSource)));
+		task.getIncludes().from(other.flatMap(elementsOf(AbstractNativeCompileTask::getIncludes)));
 
-		// TODO: Should we setFrom or from?
-		task.getSystemIncludes().setFrom(other.flatMap(elementsOf(AbstractNativeCompileTask::getSystemIncludes)));
+		task.getSystemIncludes().from(other.flatMap(elementsOf(AbstractNativeCompileTask::getSystemIncludes)));
 
-		// TODO: Should we convention or value?
 		task.getTargetPlatform().convention(other.flatMap(AbstractNativeCompileTask::getTargetPlatform));
 		task.getToolChain().convention(other.flatMap(AbstractNativeCompileTask::getToolChain));
 		task.getObjectFileDir().convention(other.flatMap(locationOnly(AbstractNativeCompileTask::getObjectFileDir)));
 	}
 
+	private Provider<Boolean> toDebuggable(AbstractNativeCompileTask task) {
+		if (task instanceof CppCompile) {
+			return ((CppCompile) task).getOptions().getDebuggable();
+		} else {
+			return task.getProject().provider(task::isDebuggable);
+		}
+	}
+
+	private Provider<Boolean> toOptimized(AbstractNativeCompileTask task) {
+		if (task instanceof CppCompile) {
+			return ((CppCompile) task).getOptions().getOptimized();
+		} else {
+			return task.getProject().provider(task::isOptimized);
+		}
+	}
+
+	private Provider<Boolean> toPositionIndependentCode(AbstractNativeCompileTask task) {
+		if (task instanceof CppCompile) {
+			return ((CppCompile) task).getOptions().getPositionIndependentCode();
+		} else {
+			return task.getProject().provider(task::isPositionIndependentCode);
+		}
+	}
+
+	private Provider<Map<String, String>> toDefinedMacros(AbstractNativeCompileTask task) {
+		if (task instanceof CppCompile) {
+			return ((CppCompile) task).getOptions().getPreprocessorOptions().getDefinedMacros();
+		} else {
+			return task.getProject().provider(task::getMacros);
+		}
+	}
+
+	private Provider<List<CommandLineArgumentProvider>> toCompilerArgumentProviders(AbstractNativeCompileTask task) {
+		if (task instanceof CppCompile) {
+			return ((CppCompile) task).getOptions().getCompilerArgumentProviders();
+		} else {
+			return null; // nothing to map
+		}
+	}
+
+	private Provider<Boolean> toIncrementalAfterFailure(AbstractNativeCompileTask task) {
+		if (task instanceof CppCompile) {
+			return ((CppCompile) task).getOptions().getIncrementalAfterFailure();
+		} else {
+			return null;
+		}
+	}
+
+	private Provider<Iterable<? extends SourceConfiguration>> toSourceOptions(AbstractNativeCompileTask task) {
+		if (task instanceof SourceOptionsAware) {
+			return ((SourceOptionsAware<?>) task).getSourceOptions().asProvider();
+		} else {
+			return null;
+		}
+	}
+
 	private static <T> Callable<?> setProperty(Consumer<? super T> setter, Provider<T> provider) {
 		return () -> {
 			setter.accept(provider.get());
-			return Collections.emptyList();
+			return emptyList();
 		};
 	}
 
@@ -92,7 +174,16 @@ public class CopyFromAction<T extends AbstractNativeCompileTask> implements Acti
 		}).collect(Collectors.toList());
 	}
 
-	public static <T extends AbstractNativeCompileTask> Action<T> copyFrom(TaskProvider<T> otherTask) {
+	/**
+	 * Copies the configuration of the specified task to the current task.
+	 * <p>
+	 * We only copy the configuration that are safe to duplicate.
+	 *
+	 * @param otherTask  the task to copy the configuration from
+	 * @return a configuration action that will perform the copy
+	 * @param <T>  must be {@link AbstractNativeCompileTask}, {@link AbstractLinkTask} or {@link CppCompile}
+	 */
+	public static <T extends Task> Action<T> copyFrom(Provider<? extends T> otherTask) {
 		return new CopyFromAction<>(otherTask);
 	}
 }
