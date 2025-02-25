@@ -1,19 +1,16 @@
 package dev.nokee.companion;
 
 import dev.nokee.commons.gradle.Plugins;
-import groovy.lang.Closure;
-import groovy.lang.GroovyObject;
-import org.codehaus.groovy.runtime.HandleMetaClass;
+import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.Task;
 import org.gradle.api.plugins.ExtensionAware;
-import org.gradle.api.provider.Provider;
+import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.cpp.CppBinary;
+import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
-import org.gradle.language.cpp.tasks.CppCompile;
 import org.gradle.language.nativeplatform.ComponentWithExecutable;
 import org.gradle.language.nativeplatform.ComponentWithInstallation;
 import org.gradle.language.nativeplatform.ComponentWithSharedLibrary;
@@ -24,7 +21,6 @@ import org.gradle.nativeplatform.tasks.LinkExecutable;
 import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
 
 import javax.inject.Inject;
-import java.util.function.Function;
 
 import static dev.nokee.commons.names.CppNames.*;
 
@@ -56,7 +52,7 @@ public final class CppBinaryTaskExtensions {
 	 */
 	@SuppressWarnings({"unchecked", "UnstableApiUsage"})
 	public static TaskProvider<InstallExecutable> installTask(ComponentWithInstallation binary) {
-		return (TaskProvider<InstallExecutable>) ((ExtensionAware) binary).getExtensions().getByName("linkTask");
+		return (TaskProvider<InstallExecutable>) ((ExtensionAware) binary).getExtensions().getByName("installTask");
 	}
 
 	/**
@@ -77,20 +73,11 @@ public final class CppBinaryTaskExtensions {
 		return (TaskProvider<CreateStaticLibrary>) ((ExtensionAware) binary).getExtensions().getByName("createTask");
 	}
 
-	private static <T extends Task, OBJ> Provider<T> extensions(Object binary, String name, Function<OBJ, Provider<T>> getter) {
-		@SuppressWarnings("unchecked")
-		Provider<T> result = (Provider<T>) ((ExtensionAware) binary).getExtensions().findByName(name);
-		if (result == null) {
-			result = getter.apply((OBJ) binary);
-		}
-		return result;
-	}
-
-	/*private*/ static abstract /*final*/ class Feature implements Plugin<Project> {
+	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
 		private final TaskContainer tasks;
 
 		@Inject
-		public Feature(TaskContainer tasks) {
+		public Rule(TaskContainer tasks) {
 			this.tasks = tasks;
 		}
 
@@ -98,54 +85,27 @@ public final class CppBinaryTaskExtensions {
 		@SuppressWarnings("UnstableApiUsage")
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
-				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
-					final TaskProvider<CppCompile> compileTask = tasks.named(compileTaskName(binary), CppCompile.class);
-					((ExtensionAware) binary).getExtensions().add("compileTask", compileTask);
+				project.getComponents().withType(CppComponent.class, component -> {
+					component.getBinaries().whenElementKnown(CppBinary.class, binary -> {
+						final TaskProvider<CppCompile> compileTask = tasks.named(compileTaskName(binary), CppCompile.class);
+						((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<CppCompile>>() {}, "compileTask", compileTask);
 
-					HandleMetaClass metaClass = new HandleMetaClass(((GroovyObject) binary).getMetaClass());
-					metaClass.setProperty("getCompileTask", new Closure(null) {
-						private Object doCall() {
-							return extensions(getDelegate(), "compileTask", CppBinary::getCompileTask);
+						if (binary instanceof ComponentWithExecutable) {
+							final TaskProvider<LinkExecutable> linkTask = tasks.named(linkTaskName(binary), LinkExecutable.class);
+							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<LinkExecutable>>() {}, "linkTask", linkTask);
+						} else if (binary instanceof ComponentWithSharedLibrary) {
+							final TaskProvider<LinkSharedLibrary> linkTask = tasks.named(linkTaskName(binary), LinkSharedLibrary.class);
+							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<LinkSharedLibrary>>() {}, "linkTask", linkTask);
+						} else if (binary instanceof ComponentWithStaticLibrary) {
+							final TaskProvider<CreateStaticLibrary> createTask = tasks.named(createTaskName(binary), CreateStaticLibrary.class);
+							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<CreateStaticLibrary>>() {}, "createTask", createTask);
+						}
+
+						if (binary instanceof ComponentWithInstallation) {
+							final TaskProvider<InstallExecutable> installTask = tasks.named(installTaskName(binary), InstallExecutable.class);
+							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<InstallExecutable>>() {}, "installTask", installTask);
 						}
 					});
-
-					if (binary instanceof ComponentWithExecutable) {
-						final TaskProvider<LinkExecutable> linkTask = tasks.named(linkTaskName(binary), LinkExecutable.class);
-						((ExtensionAware) binary).getExtensions().add("linkTask", linkTask);
-						metaClass.setProperty("getLinkTask", new Closure(null) {
-							private Object doCall() {
-								return extensions(getDelegate(), "linkTask", ComponentWithExecutable::getLinkTask);
-							}
-						});
-					} else if (binary instanceof ComponentWithSharedLibrary) {
-						final TaskProvider<LinkSharedLibrary> linkTask = tasks.named(linkTaskName(binary), LinkSharedLibrary.class);
-						((ExtensionAware) binary).getExtensions().add("linkTask", linkTask);
-						metaClass.setProperty("getLinkTask", new Closure(null) {
-							private Object doCall() {
-								return extensions(getDelegate(), "linkTask", ComponentWithSharedLibrary::getLinkTask);
-							}
-						});
-					} else if (binary instanceof ComponentWithStaticLibrary) {
-						final TaskProvider<CreateStaticLibrary> createTask = tasks.named(createTaskName(binary), CreateStaticLibrary.class);
-						((ExtensionAware) binary).getExtensions().add("createTask", createTask);
-						metaClass.setProperty("getCreateTask", new Closure(null) {
-							private Object doCall() {
-								return extensions(getDelegate(), "createTask", ComponentWithStaticLibrary::getCreateTask);
-							}
-						});
-					}
-
-					if (binary instanceof ComponentWithInstallation) {
-						final TaskProvider<InstallExecutable> installTask = tasks.named(installTaskName(binary), InstallExecutable.class);
-						((ExtensionAware) binary).getExtensions().add("installTask", installTask);
-						metaClass.setProperty("installTask", new Closure(null) {
-							private Object doCall() {
-								return extensions(getDelegate(), "installTask", ComponentWithInstallation::getInstallTask);
-							}
-						});
-					}
-
-					((GroovyObject) binary).setMetaClass(metaClass);
 				});
 			});
 		}

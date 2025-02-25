@@ -36,6 +36,7 @@ import javax.inject.Inject;
 		plugins.apply(CppSourceFiles.Rule.class);
 		plugins.apply("native-companion.replace-cpp-compile-task");
 		plugins.apply(CppBinaryObjects.Rule.class);
+		plugins.apply(CppBinaryTaskExtensions.Rule.class);
 		feature.apply("binary-task-extensions");
 
 		feature.apply("fix-for-gradle-29492");
