@@ -9,10 +9,12 @@ import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.gradle.nativeplatform.tasks.AbstractLinkTask;
+import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
 import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.VisualCpp;
 import org.gradle.process.CommandLineArgumentProvider;
 
+import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +50,8 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 	}
 
 	private void doExecute(AbstractLinkTask task, Provider<? extends AbstractLinkTask> other) {
+		task.getDebuggable().set((Boolean) null);
+
 		task.getDebuggable().convention(other.flatMap(AbstractLinkTask::getDebuggable));
 		task.getToolChain().convention(other.flatMap(AbstractLinkTask::getToolChain));
 		task.getTargetPlatform().convention(other.flatMap(AbstractLinkTask::getTargetPlatform));
@@ -55,6 +59,20 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 		task.getLinkerArgs().addAll(other.flatMap(AbstractLinkTask::getLinkerArgs));
 		task.getSource().from(other.flatMap(elementsOf(AbstractLinkTask::getSource)));
 		// WARNING: User must set AbstractLinkTask#getLinkedFile()
+		//   Internally, the task infers AbstractLinkTask#getDestinationDirectory()
+
+		if (task instanceof LinkSharedLibrary) {
+			((LinkSharedLibrary) task).getInstallName().convention(other.flatMap(this::toInstallName));
+			// WARNING: User must set LinkSharedLibrary#getImportLibrary()
+		}
+	}
+
+	private @Nullable Provider<String> toInstallName(AbstractLinkTask task) {
+		if (task instanceof LinkSharedLibrary) {
+			return ((LinkSharedLibrary) task).getInstallName();
+		} else {
+			return null;
+		}
 	}
 
 	private void doExecute(AbstractNativeCompileTask task, Provider<? extends AbstractNativeCompileTask> other) {
@@ -91,7 +109,7 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 
 		task.getTargetPlatform().convention(other.flatMap(AbstractNativeCompileTask::getTargetPlatform));
 		task.getToolChain().convention(other.flatMap(AbstractNativeCompileTask::getToolChain));
-		task.getObjectFileDir().convention(other.flatMap(locationOnly(AbstractNativeCompileTask::getObjectFileDir)));
+		// WARNING: Users must set AbstractNativeCompileTask#ObjectFileDir()
 	}
 
 	private Provider<Boolean> toDebuggable(AbstractNativeCompileTask task) {
@@ -126,7 +144,7 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 		}
 	}
 
-	private Provider<List<CommandLineArgumentProvider>> toCompilerArgumentProviders(AbstractNativeCompileTask task) {
+	private @Nullable Provider<List<CommandLineArgumentProvider>> toCompilerArgumentProviders(AbstractNativeCompileTask task) {
 		if (task instanceof CppCompile) {
 			return ((CppCompile) task).getOptions().getCompilerArgumentProviders();
 		} else {
@@ -134,7 +152,7 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 		}
 	}
 
-	private Provider<Boolean> toIncrementalAfterFailure(AbstractNativeCompileTask task) {
+	private @Nullable Provider<Boolean> toIncrementalAfterFailure(AbstractNativeCompileTask task) {
 		if (task instanceof CppCompile) {
 			return ((CppCompile) task).getOptions().getIncrementalAfterFailure();
 		} else {
@@ -142,7 +160,7 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 		}
 	}
 
-	private Provider<Iterable<? extends SourceConfiguration>> toSourceOptions(AbstractNativeCompileTask task) {
+	private @Nullable Provider<Iterable<? extends SourceConfiguration>> toSourceOptions(AbstractNativeCompileTask task) {
 		if (task instanceof SourceOptionsAware) {
 			return ((SourceOptionsAware<?>) task).getSourceOptions().asProvider();
 		} else {
