@@ -70,15 +70,11 @@ import static dev.nokee.commons.names.PublishingTaskNames.*;
 					});
 
 					// Fill the platform names to support non-buildable variants
-					Set<? extends SoftwareComponent> variants = project.getComponents().withType(PublicationAwareComponent.class).getByName("main").getMainPublication().getVariants();
-					if (variants instanceof DomainObjectSet) {
-						publication.getPlatformNames().empty();
-						((DomainObjectSet<? extends SoftwareComponent>) variants).all(it -> {
-							publication.getPlatformNames().add(((ComponentWithCoordinates) it).getCoordinates().getName());
-						});
-					} else {
-						publication.getPlatformNames().set(variants.stream().map(it -> ((ComponentWithCoordinates) it).getCoordinates().getName()).collect(Collectors.toList()));
-					}
+					// TODO: Compute platform artifacts from public APIs
+					publication.getPlatformArtifacts().set(project.provider(() -> {
+						final Set<? extends SoftwareComponent> variants = project.getComponents().withType(PublicationAwareComponent.class).getByName("main").getMainPublication().getVariants();
+						return variants.stream().map(it -> ((ComponentWithCoordinates) it).getCoordinates().getName()).collect(Collectors.toList());
+					}));
 
 					// Register platform publications
 					project.getComponents().matching(it -> !it.getName().equals(publication.getName()) && it.getName().startsWith(publication.getName())).all(component -> {
