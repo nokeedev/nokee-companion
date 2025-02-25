@@ -65,12 +65,12 @@ public abstract /*final*/ class CompileTasks {
 	}
 
 	/** {@return a live provider of all compile tasks of this view} */
-	public abstract Provider<Set<? extends Task>> getElements();
+	public abstract Provider<Set<Task>> getElements();
 
 	/*private*/ static abstract /*final*/ class CppBinaryCompileTasks extends CompileTasks {
 		private final Set<String> knownElements = new HashSet<>();
 		private final TaskContainer tasks;
-		private final Provider<Set<? extends Task>> elementsProvider;
+		private final Provider<Set<Task>> elementsProvider;
 
 		@Inject
 		public CppBinaryCompileTasks(TaskContainer tasks, ProviderFactory providers, ObjectFactory objects) {
@@ -125,7 +125,7 @@ public abstract /*final*/ class CompileTasks {
 		}
 
 		/** {@return a live provider of all compile tasks of this view} */
-		public Provider<Set<? extends Task>> getElements() {
+		public Provider<Set<Task>> getElements() {
 			return elementsProvider;
 		}
 	}
