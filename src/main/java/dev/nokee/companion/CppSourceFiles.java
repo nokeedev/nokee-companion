@@ -60,7 +60,9 @@ public final class CppSourceFiles {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					tasks.named(compileTaskName(binary), CppCompile.class).configure(task -> {
 						try {
-							task.getSource().setFrom(cppSourceOf(binary));
+							// Note: We are **not** using `setFrom` as some projects configures generated source files through Project:
+							//   project.tasks.withType(CppCompile).configureEach { source(...) }
+							task.getSource().from(cppSourceOf(binary));
 						} catch (IllegalStateException e) {
 							// We only log the failure as the `cppSource` may be wired through a different process
 							//   See per-source file compiler args sample.
