@@ -27,7 +27,7 @@ import javax.inject.Inject;
 	}
 
 	private void doApply(Project project) {
-		final NativeCompanionExtension extension = project.getExtensions().create("nativeCompanion", Extension.class, project);
+		final NativeCompanionExtension extension = project.getExtensions().create(NativeCompanionExtension.class, "nativeCompanion", Extension.class, project);
 		final FeaturePreviews feature = project.getObjects().newInstance(FeaturePreviews.class, extension);
 		final Plugins<Project> plugins = Plugins.forProject(project);
 
