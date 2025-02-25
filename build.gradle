@@ -19,7 +19,7 @@ plugins {
 }
 
 group = 'dev.nokee'
-version = '1.0-milestone-4'
+version = '1.0-milestone-5'
 description = 'Quality-of-life enhancements for Gradle core native plugins.'
 
 repositories {
@@ -89,7 +89,7 @@ testing {
 				implementation 'dev.nokee.commons:commons-names:latest.release'
 				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.release')
 				implementation testFixtures('dev.gradleplugins:gradle-runner-kit:latest.release')
-				implementation 'dev.nokee.commons:commons-hamcrest:latest.release'
+				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'
 			}
 		}
 		samplesTest(JvmTestSuite) {
