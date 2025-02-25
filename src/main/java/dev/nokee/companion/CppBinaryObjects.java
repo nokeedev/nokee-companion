@@ -1,7 +1,6 @@
 package dev.nokee.companion;
 
 import dev.nokee.commons.gradle.Plugins;
-import dev.nokee.commons.names.CppNames;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
@@ -19,18 +18,17 @@ import org.gradle.language.nativeplatform.ComponentWithStaticLibrary;
 import org.gradle.nativeplatform.tasks.CreateStaticLibrary;
 import org.gradle.nativeplatform.tasks.LinkExecutable;
 import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
-import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 
 import javax.inject.Inject;
 import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.gradle.TransformerUtils.traverse;
-import static dev.nokee.commons.names.CppNames.compileTaskName;
-import static dev.nokee.commons.names.CppNames.linkTaskName;
+import static dev.nokee.commons.names.CppNames.*;
 
 /**
  * Represents the shadow property for {@link CppBinary#getObjects()}.
  */
+@SuppressWarnings("UnstableApiUsage")
 public final class CppBinaryObjects {
 	/**
 	 * Returns the shadow property of {@link CppBinary#getObjects()}.
@@ -75,14 +73,9 @@ public final class CppBinaryObjects {
 							task.getSource().setFrom(objs);
 						});
 					} else if (binary instanceof ComponentWithStaticLibrary) {
-						tasks.named(CppNames.createTaskName(binary), CreateStaticLibrary.class, task -> {
+						tasks.named(createTaskName(binary), CreateStaticLibrary.class, task -> {
 							((ConfigurableFileCollection) task.getSource()).setFrom(objs);
 						});
-					}
-
-					if (binary instanceof CppTestExecutable) {
-						// TODO: Test suite
-						// ... and rewire the object
 					}
 				});
 			});
