@@ -1,0 +1,24 @@
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.native-companion'
+}
+
+class ForcedIncludeArguments implements CommandLineArgumentProvider {
+	ForcedIncludeArguments(File forcedIncludeFile) {
+		this.forcedIncludeFile = forcedIncludeFile
+	}
+
+	@InputFile
+	@PathSensitive(PathSensitivity.RELATIVE)
+	final File forcedIncludeFile
+
+	Iterable<String> asArguments() {
+		return ['-include', forcedIncludeFile.absolutePath]
+	}
+}
+
+application {
+	binaries.configureEach {
+		compileTask.get().options.compilerArgumentProviders.add(new ForcedIncludeArguments(file('my-forced.h')))
+	}
+}
