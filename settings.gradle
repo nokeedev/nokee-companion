@@ -3,4 +3,8 @@ pluginManagement {
 	includeBuild 'gradle/plugins/nokeebuild-plugins'
 }
 
+plugins {
+	id 'nokeebuild.develocity'
+}
+
 rootProject.name = 'nokee-companion'
