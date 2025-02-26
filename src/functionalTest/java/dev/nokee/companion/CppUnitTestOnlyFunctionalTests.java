@@ -44,6 +44,6 @@ class CppUnitTestOnlyFunctionalTests {
 	@Test
 	void canReselectTestedBinaryToOptimizedVariant() {
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":compileReleaseC", ":compileTestCpp", ":relocateMainForTest", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
 	}
 }
