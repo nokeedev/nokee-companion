@@ -219,39 +219,43 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		Class<T> specType = Cast.uncheckedCast(spec.getClass());
 		Compiler<T> baseCompiler = platformToolProvider.newCompiler(specType);
 
-		PerSourceCompiler.SpecProvider specProvider = new PerSourceCompiler.SpecProvider() {
-			@Override
-			public ISourceKey forFile(File file) {
-				return allOptions.keyOf(file).get();
-			}
-		};
-		Compiler<T> perSourceCompiler = new PerSourceCompiler<>(baseCompiler, specProvider, () -> (T) createCompileSpec(), new PerSourceCompiler.SpecConfigure<T>() {
-			@Override
-			public void configureSpec(T spec, ISourceKey key) {
-				NativeCompileOptions options = allOptions.forKey(key).get();
-
-				// Namespace the temporary directory (i.e. where the options.txt will be written)
-				spec.setTempDir(new File(spec.getTempDir(), hash(key)));
-
-				// Configure the bucket spec from the per-source options
-				spec.args(options.getCompilerArgs().get());
-				for (CommandLineArgumentProvider argumentProvider : options.getCompilerArgumentProviders().get()) {
-					argumentProvider.asArguments().forEach(spec.getArgs()::add);
+		Compiler<T> perSourceCompiler = baseCompiler;
+		if (allOptions != null) { // only if there are some per-options sources
+			PerSourceCompiler.SpecProvider specProvider = new PerSourceCompiler.SpecProvider() {
+				@Override
+				public ISourceKey forFile(File file) {
+					return allOptions.keyOf(file).get();
 				}
-			}
+			};
+			perSourceCompiler = new PerSourceCompiler<>(baseCompiler, specProvider, () -> (T) createCompileSpec(), new PerSourceCompiler.SpecConfigure<T>() {
+				@Override
+				public void configureSpec(T spec, ISourceKey key) {
+					NativeCompileOptions options = allOptions.forKey(key).get();
 
-			public String hash(ISourceKey key) {
-				try {
-					MessageDigest messageDigest = MessageDigest.getInstance("MD5");
-					for (Integer i : (Iterable<Integer>) key) {
-						messageDigest.update(ByteBuffer.allocate(4).putInt(i).array());
+					// Namespace the temporary directory (i.e. where the options.txt will be written)
+					spec.setTempDir(new File(spec.getTempDir(), hash(key)));
+
+					// Configure the bucket spec from the per-source options
+					spec.args(options.getCompilerArgs().get());
+					for (CommandLineArgumentProvider argumentProvider : options.getCompilerArgumentProviders().get()) {
+						argumentProvider.asArguments().forEach(spec.getArgs()::add);
 					}
-					return new BigInteger(1, messageDigest.digest()).toString(36);
-				} catch (NoSuchAlgorithmException e) {
-					throw UncheckedException.throwAsUncheckedException(e);
 				}
-			}
-		});
+
+				public String hash(ISourceKey key) {
+					try {
+						MessageDigest messageDigest = MessageDigest.getInstance("MD5");
+						for (Integer i : (Iterable<Integer>) key) {
+							messageDigest.update(ByteBuffer.allocate(4).putInt(i).array());
+						}
+						return new BigInteger(1, messageDigest.digest()).toString(36);
+					} catch (NoSuchAlgorithmException e) {
+						throw UncheckedException.throwAsUncheckedException(e);
+					}
+				}
+			});
+		}
+
 		Compiler<T> transactionalCompiler = perSourceCompiler;
 		if (getOptions().getIncrementalAfterFailure().getOrElse(false)) {
 			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler));
@@ -278,19 +282,18 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	// For header normalization on Windows
 	FileCollection headerDependencies;
 
+	private final ObjectFactory objects;
+
 	@Inject
 	public CppCompileTask(ObjectFactory objects, ProviderFactory providers) {
+		this.objects = objects;
 		this.source = super.getSource();
 		this.headerDependencies = super.getHeaderDependencies();
 
-		Factory<NativeCompileOptions> factory = () -> objects.newInstance(NativeCompileOptions.class);
-		factory = factory.tap(t -> {
-			t.getCompilerArgumentProviders().set(getOptions().getCompilerArgumentProviders());
-			t.getCompilerArgs().set(getOptions().getCompilerArgs());
-		});
-		this.allOptions = objects.newInstance(new TypeOf<AllSourceOptionsEx2<NativeCompileOptions>>() {}.getConcreteClass(), factory);
-
 		getBundles().set(providers.provider(() -> {
+			if (this.allOptions == null) {
+				return Collections.emptyList(); // bailout quickly
+			}
 			List<Object> result = new ArrayList<>();
 			Map<ISourceKey, Collection<SourceFile>> map = new LinkedHashMap<>();
 			source.getAsFileTree().visit(new SourceFileVisitor(sourceFile -> {
@@ -322,18 +325,32 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		getOptions().allOptions = new SourceOptionsLookup<NativeCompileOptions>() {
 			@Override
 			public Provider<NativeCompileOptions> get(File file) {
+				if (allOptions == null) {
+					return providers.provider(() -> getOptions());
+				}
 				return allOptions.forFile(file).map(filter(it -> getSource().contains(file)));
 			}
 
 			@Override
 			public Provider<Iterable<SourceOptions<NativeCompileOptions>>> getAll() {
+				if (allOptions == null) {
+					return providers.provider(() -> {
+						return () -> new SourceOptionsIterator<>(getSource(), __ -> getOptions(), objects);
+					});
+				}
 				return allOptions.forAllSources(getSource().getAsFileTree()).map(OptionsIter::unrolled);
 			}
 		};
 
 		// track build dependencies from source configuration
 		//   TODO: Should it only be unmatched source configurations? But some configuration may be overshadowed by other.
-		dependsOn((Callable<?>) allOptions.asProvider()::get);
+		dependsOn((Callable<?>) () -> {
+			if (allOptions == null) {
+				return Collections.emptyList();
+			} else {
+				return allOptions.asProvider().get();
+			}
+		});
 	}
 
 	@Override
@@ -362,10 +379,19 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	@Nested // track bundle scope
 	protected abstract ListProperty<Object> getBundles();
 
-	private final AllSourceOptionsEx2<NativeCompileOptions> allOptions;
+	private AllSourceOptionsEx2<NativeCompileOptions> allOptions;
 
 	@Override
 	public AllSourceOptionsEx2<NativeCompileOptions> getSourceOptions() {
+		if (allOptions == null) {
+			Factory<NativeCompileOptions> factory = () -> objects.newInstance(NativeCompileOptions.class);
+			factory = factory.tap(t -> {
+				t.getCompilerArgumentProviders().set(getOptions().getCompilerArgumentProviders());
+				t.getCompilerArgs().set(getOptions().getCompilerArgs());
+			});
+			allOptions = objects.newInstance(new TypeOf<AllSourceOptionsEx2<NativeCompileOptions>>() {}.getConcreteClass(), factory);
+
+		}
 		return allOptions;
 	}
 
