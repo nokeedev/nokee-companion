@@ -24,6 +24,7 @@ import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 import org.gradle.nativeplatform.test.cpp.CppTestSuite;
 
 import javax.inject.Inject;
+import java.util.Collections;
 import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.gradle.SpecUtils.named;
@@ -123,9 +124,9 @@ public final class CppUnitTestExtensions {
 								return (Callable<?>) () -> tasks.named(relocateMainForBinaryTaskName(testExecutable), UnexportMainSymbol.class)
 									.map(UnexportMainSymbol::getRelocatedObjects);
 							} else {
-								return objectsOf(mainBinary);
+								return (Object) objectsOf(mainBinary);
 							}
-						}));
+						}).orElse(Collections.emptyList()));
 
 						// Assuming a single FileCollectionDependency which should be the Gradle core object files.
 						//   In cases where this code executes **before** normal Gradle code (for some reason),
