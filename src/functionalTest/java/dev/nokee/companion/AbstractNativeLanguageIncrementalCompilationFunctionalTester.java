@@ -222,7 +222,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
-				options.preprocessorOptions.definedMacros.put('MY_NEW_MACRO', 'value')
+				options.preprocessorOptions.define('MY_NEW_MACRO', 'value')
 			}
 		""".stripIndent()));
 

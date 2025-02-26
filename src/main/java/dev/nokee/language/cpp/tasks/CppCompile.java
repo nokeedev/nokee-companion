@@ -3,6 +3,7 @@ package dev.nokee.language.cpp.tasks;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
 import org.gradle.api.Action;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.Input;
@@ -11,7 +12,7 @@ import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
 
 import java.io.File;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Compiles C++ source files into object files.
@@ -33,7 +34,7 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 		getOptions().getDebuggable().convention(super.isDebuggable());
 		getOptions().getOptimized().convention(super.isOptimized());
 		getOptions().getPositionIndependentCode().convention(super.isPositionIndependentCode());
-		getOptions().getPreprocessorOptions().getDefinedMacros().set(super.getMacros());
+		getOptions().getPreprocessorOptions().defines(super.getMacros());
 	}
 
 	/**
@@ -155,7 +156,74 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 	@Internal
 	@Override
 	public Map<String, String> getMacros() {
-		return dev.nokee.commons.gradle.provider.ProviderUtils.asJdkMap(getOptions().getPreprocessorOptions().getDefinedMacros());
+		class MacroMap extends AbstractMap<String, String> {
+			private final ListProperty<PreprocessorOptions.DefinedMacro> delegate = getOptions().getPreprocessorOptions().getDefinedMacros();
+
+			public String remove(Object key) {
+				List<PreprocessorOptions.DefinedMacro> newValues = new ArrayList<>(delegate.get());
+
+				ListIterator<PreprocessorOptions.DefinedMacro> iter = newValues.listIterator();
+				while (iter.hasNext()) {
+					PreprocessorOptions.DefinedMacro macro = iter.next();
+					if (macro.getName().equals(key)) {
+						iter.remove();
+						return macro.getDefinition();
+					}
+				}
+				return null;
+			}
+
+			public void clear() {
+				this.delegate.empty();
+			}
+
+			public Set<Entry<String, String>> entrySet() {
+				return asMap().entrySet();
+			}
+
+			public String getOrDefault(Object key, String defaultValue) {
+				for (PreprocessorOptions.DefinedMacro macro : delegate.get()) {
+					if (macro.getName().equals(key)) {
+						return macro.getDefinition();
+					}
+				}
+				return defaultValue;
+			}
+
+			public String get(Object key) {
+				return getOrDefault(key, null);
+			}
+
+			public String put(String key, String value) {
+				if (value == null) {
+					getOptions().getPreprocessorOptions().define(key);
+				} else {
+					getOptions().getPreprocessorOptions().define(key, value);
+				}
+				return null;
+			}
+
+			public void putAll(Map<? extends String, ? extends String> m) {
+				getOptions().getPreprocessorOptions().defines(m);
+			}
+
+			public Collection<String> values() {
+				return asMap().values();
+			}
+
+			public Set<String> keySet() {
+				return asMap().keySet();
+			}
+
+			private Map<String, String> asMap() {
+				Map<String, String> result = new LinkedHashMap<>();
+				for (PreprocessorOptions.DefinedMacro macro : delegate.get()) {
+					result.put(macro.getName(), macro.getDefinition());
+				}
+				return result;
+			}
+		}
+		return new MacroMap();
 	}
 
 	/**
@@ -163,7 +231,8 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 	 */
 	@Override
 	public void setMacros(Map<String, String> macros) {
-		getOptions().getPreprocessorOptions().getDefinedMacros().set(macros);
+		getOptions().getPreprocessorOptions().getDefinedMacros().empty();
+		getOptions().getPreprocessorOptions().defines(macros);
 	}
 	//endregion
 }

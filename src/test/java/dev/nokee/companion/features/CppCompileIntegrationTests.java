@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
 
 import static dev.nokee.commons.hamcrest.gradle.provider.ProviderOfMatcher.providerOf;
@@ -116,6 +117,31 @@ class CppCompileIntegrationTests {
 		@Test
 		void defaultsToNoCompilerArgsProviders() {
 			assertThat(compileTask.getOptions().getCompilerArgumentProviders(), providerOf(emptyIterable()));
+		}
+	}
+
+	@Nested
+	class MacrosTests {
+		@Test
+		void canDefineMacroWithoutDefinition() {
+			compileTask.getOptions().getPreprocessorOptions().define("MACRO1");
+			compileTask.getOptions().getPreprocessorOptions().defines(Collections.singletonMap("MACRO2", null));
+			compileTask.getOptions().getPreprocessorOptions().defines(project.provider(() -> Collections.singletonMap("MACRO3", null)));
+
+			assertThat(compileTask.getMacros().keySet(), contains("MACRO1", "MACRO2", "MACRO3"));
+			assertThat(compileTask.getMacros().values(), contains(null, null, null));
+			assertThat(compileTask.getMacros().get("MACRO2"), nullValue());
+		}
+
+		@Test
+		void canDefineMacroWithDefinition() {
+			compileTask.getOptions().getPreprocessorOptions().define("MACRO1", "val1");
+			compileTask.getOptions().getPreprocessorOptions().defines(Collections.singletonMap("MACRO2", "val2"));
+			compileTask.getOptions().getPreprocessorOptions().defines(project.provider(() -> Collections.singletonMap("MACRO3", "val3")));
+
+			assertThat(compileTask.getMacros().keySet(), contains("MACRO1", "MACRO2", "MACRO3"));
+			assertThat(compileTask.getMacros().values(), contains("val1", "val2", "val3"));
+			assertThat(compileTask.getMacros().get("MACRO2"), equalTo("val2"));
 		}
 	}
 }

@@ -4,7 +4,6 @@ import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Project;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Provider;
 import org.gradle.nativeplatform.platform.NativePlatform;
 import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform;
@@ -17,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static dev.nokee.commons.fixtures.ActionTestUtils.doSomething;
@@ -51,8 +49,8 @@ class CppCompileCopyFromIntegrationTests {
 			task.getOptions().getDebuggable().set(true);
 			task.getOptions().getPositionIndependentCode().set(true);
 			task.getOptions().getOptimized().set(true);
-			task.getOptions().getPreprocessorOptions().getDefinedMacros().put("MY_MACRO", "foo");
-			task.getOptions().getPreprocessorOptions().getDefinedMacros().put("MY_OTHER_MACRO", "bar");
+			task.getOptions().getPreprocessorOptions().define("MY_MACRO");
+			task.getOptions().getPreprocessorOptions().define("MY_OTHER_MACRO", "bar");
 			task.getOptions().getIncrementalAfterFailure().set(true);
 			task.getSystemIncludes().from("/usr/includes");
 			task.getIncludes().from(project.file("my-includes"));
@@ -74,7 +72,7 @@ class CppCompileCopyFromIntegrationTests {
 			task.setDebuggable(true);
 			task.setPositionIndependentCode(true);
 			task.setOptimized(true);
-			task.getMacros().put("MY_MACRO", "foo");
+			task.getMacros().put("MY_MACRO", null);
 			task.getMacros().put("MY_OTHER_MACRO", "bar");
 			task.getSystemIncludes().from("/usr/includes");
 			task.getIncludes().from(project.file("my-includes"));
@@ -95,7 +93,7 @@ class CppCompileCopyFromIntegrationTests {
 		assertThat(subject.isDebuggable(), is(true));
 		assertThat(subject.isPositionIndependentCode(), is(true));
 		assertThat(subject.isOptimized(), is(true));
-		assertThat(subject.getMacros(), allOf(aMapWithSize(2), hasEntry("MY_MACRO", "foo"), hasEntry("MY_OTHER_MACRO", "bar")));
+		assertThat(subject.getMacros(), allOf(aMapWithSize(2), hasEntry("MY_MACRO", null), hasEntry("MY_OTHER_MACRO", "bar")));
 		assertThat(subject.getOptions().getIncrementalAfterFailure(), providerOf(true));
 		assertThat(subject.getSystemIncludes(), contains(aFile(with(absolutePath("/usr/includes")))));
 		assertThat(subject.getToolChain(), providerOf(allOf(named("gcc"), instanceOf(Gcc.class))));
@@ -119,7 +117,7 @@ class CppCompileCopyFromIntegrationTests {
 		assertThat(subject.getSystemIncludes(), contains(aFile(with(absolutePath("/usr/includes")))));
 		assertThat(subject.getToolChain(), providerOf(allOf(named("gcc"), instanceOf(Gcc.class))));
 		assertThat(subject.getTargetPlatform(), providerOf(instanceOf(NativePlatform.class)));
-		assertThat(subject.getCompilerArgs(), providerOf(contains("-DMY_MACRO=foo", "-DMY_OTHER_MACRO=bar", "--some-flag")));
+		assertThat(subject.getCompilerArgs(), providerOf(contains("-DMY_MACRO", "-DMY_OTHER_MACRO=bar", "--some-flag")));
 		assertThat(subject.getSource(), contains(aFileNamed("file1.cpp"), aFileNamed("file2.cpp"), aFileNamed("file3.cpp")));
 		assertThat(subject.getIncludes(), contains(aFileNamed("my-includes")));
 	}
@@ -130,7 +128,7 @@ class CppCompileCopyFromIntegrationTests {
 		assertThat(subject.isDebuggable(), is(true));
 		assertThat(subject.isPositionIndependentCode(), is(true));
 		assertThat(subject.isOptimized(), is(true));
-		assertThat(subject.getMacros(), allOf(aMapWithSize(2), hasEntry("MY_MACRO", "foo"), hasEntry("MY_OTHER_MACRO", "bar")));
+		assertThat(subject.getMacros(), allOf(aMapWithSize(2), hasEntry("MY_MACRO", null), hasEntry("MY_OTHER_MACRO", "bar")));
 		assertThat(subject.getOptions().getIncrementalAfterFailure(), noValueProvider());
 		assertThat(subject.getSystemIncludes(), contains(aFile(with(absolutePath("/usr/includes")))));
 		assertThat(subject.getToolChain(), providerOf(allOf(named("gcc"), instanceOf(Gcc.class))));
@@ -154,7 +152,7 @@ class CppCompileCopyFromIntegrationTests {
 		assertThat(subject.getSystemIncludes(), contains(aFile(with(absolutePath("/usr/includes")))));
 		assertThat(subject.getToolChain(), providerOf(allOf(named("gcc"), instanceOf(Gcc.class))));
 		assertThat(subject.getTargetPlatform(), providerOf(instanceOf(NativePlatform.class)));
-		assertThat(subject.getCompilerArgs(), providerOf(contains("-DMY_MACRO=foo", "-DMY_OTHER_MACRO=bar", "--some-flag")));
+		assertThat(subject.getCompilerArgs(), providerOf(contains("-DMY_MACRO", "-DMY_OTHER_MACRO=bar", "--some-flag")));
 		assertThat(subject.getSource(), contains(aFileNamed("file1.cpp"), aFileNamed("file2.cpp"), aFileNamed("file3.cpp")));
 		assertThat(subject.getIncludes(), contains(aFileNamed("my-includes")));
 	}

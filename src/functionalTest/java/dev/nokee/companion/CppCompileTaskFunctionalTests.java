@@ -245,7 +245,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		""".stripIndent());
 
 		result.getBuildFile().append(groovyDsl("""
-			compileTask.options.preprocessorOptions.definedMacros.put('INCLUDE_MACRO', '"my-include-macro.h"')
+			compileTask.options.preprocessorOptions.define('INCLUDE_MACRO', '"my-include-macro.h"')
 		""".stripIndent()));
 		return result;
 	}

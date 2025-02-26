@@ -15,7 +15,6 @@ import org.gradle.nativeplatform.toolchain.VisualCpp;
 import org.gradle.process.CommandLineArgumentProvider;
 
 import javax.annotation.Nullable;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -23,7 +22,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static dev.nokee.commons.gradle.provider.ProviderUtils.elementsOf;
-import static dev.nokee.commons.gradle.provider.ProviderUtils.locationOnly;
 import static java.util.Collections.emptyList;
 
 /**
@@ -81,7 +79,7 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 			((CppCompile) task).getOptions().getOptimized().convention(other.flatMap(this::toOptimized));
 			((CppCompile) task).getOptions().getPositionIndependentCode().convention(other.flatMap(this::toPositionIndependentCode));
 			((CppCompile) task).getOptions().getCompilerArgumentProviders().addAll(other.flatMap(this::toCompilerArgumentProviders).orElse(emptyList()));
-			((CppCompile) task).getOptions().getPreprocessorOptions().getDefinedMacros().putAll(other.flatMap(this::toDefinedMacros));
+			((CppCompile) task).getOptions().getPreprocessorOptions().defines(other.flatMap(this::toDefinedMacros));
 			((CppCompile) task).getOptions().getIncrementalAfterFailure().convention(other.flatMap(this::toIncrementalAfterFailure));
 
 			if (((CppCompile) task).getOptions() instanceof SourceOptionsAware.Options) {
@@ -136,7 +134,7 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 		}
 	}
 
-	private Provider<Map<String, String>> toDefinedMacros(AbstractNativeCompileTask task) {
+	private Provider<? extends Object> toDefinedMacros(AbstractNativeCompileTask task) {
 		if (task instanceof CppCompile) {
 			return ((CppCompile) task).getOptions().getPreprocessorOptions().getDefinedMacros();
 		} else {

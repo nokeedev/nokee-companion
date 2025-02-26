@@ -7,6 +7,7 @@ import dev.nokee.commons.gradle.file.SourceFileVisitor;
 import dev.nokee.commons.gradle.tasks.options.*;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
+import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -36,6 +37,7 @@ import org.gradle.process.CommandLineArgumentProvider;
 import org.gradle.work.Incremental;
 import org.gradle.work.InputChanges;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.lang.reflect.Field;
@@ -70,10 +72,111 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			return allOptions.getAll();
 		}
 
+		@Nested
+		@Override
+		public abstract DefaultPreprocessorOptions getPreprocessorOptions();
+
 		@Internal
 		@Override
 		public ListProperty<String> getCompilerArgs() {
 			return compilerArgs;
+		}
+
+		public static abstract /*final*/ class DefaultPreprocessorOptions implements PreprocessorOptions {
+			private final ObjectFactory objects;
+
+			@Inject
+			public DefaultPreprocessorOptions(ObjectFactory objects) {
+				this.objects = objects;
+			}
+
+			@Override
+			public void defines(Provider<?> definedMacros) {
+				getDefinedMacros().addAll(definedMacros.map(it -> {
+					List<DefinedMacro> result = new ArrayList<>();
+					if (it instanceof Map) {
+						((Map) it).forEach((name, definition) -> {
+							if (definition == null) {
+								result.add(objects.newInstance(NameOnlyMacro.class, name));
+							} else {
+								result.add(objects.newInstance(MacroWithDefinition.class, name, definition));
+							}
+						});
+					} else if (it instanceof Iterable) {
+						((Iterable) it).forEach(entry -> {
+							if (entry instanceof DefinedMacro) {
+								result.add((DefinedMacro) entry);
+							} else {
+								throw new UnsupportedOperationException();
+							}
+						});
+					} else {
+						throw new IllegalArgumentException();
+					}
+					return result;
+				}));
+			}
+
+			@Override
+			public void defines(Map<? extends String, ?> definedMacros) {
+				definedMacros.forEach((name, definition) -> {
+					if (definition == null) {
+						getDefinedMacros().add(objects.newInstance(NameOnlyMacro.class, name));
+					} else {
+						getDefinedMacros().add(objects.newInstance(MacroWithDefinition.class, name, definition));
+					}
+				});
+			}
+
+			@Override
+			public void define(String name) {
+				getDefinedMacros().add(objects.newInstance(NameOnlyMacro.class, name));
+			}
+
+			@Override
+			public void define(String name, Object definition) {
+				getDefinedMacros().add(objects.newInstance(MacroWithDefinition.class, name, Objects.requireNonNull(definition, "'definition' must not be null")));
+			}
+
+			public static abstract /*final*/ class NameOnlyMacro implements DefinedMacro {
+				private final String name;
+
+				@Inject
+				public NameOnlyMacro(String name) {
+					this.name = name;
+				}
+
+				@Override
+				public String getName() {
+					return name;
+				}
+
+				@Override
+				public @Nullable String getDefinition() {
+					return null;
+				}
+			}
+
+			public static abstract /*final*/ class MacroWithDefinition implements DefinedMacro {
+				private final String name;
+				private final Object definition;
+
+				@Inject
+				public MacroWithDefinition(String name, Object definition) {
+					this.name = name;
+					this.definition = definition;
+				}
+
+				@Override
+				public String getName() {
+					return name;
+				}
+
+				@Override
+				public @Nullable String getDefinition() {
+					return definition == null ? null : definition.toString();
+				}
+			}
 		}
 	}
 
@@ -91,7 +194,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		spec.include(getIncludes());
 		spec.systemInclude(getSystemIncludes());
 		spec.source(getSource());
-		spec.setMacros(getOptions().getPreprocessorOptions().getDefinedMacros().get());
+		spec.setMacros(getMacros());
 		spec.args(getCompilerArgs().get());
 		for (CommandLineArgumentProvider argProvider : getOptions().getCompilerArgumentProviders().get()) {
 			argProvider.asArguments().forEach(spec.getArgs()::add);
