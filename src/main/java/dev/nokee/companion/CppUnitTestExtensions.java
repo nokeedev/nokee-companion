@@ -6,6 +6,7 @@ import dev.nokee.commons.gradle.provider.ZipProvider;
 import dev.nokee.companion.util.TestedBinaryMapper;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.FileCollectionDependency;
@@ -113,7 +114,7 @@ public final class CppUnitTestExtensions {
 
 						// In cases where the task `relocateMainFor*` doesn't exist (for some reason),
 						//   we can configure the task only when it appears (by name).
-						tasks.withType(UnexportMainSymbol.class).configureEach(named(relocateMainForBinaryTaskName(testExecutable)::equals).whenSatisfied(task -> {
+						tasks.withType(UnexportMainSymbol.class).configureEach(named(relocateMainForBinaryTaskName(testExecutable)::equals).using(Task::getName).whenSatisfied(task -> {
 							task.getObjects().setFrom((Callable<?>) () -> objectsOf(testedBinaryOf(testExecutable).get()));
 						}));
 
