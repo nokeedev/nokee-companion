@@ -2,7 +2,6 @@ package dev.nokee.companion.features;
 
 import dev.nokee.commons.gradle.Factory;
 import dev.nokee.commons.gradle.Plugins;
-import dev.nokee.commons.gradle.file.SourceFile;
 import dev.nokee.commons.gradle.file.SourceFileVisitor;
 import dev.nokee.commons.gradle.tasks.options.*;
 import dev.nokee.language.cpp.tasks.CppCompile;
@@ -24,7 +23,6 @@ import org.gradle.internal.UncheckedException;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.language.cpp.CppBinary;
-import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilerBuilder;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
@@ -47,7 +45,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
 
 import static dev.nokee.commons.gradle.TransformerUtils.filter;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
@@ -295,11 +292,11 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				return Collections.emptyList(); // bailout quickly
 			}
 			List<Object> result = new ArrayList<>();
-			Map<ISourceKey, Collection<SourceFile>> map = new LinkedHashMap<>();
+			Map<ISourceKey, Collection<String>> map = new LinkedHashMap<>();
 			source.getAsFileTree().visit(new SourceFileVisitor(sourceFile -> {
 				ISourceKey key = allOptions.keyOf(sourceFile.getFile()).get();
 				if (key != ISourceKey.DEFAULT_KEY) { // must avoid capturing the default bucket
-					map.computeIfAbsent(key, __ -> new ArrayList<>()).add(sourceFile);
+					map.computeIfAbsent(key, __ -> new ArrayList<>()).add(sourceFile.getPath());
 				}
 			}));
 
@@ -307,7 +304,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				result.add(new Object() {
 					@Input
 					public Set<String> getPaths() {
-						return files.stream().map(SourceFile::getPath).collect(Collectors.toSet());
+						return new LinkedHashSet<>(files);
 					}
 
 					@Nested
