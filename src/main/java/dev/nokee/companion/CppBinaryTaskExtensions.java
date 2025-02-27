@@ -74,6 +74,11 @@ public final class CppBinaryTaskExtensions {
 	}
 
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
+		private static final TypeOf<TaskProvider<CppCompile>> COMPILE_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<CppCompile>>() {};
+		private static final TypeOf<TaskProvider<LinkExecutable>> LINK_EXECUTABLE_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<LinkExecutable>>() {};
+		private static final TypeOf<TaskProvider<LinkSharedLibrary>> LINK_SHARED_LIBRARY_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<LinkSharedLibrary>>() {};
+		private static final TypeOf<TaskProvider<CreateStaticLibrary>> CREATE_STATIC_LIBRARY_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<CreateStaticLibrary>>() {};
+		private static final TypeOf<TaskProvider<InstallExecutable>> INSTALL_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<InstallExecutable>>() {};
 		private final TaskContainer tasks;
 
 		@Inject
@@ -88,22 +93,22 @@ public final class CppBinaryTaskExtensions {
 				project.getComponents().withType(CppComponent.class, component -> {
 					component.getBinaries().whenElementKnown(CppBinary.class, binary -> {
 						final TaskProvider<CppCompile> compileTask = tasks.named(compileTaskName(binary), CppCompile.class);
-						((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<CppCompile>>() {}, "compileTask", compileTask);
+						((ExtensionAware) binary).getExtensions().add(COMPILE_TASK_PROVIDER_TYPE, "compileTask", compileTask);
 
 						if (binary instanceof ComponentWithExecutable) {
 							final TaskProvider<LinkExecutable> linkTask = tasks.named(linkTaskName(binary), LinkExecutable.class);
-							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<LinkExecutable>>() {}, "linkTask", linkTask);
+							((ExtensionAware) binary).getExtensions().add(LINK_EXECUTABLE_TASK_PROVIDER_TYPE, "linkTask", linkTask);
 						} else if (binary instanceof ComponentWithSharedLibrary) {
 							final TaskProvider<LinkSharedLibrary> linkTask = tasks.named(linkTaskName(binary), LinkSharedLibrary.class);
-							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<LinkSharedLibrary>>() {}, "linkTask", linkTask);
+							((ExtensionAware) binary).getExtensions().add(LINK_SHARED_LIBRARY_TASK_PROVIDER_TYPE, "linkTask", linkTask);
 						} else if (binary instanceof ComponentWithStaticLibrary) {
 							final TaskProvider<CreateStaticLibrary> createTask = tasks.named(createTaskName(binary), CreateStaticLibrary.class);
-							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<CreateStaticLibrary>>() {}, "createTask", createTask);
+							((ExtensionAware) binary).getExtensions().add(CREATE_STATIC_LIBRARY_TASK_PROVIDER_TYPE, "createTask", createTask);
 						}
 
 						if (binary instanceof ComponentWithInstallation) {
 							final TaskProvider<InstallExecutable> installTask = tasks.named(installTaskName(binary), InstallExecutable.class);
-							((ExtensionAware) binary).getExtensions().add(new TypeOf<TaskProvider<InstallExecutable>>() {}, "installTask", installTask);
+							((ExtensionAware) binary).getExtensions().add(INSTALL_TASK_PROVIDER_TYPE, "installTask", installTask);
 						}
 					});
 				});
