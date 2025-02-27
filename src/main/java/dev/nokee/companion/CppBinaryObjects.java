@@ -54,6 +54,7 @@ public final class CppBinaryObjects {
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
+					final ShadowProperty<FileCollection> allObjects = objectsOf(binary);
 					final FileCollection objs = objects.fileCollection().from((Callable<?>) () -> {
 						final CompileTasks compileTasks = (CompileTasks) ((ExtensionAware) binary).getExtensions().findByName("compileTasks");
 						if (compileTasks != null) {
@@ -61,20 +62,20 @@ public final class CppBinaryObjects {
 						}
 						return tasks.named(compileTaskName(binary), CppCompile.class).map(ObjectFiles::of);
 					});
-					objectsOf(binary).set(objs);
+					allObjects.set(objs);
 
 					// Rewire the objects to account for the shadow property
 					if (binary instanceof ComponentWithExecutable) {
 						tasks.named(linkTaskName(binary), LinkExecutable.class, task -> {
-							task.getSource().setFrom(objs);
+							task.getSource().setFrom(allObjects);
 						});
 					} else if (binary instanceof ComponentWithSharedLibrary) {
 						tasks.named(linkTaskName(binary), LinkSharedLibrary.class, task -> {
-							task.getSource().setFrom(objs);
+							task.getSource().setFrom(allObjects);
 						});
 					} else if (binary instanceof ComponentWithStaticLibrary) {
 						tasks.named(createTaskName(binary), CreateStaticLibrary.class, task -> {
-							((ConfigurableFileCollection) task.getSource()).setFrom(objs);
+							((ConfigurableFileCollection) task.getSource()).setFrom(allObjects);
 						});
 					}
 				});
