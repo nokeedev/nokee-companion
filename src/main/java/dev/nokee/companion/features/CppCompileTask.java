@@ -406,10 +406,8 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		@Override
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
-				project.getComponents().withType(CppComponent.class, component -> {
-					component.getBinaries().whenElementKnown(CppBinary.class, binary -> {
-						project.getTasks().replace(compileTaskName(binary), CppCompileTask.class);
-					});
+				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
+					project.getTasks().replace(compileTaskName(binary), CppCompileTask.class);
 				});
 			});
 		}
