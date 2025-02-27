@@ -62,9 +62,13 @@ import java.util.concurrent.Callable;
 				FileCollection sourceFiles = (FileCollection) StateCollectingIncrementalCompiler_sourceFiles.get(incrementalCompiler);
 
 				// remove final on StateCollectingIncrementalCompiler#sourceFiles
-				Field StateCollectingIncrementalCompiler_sourceFiles_modifiers = Field.class.getDeclaredField("modifiers");
-				StateCollectingIncrementalCompiler_sourceFiles_modifiers.setAccessible(true);
-				StateCollectingIncrementalCompiler_sourceFiles.setInt(StateCollectingIncrementalCompiler_sourceFiles, StateCollectingIncrementalCompiler_sourceFiles.getModifiers() & ~Modifier.FINAL);
+				try {
+					Field StateCollectingIncrementalCompiler_sourceFiles_modifiers = Field.class.getDeclaredField("modifiers");
+					StateCollectingIncrementalCompiler_sourceFiles_modifiers.setAccessible(true);
+					StateCollectingIncrementalCompiler_sourceFiles.setInt(StateCollectingIncrementalCompiler_sourceFiles, StateCollectingIncrementalCompiler_sourceFiles.getModifiers() & ~Modifier.FINAL);
+				} catch (NoSuchFieldException e) {
+					// ignore, may be on JDK 12+
+				}
 
 				// override StateCollectingIncrementalCompiler#sourceFiles
 				StateCollectingIncrementalCompiler_sourceFiles.set(incrementalCompiler, objects.fileCollection().from((Callable<?>) () -> new TreeSet<>(sourceFiles.getFiles())).builtBy(sourceFiles));
