@@ -46,7 +46,7 @@ import java.util.concurrent.Callable;
 			try {
 				Field AbstractNativeCompileTask__incrementalCompiler = AbstractNativeCompileTask.class.getDeclaredField("incrementalCompiler");
 				AbstractNativeCompileTask__incrementalCompiler.setAccessible(true);
-				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__incrementalCompiler.get(this);
+				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__incrementalCompiler.get(self);
 			} catch (NoSuchFieldException | IllegalAccessException e) {
 				throw new RuntimeException(e);
 			}
