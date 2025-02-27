@@ -23,7 +23,7 @@ import javax.inject.Inject;
 	}
 
 	private void doApply(Settings settings) {
-		settings.getGradle().allprojects(project -> Plugins.forProject(project).apply("dev.nokee.native-companion"));
+		settings.getGradle().allprojects(project -> project.getPluginManager().apply("dev.nokee.native-companion"));
 	}
 
 	private void doApply(Project project) {
