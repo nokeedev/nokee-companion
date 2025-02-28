@@ -44,7 +44,6 @@ import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.gradle.TransformerUtils.filter;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
@@ -315,7 +314,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			});
 			return result;
 		}));
-		// MUST NOT finalizeValueOnRead() because the bundles may have
+		getBundles().finalizeValueOnRead();
 		getBundles().disallowChanges();
 
 		getOptions().compilerArgs = getCompilerArgs();
@@ -338,16 +337,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				return allOptions.forAllSources(getSource().getAsFileTree()).map(OptionsIter::unrolled);
 			}
 		};
-
-		// track build dependencies from source configuration
-		//   TODO: Should it only be unmatched source configurations? But some configuration may be overshadowed by other.
-		dependsOn((Callable<?>) () -> {
-			if (allOptions == null) {
-				return Collections.emptyList();
-			} else {
-				return allOptions.asProvider().get();
-			}
-		});
 	}
 
 	@Override
@@ -373,8 +362,24 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	}
 
 	//region Per-source Options
-	@Nested // track bundle scope
+	@Internal // track bundle scope
 	protected abstract ListProperty<Object> getBundles();
+
+	@Nested
+	protected Iterable<Object> getSourceOptionsSnapshotting() {
+		if (allOptions == null) {
+			return Collections.emptyList();
+		} else {
+			for (StackTraceElement stackTraceElement : Thread.currentThread().getStackTrace()) {
+				if (stackTraceElement.getClassName().endsWith(".DefaultTaskProperties") && stackTraceElement.getMethodName().equals("resolve")) {
+					return getBundles().get();
+				} else if (stackTraceElement.getClassName().endsWith(".DefaultTaskInputs") && stackTraceElement.getMethodName().equals("visitDependencies")) {
+					return allOptions.getDepEntries().get();
+				}
+			}
+			throw new UnsupportedOperationException();
+		}
+	}
 
 	private AllSourceOptionsEx2<NativeCompileOptions> allOptions;
 

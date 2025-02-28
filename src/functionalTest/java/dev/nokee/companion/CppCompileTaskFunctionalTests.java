@@ -217,16 +217,9 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 				outputFile = layout.buildDirectory.file('foo.cpp')
 			}
 
-			compileTask.source(generateTask, new Action() {
-			  // follows Buildable contract
-			  TaskDependency getBuildDependencies() {
-				return files(argTask.flatMap { it.args }).buildDependencies
-			  }
-
-			  void execute(def options) {
-				options.compilerArgs.addAll(argTask.flatMap { it.args })
-			  }
-			})
+			compileTask.source(generateTask) {
+				compilerArgs.addAll(argTask.flatMap { it.args })
+			}
 			""".stripIndent()));
 		return result;
 	}
