@@ -39,6 +39,7 @@ import javax.inject.Inject;
 		plugins.apply(CppUnitTestExtensions.Rule.class);
 		plugins.apply(CppBinaryTaskExtensions.Rule.class);
 		feature.apply("binary-task-extensions");
+		feature.apply("objects-lifecycle-tasks");
 
 		feature.apply("fix-for-gradle-29492");
 		feature.apply("fix-for-gradle-29744");

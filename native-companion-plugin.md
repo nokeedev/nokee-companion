@@ -66,6 +66,7 @@ Here's summary of all features available:
 - _(disabled)_ [**fix-headers-dependencies-for-case-insensitive**](#feature-fix-headers-dependencies-for-case-insensitive):
 - _(disabled)_ [**fix-for-version-catalog**](#feature-fix-for-version-catalog): Accepts version catalog dependencies in native dependency buckets.
 - _(disabled)_ [**incremental-compilation-after-failure**](#feature-incremental-compilation-after-failure): Conserves incremental compilation after compile task failure.
+- _(disabled)_ [**objects-lifecycle-tasks**](#feature-objects-lifecycle-tasks): Adds lifecycle task to assemble a component's objects.
 - _(disabled)_ [**multiplatform-publishing**](#feature-multiplatform-publishing): Replace core publishing with Nokee's multiplatform publishing.
 
 ### Feature: native-task-object-files-extension
@@ -122,6 +123,13 @@ A compilation failure often result in some changed outputs.
 As Gradle doesn't perform any output snapshotting when a task fails, it treats this particular _controlled failure_ as a non-incremental change to its properties.
 The following task execution will result in a full rebuild.
 The feature ensure a controlled failure is safely handled by Gradle to prevent breakage of the incremental compilation.
+
+### Feature: objects-lifecycle-tasks
+
+Adds `<variant>Objects` lifecycle tasks to all C++ binaries.
+It's the most efficient target to force the whole compilation phase of a project for faster developer feedback.
+It relies on `CppBinary#objects` (and its shadow alternative) to build the task graph.
+Any native compile tasks added to the `CppBinary#compileTasks` view will be automatically wired to the lifecycle target.
 
 ### Feature: multiplatform-publishing
 
