@@ -1,0 +1,9 @@
+plugins {
+	id 'cpp-library'
+	id 'dev.nokee.native-companion'
+	id 'nokee-samples.assembler-language'
+}
+
+library {
+	targetMachines = [machines.windows.x86, machines.linux.x86, machines.macOS.architecture('aarch64')]
+}

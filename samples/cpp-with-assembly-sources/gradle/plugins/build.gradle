@@ -1,0 +1,13 @@
+plugins {
+	id 'groovy-gradle-plugin'
+}
+
+repositories {
+	mavenCentral()
+	gradlePluginPortal()
+}
+
+dependencies {
+	implementation 'dev.nokee.commons:commons-names:latest.release'
+	implementation 'dev.nokee.native-companion:dev.nokee.native-companion.gradle.plugin:latest.release'
+}

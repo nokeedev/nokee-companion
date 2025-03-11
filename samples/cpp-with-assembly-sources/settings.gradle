@@ -1,0 +1,6 @@
+pluginManagement {
+	includeBuild 'gradle/plugins'
+}
+
+rootProject.name = 'mixed-languages'
+include 'app', 'lib'

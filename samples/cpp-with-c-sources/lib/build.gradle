@@ -1,0 +1,5 @@
+plugins {
+	id 'cpp-library'
+	id 'dev.nokee.native-companion'
+	id 'nokee-samples.c-language'
+}

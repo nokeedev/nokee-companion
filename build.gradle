@@ -257,4 +257,6 @@ samples {
 			app.writeToProject(location)
 		}
 	}
+	samples.register('cpp-with-c-sources')
+	samples.register('cpp-with-assembly-sources')
 }
