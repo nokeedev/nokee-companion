@@ -8,7 +8,7 @@ The Nokee Native Companion Plugin enhances and extends Gradle’s native build c
    Apply the plugin in your project’s `settings.gradle` or `build.gradle`:
    ```groovy
    plugins {
-       id 'com.example.native-companion' version '1.0.0'
+       id 'dev.nokee.native-companion' version '1.0.0'
    }
    ```
 
