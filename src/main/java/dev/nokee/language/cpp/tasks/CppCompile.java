@@ -162,15 +162,19 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 			public String remove(Object key) {
 				List<PreprocessorOptions.DefinedMacro> newValues = new ArrayList<>(delegate.get());
 
-				ListIterator<PreprocessorOptions.DefinedMacro> iter = newValues.listIterator();
-				while (iter.hasNext()) {
-					PreprocessorOptions.DefinedMacro macro = iter.next();
-					if (macro.getName().equals(key)) {
-						iter.remove();
-						return macro.getDefinition();
+				try {
+					ListIterator<PreprocessorOptions.DefinedMacro> iter = newValues.listIterator();
+					while (iter.hasNext()) {
+						PreprocessorOptions.DefinedMacro macro = iter.next();
+						if (macro.getName().equals(key)) {
+							iter.remove();
+							return macro.getDefinition();
+						}
 					}
+					return null;
+				} finally {
+					delegate.set(newValues);
 				}
-				return null;
 			}
 
 			public void clear() {

@@ -1,9 +1,9 @@
 package dev.nokee.companion.features;
 
+import dev.nokee.commons.fixtures.Subject;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Project;
 import org.gradle.api.internal.project.ProjectInternal;
-import org.gradle.api.model.ObjectFactory;
 import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform;
 import org.gradle.nativeplatform.plugins.NativeComponentPlugin;
 import org.gradle.nativeplatform.toolchain.NativeToolChainRegistry;
@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 
+import static dev.nokee.commons.hamcrest.gradle.NamedMatcher.named;
 import static dev.nokee.commons.hamcrest.gradle.provider.ProviderOfMatcher.providerOf;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -25,9 +26,6 @@ class CppCompileIntegrationTests {
 	Project project;
 	@TempDir Path testDirectory;
 	CppCompile compileTask;
-	ObjectFactory objectFactory() {
-		return project.getObjects();
-	}
 
 	@BeforeEach
 	void setup() {
@@ -122,26 +120,96 @@ class CppCompileIntegrationTests {
 
 	@Nested
 	class MacrosTests {
-		@Test
-		void canDefineMacroWithoutDefinition() {
-			compileTask.getOptions().getPreprocessorOptions().define("MACRO1");
-			compileTask.getOptions().getPreprocessorOptions().defines(Collections.singletonMap("MACRO2", null));
-			compileTask.getOptions().getPreprocessorOptions().defines(project.provider(() -> Collections.singletonMap("MACRO3", null)));
+		@Nested
+		class LegacyMacrosMapTests extends MacroTester {
+			@Subject Macros subject() {
+				return newMacros(compileTask);
+			}
 
-			assertThat(compileTask.getMacros().keySet(), contains("MACRO1", "MACRO2", "MACRO3"));
-			assertThat(compileTask.getMacros().values(), contains(null, null, null));
-			assertThat(compileTask.getMacros().get("MACRO2"), nullValue());
+			@Subject("with-macros") Macros subjectWithEntries() {
+				return newMacros(compileTask).define("MACRO1").define("MACRO2", "val2");
+			}
+
+			@Test
+			void reflectsNewEntriesInLegacyMacrosMapInPreprocessorOptionsDefines() {
+				compileTask.getMacros().put("MACRO1", null);
+				compileTask.getMacros().put("MACRO2", "val2");
+
+				// TODO: Assert definition
+				assertThat(compileTask.getOptions().getPreprocessorOptions().getDefinedMacros(), providerOf(contains(named("MACRO1"), named("MACRO2"))));
+			}
+
+			@Test
+			void reflectsClear() {
+				compileTask.getMacros().put("MACRO1", null);
+				compileTask.getMacros().put("MACRO2", "val2");
+				assertThat(compileTask.getOptions().getPreprocessorOptions().getDefinedMacros(), providerOf(contains(named("MACRO1"), named("MACRO2"))));
+
+				compileTask.getOptions().getPreprocessorOptions().getDefinedMacros().empty();
+				assertThat(compileTask.getMacros(), anEmptyMap());
+			}
 		}
 
-		@Test
-		void canDefineMacroWithDefinition() {
-			compileTask.getOptions().getPreprocessorOptions().define("MACRO1", "val1");
-			compileTask.getOptions().getPreprocessorOptions().defines(Collections.singletonMap("MACRO2", "val2"));
-			compileTask.getOptions().getPreprocessorOptions().defines(project.provider(() -> Collections.singletonMap("MACRO3", "val3")));
+		@Nested
+		class PreprocessorOptionsDefinedMacrosTests extends MacroTester {
+			@Subject Macros subject() {
+				return newMacros(compileTask.getOptions().getPreprocessorOptions());
+			}
 
-			assertThat(compileTask.getMacros().keySet(), contains("MACRO1", "MACRO2", "MACRO3"));
-			assertThat(compileTask.getMacros().values(), contains("val1", "val2", "val3"));
-			assertThat(compileTask.getMacros().get("MACRO2"), equalTo("val2"));
+			@Subject("with-macros") Macros subjectWithEntries() {
+				return newMacros(compileTask.getOptions().getPreprocessorOptions()).define("MACRO1").define("MACRO2", "val2");
+			}
+
+			@Test
+			void reflectsPreprocessorOptionsDefinesWithoutDefinitionInLegacyMacrosMap() {
+				compileTask.getOptions().getPreprocessorOptions().define("MACRO1");
+				compileTask.getOptions().getPreprocessorOptions().defines(Collections.singletonMap("MACRO2", null));
+				compileTask.getOptions().getPreprocessorOptions().defines(project.provider(() -> Collections.singletonMap("MACRO3", null)));
+
+				assertThat(compileTask.getMacros(), aMapWithSize(3));
+				assertThat(compileTask.getMacros().keySet(), contains("MACRO1", "MACRO2", "MACRO3"));
+				assertThat(compileTask.getMacros().values(), contains(null, null, null));
+				assertThat(compileTask.getMacros().get("MACRO2"), nullValue());
+				assertThat(compileTask.getMacros().getOrDefault("MACRO3", "<null>"), nullValue());
+				assertThat(compileTask.getMacros().getOrDefault("NON_EXISTENT_MACRO", "<null>"), equalTo("<null>"));
+			}
+
+			@Test
+			void reflectsPreprocessorOptionsDefinesInLegacyMacrosMap() {
+				compileTask.getOptions().getPreprocessorOptions().define("MACRO1", "val1");
+				compileTask.getOptions().getPreprocessorOptions().defines(Collections.singletonMap("MACRO2", "val2"));
+				compileTask.getOptions().getPreprocessorOptions().defines(project.provider(() -> Collections.singletonMap("MACRO3", "val3")));
+
+				assertThat(compileTask.getMacros(), aMapWithSize(3));
+				assertThat(compileTask.getMacros().keySet(), contains("MACRO1", "MACRO2", "MACRO3"));
+				assertThat(compileTask.getMacros().values(), contains("val1", "val2", "val3"));
+				assertThat(compileTask.getMacros().get("MACRO2"), equalTo("val2"));
+				assertThat(compileTask.getMacros().getOrDefault("MACRO3", "<null>"), equalTo("val3"));
+				assertThat(compileTask.getMacros().getOrDefault("NON_EXISTENT_MACRO", "<null>"), equalTo("<null>"));
+			}
+
+			@Test
+			void reflectsRemovedEntriesInLegacyMacrosMapInPreprocessorOptionsDefines() {
+				compileTask.getMacros().put("MACRO1", null);
+				compileTask.getMacros().put("MACRO2", "val2");
+				assertThat(compileTask.getOptions().getPreprocessorOptions().getDefinedMacros(), providerOf(contains(named("MACRO1"), named("MACRO2"))));
+
+				compileTask.getMacros().remove("MACRO1");
+				assertThat(compileTask.getOptions().getPreprocessorOptions().getDefinedMacros(), providerOf(contains(named("MACRO2"))));
+
+				compileTask.getMacros().remove("MACRO2");
+				assertThat(compileTask.getOptions().getPreprocessorOptions().getDefinedMacros(), providerOf(empty()));
+			}
+
+			@Test
+			void reflectsClear() {
+				compileTask.getMacros().put("MACRO1", null);
+				compileTask.getMacros().put("MACRO2", "val2");
+				assertThat(compileTask.getOptions().getPreprocessorOptions().getDefinedMacros(), providerOf(contains(named("MACRO1"), named("MACRO2"))));
+
+				compileTask.getMacros().clear();
+				assertThat(compileTask.getOptions().getPreprocessorOptions().getDefinedMacros(), providerOf(empty()));
+			}
 		}
 	}
 }
