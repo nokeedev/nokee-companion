@@ -19,6 +19,9 @@ import org.gradle.nativeplatform.tasks.CreateStaticLibrary;
 import org.gradle.nativeplatform.tasks.InstallExecutable;
 import org.gradle.nativeplatform.tasks.LinkExecutable;
 import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
+import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
+import org.gradle.nativeplatform.test.cpp.CppTestSuite;
+import org.gradle.nativeplatform.test.tasks.RunTestExecutable;
 
 import javax.inject.Inject;
 
@@ -73,12 +76,22 @@ public final class CppBinaryTaskExtensions {
 		return (TaskProvider<CreateStaticLibrary>) ((ExtensionAware) binary).getExtensions().getByName("createTask");
 	}
 
+	/**
+	 * {@return a configurable provider to the run task of the specified binary}
+	 * @param binary  the target binary
+	 */
+	@SuppressWarnings("unchecked")
+	public static TaskProvider<RunTestExecutable> runTask(CppTestExecutable binary) {
+		return (TaskProvider<RunTestExecutable>) ((ExtensionAware) binary).getExtensions().getByName("runTask");
+	}
+
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
 		private static final TypeOf<TaskProvider<CppCompile>> COMPILE_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<CppCompile>>() {};
 		private static final TypeOf<TaskProvider<LinkExecutable>> LINK_EXECUTABLE_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<LinkExecutable>>() {};
 		private static final TypeOf<TaskProvider<LinkSharedLibrary>> LINK_SHARED_LIBRARY_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<LinkSharedLibrary>>() {};
 		private static final TypeOf<TaskProvider<CreateStaticLibrary>> CREATE_STATIC_LIBRARY_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<CreateStaticLibrary>>() {};
 		private static final TypeOf<TaskProvider<InstallExecutable>> INSTALL_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<InstallExecutable>>() {};
+		private static final TypeOf<TaskProvider<RunTestExecutable>> RUN_TASK_PROVIDER_TYPE = new TypeOf<TaskProvider<RunTestExecutable>>() {};
 		private final TaskContainer tasks;
 
 		@Inject
@@ -110,6 +123,15 @@ public final class CppBinaryTaskExtensions {
 							final TaskProvider<InstallExecutable> installTask = tasks.named(installTaskName(binary), InstallExecutable.class);
 							((ExtensionAware) binary).getExtensions().add(INSTALL_TASK_PROVIDER_TYPE, "installTask", installTask);
 						}
+					});
+				});
+			});
+
+			Plugins.forProject(project).whenPluginApplied("cpp-unit-test", () -> {
+				project.getComponents().withType(CppTestSuite.class).configureEach(component -> {
+					component.getBinaries().whenElementKnown(CppTestExecutable.class, binary -> {
+						final TaskProvider<RunTestExecutable> runTask = tasks.named(runTaskName((CppTestExecutable) binary), RunTestExecutable.class);
+						((ExtensionAware) binary).getExtensions().add(RUN_TASK_PROVIDER_TYPE, "runTask", runTask);
 					});
 				});
 			});

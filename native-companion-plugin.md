@@ -139,3 +139,12 @@ The multiplatform publishing plugin allow attributes mutation of the platform's 
 ## Extensions
 
 The plugin provide a Project extension named `nativeCompanion` of type [`NativeCompanionExtension`](https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/NativeCompanionExtension.java).
+
+Each `CppBinary` has their respective `TaskProvider` as extensions to avoid realizing the tasks in order to configure them:
+
+- `CppBinary`: extension named `compileTask` of type `TaskProvider<CppCompile>`
+- `ComponentWithExecutable`: extension named `linkTask` of type `TaskProvider<LinkExecutable>`
+- `ComponentWithSharedLibrary`: extension named `linkTask` of type `TaskProvider<LinkSharedLibrary>`
+- `ComponentWithStaticLibrary`: extension named `createTask` of type `TaskProvider<CreateStaticLibrary>`
+- `ComponentWithInstallation`: extension named `installTask` of type `TaskProvider<InstallExecutable>`
+- `CppTestExecutable`: extension named `runTask` of type `TaskProvider<RunTestExecutable>`

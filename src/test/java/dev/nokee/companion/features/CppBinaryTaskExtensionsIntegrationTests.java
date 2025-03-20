@@ -12,6 +12,9 @@ import org.gradle.nativeplatform.tasks.CreateStaticLibrary;
 import org.gradle.nativeplatform.tasks.InstallExecutable;
 import org.gradle.nativeplatform.tasks.LinkExecutable;
 import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
+import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
+import org.gradle.nativeplatform.test.cpp.CppTestSuite;
+import org.gradle.nativeplatform.test.tasks.RunTestExecutable;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -72,6 +75,11 @@ class CppBinaryTaskExtensionsIntegrationTests {
 		void noCreateTask() {
 			assertThat(binaries, everyItem(with(not(extension(named("createTask"))))));
 		}
+
+		@Test
+		void noRunTask() {
+			assertThat(binaries, everyItem(with(not(extension(named("runTask"))))));
+		}
 	}
 
 	@Nested
@@ -115,6 +123,11 @@ class CppBinaryTaskExtensionsIntegrationTests {
 			void noInstallTask() {
 				assertThat(binaries, everyItem(with(not(extension(named("installTask"))))));
 			}
+
+			@Test
+			void noRunTask() {
+				assertThat(binaries, everyItem(with(not(extension(named("runTask"))))));
+			}
 		}
 
 		@Nested
@@ -150,6 +163,53 @@ class CppBinaryTaskExtensionsIntegrationTests {
 			void noInstallTask() {
 				assertThat(binaries, everyItem(with(not(extension(named("installTask"))))));
 			}
+
+			@Test
+			void noRunTask() {
+				assertThat(binaries, everyItem(with(not(extension(named("runTask"))))));
+			}
+		}
+	}
+
+	@Nested
+	class WhenCppUnitTestPluginApplied {
+		List<CppTestExecutable> binaries;
+
+		@BeforeEach
+		void setup() {
+			project.getPlugins().apply("cpp-unit-test");
+			((ProjectInternal) project).evaluate();
+			binaries = project.getExtensions().getByType(CppTestSuite.class).getBinaries().get().stream().map(CppTestExecutable.class::cast).toList();
+			assertThat(binaries, hasSize(1));
+		}
+
+		@Test
+		void canAccessCompileTask() {
+			assertThat(binaries, everyItem(with(extension(named("compileTask"), publicType(new TypeOf<TaskProvider<CppCompile>>() {})))));
+			assertThat(binaries.stream().map(CppBinaryTaskExtensions::compileTask).toList(), contains(named("compileTestCpp")));
+		}
+
+		@Test
+		void canAccessLinkTask() {
+			assertThat(binaries, everyItem(with(extension(named("linkTask"), publicType(new TypeOf<TaskProvider<LinkExecutable>>() {})))));
+			assertThat(binaries.stream().map(CppBinaryTaskExtensions::linkTask).toList(), contains(named("linkTest")));
+		}
+
+		@Test
+		void canAccessInstallTask() {
+			assertThat(binaries, everyItem(with(extension(named("installTask"), publicType(new TypeOf<TaskProvider<InstallExecutable>>() {})))));
+			assertThat(binaries.stream().map(CppBinaryTaskExtensions::installTask).toList(), contains(named("installTest")));
+		}
+
+		@Test
+		void noCreateTask() {
+			assertThat(binaries, everyItem(with(not(extension(named("createTask"))))));
+		}
+
+		@Test
+		void canAccessRunTask() {
+			assertThat(binaries, everyItem(with(extension(named("runTask"), publicType(new TypeOf<TaskProvider<RunTestExecutable>>() {})))));
+			assertThat(binaries.stream().map(CppBinaryTaskExtensions::runTask).toList(), contains(named("runTest")));
 		}
 	}
 }
