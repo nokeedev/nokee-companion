@@ -8,7 +8,6 @@ import org.gradle.api.file.Directory;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.plugins.ExtensionAware;
-import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.language.assembler.tasks.Assemble;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;

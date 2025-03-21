@@ -73,19 +73,20 @@ class ObjectFilesIntegrationTests {
 
 		project.getExtensions().getByType(NativeCompanionExtension.class).enableFeaturePreview("native-task-object-files-extension");
 		List<String> val3 = new ArrayList<>();
-		project.files(ObjectFiles.of(compileTask)).getAsFileTree().visit(new SourceFileVisitor(it -> val2.add(it.getPath())));
+		project.files(ObjectFiles.of(compileTask)).getAsFileTree().visit(new SourceFileVisitor(it -> val3.add(it.getPath())));
 		assertThat(val3, containsInAnyOrder("60yemoco4lam131yntpgpbh2r/size.o", "5v08dtn7cszvzrlgdayn1y9u6/main.o", "f0c36b8y9kkzr0hshipmuavim/message.o", "d7rpxlv4rhfra2lzuvpri9lyj/get.o", "c2kofpfbdvl0ox5prbhyuwx8n/join.o", "7l1rrxf4ugu1brfnb9msa2y3i/remove.o", "8dasnq975rzjosysh2j5fktog/split.o", "9ryzqhmpa69of9utjiizgddi3/copy_ctor_assign.o", "57uiwkglely1v0krq64yn8ivd/add.o", "3gfmv4hei6kdj2kxpjtavx6sh/destructor.o"));
 	}
 
 	@Test
 	void assembly() throws IOException {
+		System.out.println("Test directory: " + project.getProjectDir());
 		GradleBuildElement build = GradleBuildElement.inDirectory(Files.createTempDirectory("gradle"));
 		build.getBuildFile().plugins(it -> it.id("cpp-application"));
-		build.getBuildFile().append(groovyDsl("tasks.withType(CppCompile).configureEach { source(fileTree('src/main/cpp')) }"));
+		build.getBuildFile().append(groovyDsl("tasks.withType(CppCompile).configureEach { source(fileTree('src/main/asm')) }"));
 		new CppApp().writeToDirectory(build.getLocation());
 		Files.list(build.getLocation().resolve("src/main/cpp")).forEach(it -> {
 			try {
-				Files.move(it, it.getParent().resolve(it.getFileName().toString().replace(".cpp", ".s")));
+				Files.move(it, Files.createDirectories(new File(it.getParent().toString().replace("/src/main/cpp", "/src/main/asm")).toPath()).resolve(it.getFileName().toString().replace(".cpp", ".s")));
 			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
@@ -94,12 +95,10 @@ class ObjectFilesIntegrationTests {
 
 		FileUtils.copyDirectory(build.dir("build/obj/main/release").toFile(), project.getLayout().getBuildDirectory().dir("obj").get().getAsFile());
 
-		project.getExtensions().getByType(NativeCompanionExtension.class).enableFeaturePreview("native-task-object-files-extension");
-
 		new CppApp().writeToDirectory(project.getProjectDir().toPath());
 		Files.list(project.getProjectDir().toPath().resolve("src/main/cpp")).forEach(it -> {
 			try {
-				Files.move(it, Files.createDirectories(new File(it.getParent().toString().replace("/src/main/cpp/", "/src/main/asm/")).toPath()).resolve(it.getFileName().toString().replace(".cpp", ".s")));
+				Files.move(it, Files.createDirectories(new File(it.getParent().toString().replace("/src/main/cpp", "/src/main/asm")).toPath()).resolve(it.getFileName().toString().replace(".cpp", ".s")));
 			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
@@ -114,8 +113,7 @@ class ObjectFilesIntegrationTests {
 		List<String> val = new ArrayList<>();
 		project.files(ObjectFiles.of(compileTask)).getAsFileTree().visit(new SourceFileVisitor(it -> val.add(it.getPath())));
 
-		System.out.println(val);
-		assertThat(val, containsInAnyOrder("dtubmbufzoqugb7g2nr2ajmku/destructor.o", "bla582uw7ghia6h1j5306pigm/split.o", "5kossxetgzj7fykg9wq5u6rim/remove.o", "4xpvjqqo73v04ubildcqrv82l/copy_ctor_assign.o", "82e27d079y943zrk1pys1e2cn/size.o", "2f8iuoasryejxzyrn8m7wmkdv/join.o", "ev2fdlw45ba56yzx20i3maz1/message.o", "a3xkqa2f1a1r968dt6b5mdfl5/get.o", "br7dkxjkf1l14vq1mnlgpdc4x/add.o", "46eqkew3nhumtt4r2bpvdn0va/main.o"));
+		assertThat(val, containsInAnyOrder("8wvym8e5j1aof35p5oepwi693/destructor.o", "5l7pivo7ae4yeh77kxo5h8e9c/split.o", "4u144ap9bqsoi5402yqiv0iww/remove.o", "6hvbcgbbb9cve2pvrw5gxqvb6/copy_ctor_assign.o", "d7uhq74mjmq4g00izk6nzdc9p/size.o", "3v2toruijtk75zj2gzow5b8qs/join.o", "7fwgkvuk3y0uxxwxv1xl2xb2e/message.o", "btaz7612dg8cg50cgcapecnnd/get.o", "37sxm9n411xbe76mb3c2ph9le/add.o", "b672h9phuoy3y80lzl59zlxqi/main.o"));
 
 		Files.createFile(project.getProjectDir().toPath().resolve("build/obj/unrelated.o"));
 		List<String> val2 = new ArrayList<>();
@@ -124,7 +122,7 @@ class ObjectFilesIntegrationTests {
 
 		project.getExtensions().getByType(NativeCompanionExtension.class).enableFeaturePreview("native-task-object-files-extension");
 		List<String> val3 = new ArrayList<>();
-		project.files(ObjectFiles.of(compileTask)).getAsFileTree().visit(new SourceFileVisitor(it -> val2.add(it.getPath())));
-		assertThat(val3, containsInAnyOrder("dtubmbufzoqugb7g2nr2ajmku/destructor.o", "bla582uw7ghia6h1j5306pigm/split.o", "5kossxetgzj7fykg9wq5u6rim/remove.o", "4xpvjqqo73v04ubildcqrv82l/copy_ctor_assign.o", "82e27d079y943zrk1pys1e2cn/size.o", "2f8iuoasryejxzyrn8m7wmkdv/join.o", "ev2fdlw45ba56yzx20i3maz1/message.o", "a3xkqa2f1a1r968dt6b5mdfl5/get.o", "br7dkxjkf1l14vq1mnlgpdc4x/add.o", "46eqkew3nhumtt4r2bpvdn0va/main.o"));
+		project.files(ObjectFiles.of(compileTask)).getAsFileTree().visit(new SourceFileVisitor(it -> val3.add(it.getPath())));
+		assertThat(val3, containsInAnyOrder("8wvym8e5j1aof35p5oepwi693/destructor.o", "5l7pivo7ae4yeh77kxo5h8e9c/split.o", "4u144ap9bqsoi5402yqiv0iww/remove.o", "6hvbcgbbb9cve2pvrw5gxqvb6/copy_ctor_assign.o", "d7uhq74mjmq4g00izk6nzdc9p/size.o", "3v2toruijtk75zj2gzow5b8qs/join.o", "7fwgkvuk3y0uxxwxv1xl2xb2e/message.o", "btaz7612dg8cg50cgcapecnnd/get.o", "37sxm9n411xbe76mb3c2ph9le/add.o", "b672h9phuoy3y80lzl59zlxqi/main.o"));
 	}
 }
