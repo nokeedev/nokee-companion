@@ -13,6 +13,7 @@ import org.gradle.api.artifacts.FileCollectionDependency;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.ExtensionAware;
+import org.gradle.api.plugins.ExtraPropertiesExtension;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.TaskContainer;
@@ -66,6 +67,10 @@ public final class CppUnitTestExtensions {
 
 	@SuppressWarnings("UnstableApiUsage")
 	static abstract /*final*/ class Rule implements Plugin<Project> {
+		private static final String TESTABLE_OBJECTS_PROPERTY_NAME = "testableObjects";
+		private static final String TESTED_BINARY_EXTENSION_NAME = "testedBinary";
+		private static final String TESTED_COMPONENT_EXTENSION_NAME = "testedComponent";
+
 		private final ObjectFactory objects;
 		private final ProviderFactory providers;
 		private final ZipProvider.Factory zipProviders;
@@ -97,7 +102,7 @@ public final class CppUnitTestExtensions {
 							return null;
 						}
 					}));
-					((ExtensionAware) testSuite).getExtensions().add("testedComponent", testedComponent);
+					((ExtensionAware) testSuite).getExtensions().add(TESTED_COMPONENT_EXTENSION_NAME, testedComponent);
 
 					testSuite.getBinaries().whenElementKnown(CppTestExecutable.class, testExecutable -> {
 						final Property<CppBinary> testedBinary = objects.property(CppBinary.class);
@@ -110,7 +115,7 @@ public final class CppUnitTestExtensions {
 									&& hasDevelopmentBinaryLinkage(mainComponent, testedBinary);
 							}
 						}));
-						((ExtensionAware) testExecutable).getExtensions().add("testedBinary", testedBinary);
+						((ExtensionAware) testExecutable).getExtensions().add(TESTED_BINARY_EXTENSION_NAME, testedBinary);
 
 						// In cases where the task `relocateMainFor*` doesn't exist (for some reason),
 						//   we can configure the task only when it appears (by name).
@@ -128,6 +133,18 @@ public final class CppUnitTestExtensions {
 								return (Object) objectsOf(mainBinary);
 							}
 						}).orElse(Collections.emptyList()));
+						// To allow reassignment, we must use extra properties
+						((ExtensionAware) testExecutable).getExtensions().getExtraProperties().set(TESTABLE_OBJECTS_PROPERTY_NAME, testableObjects);
+
+						// As we cannot use addAllLater because we are using `.all` hook to remove the "core testable objects",
+						//   we use an FileCollection indirection that will either return the testableObjects or an empty list.
+						final ConfigurableFileCollection actualTestableObjects = objects.fileCollection().from((Callable<?>) () -> {
+							final ExtraPropertiesExtension testExecutableExts = ((ExtensionAware) testExecutable).getExtensions().getExtraProperties();
+							if (testExecutableExts.has(TESTABLE_OBJECTS_PROPERTY_NAME)) {
+								return testExecutableExts.get(TESTABLE_OBJECTS_PROPERTY_NAME);
+							}
+							return Collections.emptyList();
+						});
 
 						// Assuming a single FileCollectionDependency which should be the Gradle core object files.
 						//   In cases where this code executes **before** normal Gradle code (for some reason),
@@ -138,12 +155,16 @@ public final class CppUnitTestExtensions {
 						final Configuration nativeLink = configurations.getByName(nativeLinkConfigurationName(testExecutable));
 						nativeLink.getDependencies().all(dependencyCandidate -> {
 							if (dependencyCandidate instanceof FileCollectionDependency) {
-								if (!((FileCollectionDependency) dependencyCandidate).getFiles().equals(testableObjects)) {
+								if (!((FileCollectionDependency) dependencyCandidate).getFiles().equals(actualTestableObjects)) {
 									nativeLink.getDependencies().remove(dependencyCandidate);
 								}
 							}
 						});
-						nativeLink.getDependencies().add(dependencyFactory.create(testableObjects));
+
+						// TODO: We should be using a declarable dependency bucket instead, instead of relying on linkOnly, use a custom declarable bucket
+
+						// There may-or-may-not have "testable objects" for this test suite
+						nativeLink.getDependencies().add(dependencyFactory.create(actualTestableObjects));
 					});
 				});
 			});
