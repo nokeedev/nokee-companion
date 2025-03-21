@@ -91,9 +91,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 			def file3 = 'src/main/cpp/split.cpp'
 			def file4 = 'src/main/cpp/add.cpp'
 			def missingSourceBucket = { it.compilerArgs.add('-DOTHER_MACRO') } as Action
-			def moreSourceOptions = {
-				println 'in more source options'
-				it.compilerArgs.add('-DMORE_MACROS') } as Action
+			def moreSourceOptions = { it.compilerArgs.add('-DMORE_MACROS') } as Action
 
 			compileTask.source(file1) { compilerArgs.add('-DMY_MACRO') }
 		""".stripIndent()));

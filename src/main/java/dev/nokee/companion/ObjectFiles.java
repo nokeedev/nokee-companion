@@ -143,7 +143,6 @@ public final class ObjectFiles {
 
 					// Map all source files to object files
 					for (File sourceFile : sourceOf(task)) {
-						System.out.println("- " + outputFileNamingScheme.map(sourceFile));
 						it.include(objectFileDir.toPath().relativize(outputFileNamingScheme.map(sourceFile).toPath()).toString());
 					}
 				}).getAsFileTree(); // Use FileTree to remove missing object files
