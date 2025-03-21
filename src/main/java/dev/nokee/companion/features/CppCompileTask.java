@@ -291,7 +291,10 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				return Collections.emptyList(); // bailout quickly
 			}
 			List<Object> result = new ArrayList<>();
-			Map<ISourceKey, Collection<String>> map = new LinkedHashMap<>();
+			Map<ISourceKey, Collection<String>> map = new TreeMap<>(); // important to sort the keys...
+			//  ...remember properties are flat hence it doesn't matter if a nested holder is a set, list or map.
+			//  Everything will flatten into a non-hierarchical names, losing any concept of "unorderedness".
+			//  Set vs List only take into effect for value snapshotting
 			source.getAsFileTree().visit(new SourceFileVisitor(sourceFile -> {
 				ISourceKey key = allOptions.keyOf(sourceFile.getFile()).get();
 				if (key != ISourceKey.DEFAULT_KEY) { // must avoid capturing the default bucket
