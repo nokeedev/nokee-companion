@@ -14,7 +14,7 @@ components.withType(CppComponent).configureEach { component ->
 			toolChain = compileTask.flatMap { it.toolChain }
 			objectFileDir = layout.buildDirectory.dir(names.append('c').toString(NamingScheme.dirNames()))
 			includes(component.privateHeaderDirs)
-			source(fileTree('src/main/c'))
+			source(fileTree("src/${component.name}/c"))
 		}
 		compileTask(binary).configure {
 			objectFileDir = layout.buildDirectory.dir(names.append('cpp').toString(NamingScheme.dirNames()))
