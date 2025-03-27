@@ -31,12 +31,15 @@ import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
 import org.gradle.process.CommandLineArgumentProvider;
+import org.gradle.util.GradleVersion;
 import org.gradle.work.InputChanges;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -254,19 +257,30 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		if (getOptions().getIncrementalAfterFailure().getOrElse(false)) {
 			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler));
 		}
-		Compiler<T> incrementalCompiler = incrementalCompiler(this).createCompiler(transactionalCompiler);
+		Compiler<T> incrementalCompiler = incrementalCompilerOf(this).createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
 		return loggingCompiler.execute(spec);
 	}
 
 	// We have to reach to AbstractNativeSourceCompileTask#incrementalCompiler
-	private static IncrementalCompilerBuilder.IncrementalCompiler incrementalCompiler(AbstractNativeCompileTask self) {
-		try {
-			Field AbstractNativeCompileTask__incrementalCompiler = AbstractNativeCompileTask.class.getDeclaredField("incrementalCompiler");
-			AbstractNativeCompileTask__incrementalCompiler.setAccessible(true);
-			return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__incrementalCompiler.get(self);
-		} catch (NoSuchFieldException | IllegalAccessException e) {
-			throw new RuntimeException(e);
+	private static IncrementalCompilerBuilder.IncrementalCompiler incrementalCompilerOf(AbstractNativeCompileTask self) {
+		// On Gradle 8.11+, the `incrementalCompiler` field is transient and computed as needed via `getIncrementalCompiler()`
+		if (GradleVersion.current().compareTo(GradleVersion.version("8.11")) >= 0) {
+			try {
+				Method AbstractNativeCompileTask__getIncrementalCompiler = AbstractNativeCompileTask.class.getDeclaredMethod("getIncrementalCompiler");
+				AbstractNativeCompileTask__getIncrementalCompiler.setAccessible(true);
+				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__getIncrementalCompiler.invoke(self);
+			} catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+				throw new RuntimeException(e);
+			}
+		} else { // On Gradle <8.11, we use `incrementalCompiler` field
+			try {
+				Field AbstractNativeCompileTask__incrementalCompiler = AbstractNativeCompileTask.class.getDeclaredField("incrementalCompiler");
+				AbstractNativeCompileTask__incrementalCompiler.setAccessible(true);
+				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__incrementalCompiler.get(self);
+			} catch (NoSuchFieldException | IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
 		}
 	}
 
