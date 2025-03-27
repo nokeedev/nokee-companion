@@ -130,7 +130,7 @@ public final class CppBinaryTaskExtensions {
 			Plugins.forProject(project).whenPluginApplied("cpp-unit-test", () -> {
 				project.getComponents().withType(CppTestSuite.class).configureEach(component -> {
 					component.getBinaries().whenElementKnown(CppTestExecutable.class, binary -> {
-						final TaskProvider<RunTestExecutable> runTask = tasks.named(runTaskName((CppTestExecutable) binary), RunTestExecutable.class);
+						final TaskProvider<RunTestExecutable> runTask = tasks.named(runTaskName(binary), RunTestExecutable.class);
 						((ExtensionAware) binary).getExtensions().add(RUN_TASK_PROVIDER_TYPE, "runTask", runTask);
 					});
 				});

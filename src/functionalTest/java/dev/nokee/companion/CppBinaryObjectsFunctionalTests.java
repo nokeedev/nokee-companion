@@ -42,7 +42,6 @@ class CppBinaryObjectsFunctionalTests {
 		build.getBuildFile().append(groovyDsl("""
 			def objectsTask = tasks.register('objects')
 			components.withType(CppBinary) { binary ->
-			println binary
 				objectsTask.configure {
 					dependsOn(objectsOf(binary))
 				}
