@@ -44,7 +44,6 @@ import javax.inject.Inject;
 		feature.apply("fix-for-gradle-29492");
 		feature.apply("fix-for-gradle-29744");
 		feature.apply("fix-for-public-headers");
-		feature.apply("fix-headers-dependencies-for-case-insensitive");
 		feature.apply("fix-for-version-catalog");
 		feature.apply("incremental-compilation-after-failure");
 

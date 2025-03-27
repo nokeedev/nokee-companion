@@ -63,7 +63,6 @@ Here's summary of all features available:
 - _(disabled)_ [**fix-for-gradle-29492**](#feature-fix-for-gradle-29492): Fixes [gradle/gradle#29492](https://github.com/gradle/gradle/issues/29492) regarding inability to track relative path of native compilation units.
 - _(disabled)_ [**fix-for-gradle-29744**](#feature-fix-for-gradle-29744): Fixes [gradle/gradle#29744](https://github.com/gradle/gradle/issues/29744) regarding header dependencies sensitivity to source ordering.
 - _(disabled)_ [**fix-for-public-headers**](#feature-fix-for-public-headers): Propagates generated headers' task dependencies and allows multiple public headers.
-- _(disabled)_ [**fix-headers-dependencies-for-case-insensitive**](#feature-fix-headers-dependencies-for-case-insensitive):
 - _(disabled)_ [**fix-for-version-catalog**](#feature-fix-for-version-catalog): Accepts version catalog dependencies in native dependency buckets.
 - _(disabled)_ [**incremental-compilation-after-failure**](#feature-incremental-compilation-after-failure): Conserves incremental compilation after compile task failure.
 - _(disabled)_ [**objects-lifecycle-tasks**](#feature-objects-lifecycle-tasks): Adds lifecycle task to assemble a component's objects.
@@ -106,10 +105,6 @@ Also, allows multiple public headers directories on `CppLibrary#publicHeaders`.
 The plugin configures Gradle to pass along single public header directory.
 For multiple public header directories, the plugin sync them into a single directory and pass along that directory.
 The sync task in question is an implementation detail and users should not depend on it.
-
-### Feature: fix-headers-dependencies-for-case-insensitive
-
-Under evaluation, [contact us](mailto:support@nokee.dev) for more information.
 
 ### Feature: fix-for-version-catalog
 

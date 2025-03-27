@@ -199,17 +199,6 @@ samples {
 			}
 		}
 	}
-	// TODO: Rename this sample
-	samples.register('cpp-header-dependencies-normalization') {
-//		copySource {
-//			project(".").buildRoot()
-//			appProject("app").fromTemplate("cpp-app")
-//			appProject("app").fromTemplate(cppMessageLib)
-//			appProject("app").fromTemplate("cpp-message-static")
-//			libProject("lib").fromTemplate(cppUtilsLib)
-//			libProject("lib").fromTemplate(cppListLib)
-//		}
-	}
 	samples.register('cpp-multiple-compile-tasks') {
 
 	}

@@ -11,7 +11,6 @@ import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
-import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Provider;
@@ -32,7 +31,6 @@ import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
 import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
 import org.gradle.process.CommandLineArgumentProvider;
-import org.gradle.work.Incremental;
 import org.gradle.work.InputChanges;
 
 import javax.annotation.Nullable;
@@ -275,16 +273,12 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	// For gradle/gradle#29492
 	ConfigurableFileCollection source;
 
-	// For header normalization on Windows
-	FileCollection headerDependencies;
-
 	private final ObjectFactory objects;
 
 	@Inject
 	public CppCompileTask(ObjectFactory objects, ProviderFactory providers) {
 		this.objects = objects;
 		this.source = super.getSource();
-		this.headerDependencies = super.getHeaderDependencies();
 
 		getBundles().set(providers.provider(() -> {
 			if (this.allOptions == null) {
@@ -354,14 +348,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	@Override
 	public void source(Object sourceFiles) {
 		source.from(sourceFiles);
-	}
-
-	@Override
-	@InputFiles
-	@Incremental
-	@PathSensitive(PathSensitivity.NAME_ONLY)
-	protected FileCollection getHeaderDependencies() {
-		return headerDependencies;
 	}
 
 	//region Per-source Options
