@@ -127,34 +127,35 @@ public final class CppUnitTestExtensions {
 						}));
 						((ExtensionAware) testExecutable).getExtensions().add(TESTED_BINARY_EXTENSION_NAME, testedBinary);
 
-						// In cases where the task `relocateMainFor*` doesn't exist (for some reason),
-						//   we can configure the task only when it appears (by name).
-						tasks.withType(UnexportMainSymbol.class).configureEach(named(relocateMainForBinaryTaskName(testExecutable)::equals).using(Task::getName).whenSatisfied(task -> {
-							task.getObjects().setFrom((Callable<?>) () -> objectsOf(testedBinaryOf(testExecutable).get()));
-						}));
+						// To allow reassignment, we must use extra properties
+						((ExtensionAware) testExecutable).getExtensions().getExtraProperties().set(TESTABLE_OBJECTS_PROPERTY_NAME, objects.fileCollection().from((Callable<?>) () -> objectsOf(testedBinaryOf(testExecutable).get())));
 
 						// Recreate testable objects
 						final ConfigurableFileCollection testableObjects = objects.fileCollection();
-						testableObjects.from(zipProviders.zip(testedComponentOf(testSuite), testedBinaryOf(testExecutable), (mainComponent, mainBinary) -> {
-							if (mainComponent instanceof CppApplication) {
-								return (Callable<?>) () -> tasks.named(relocateMainForBinaryTaskName(testExecutable), UnexportMainSymbol.class)
-									.map(UnexportMainSymbol::getRelocatedObjects);
-							} else {
-								return (Object) objectsOf(mainBinary);
-							}
-						}).orElse(Collections.emptyList()));
-						// To allow reassignment, we must use extra properties
-						((ExtensionAware) testExecutable).getExtensions().getExtraProperties().set(TESTABLE_OBJECTS_PROPERTY_NAME, testableObjects);
-
-						// As we cannot use addAllLater because we are using `.all` hook to remove the "core testable objects",
-						//   we use an FileCollection indirection that will either return the testableObjects or an empty list.
-						final ConfigurableFileCollection actualTestableObjects = objects.fileCollection().from((Callable<?>) () -> {
+						testableObjects.from((Callable<?>) () -> {
 							final ExtraPropertiesExtension testExecutableExts = ((ExtensionAware) testExecutable).getExtensions().getExtraProperties();
 							if (testExecutableExts.has(TESTABLE_OBJECTS_PROPERTY_NAME)) {
 								return testExecutableExts.get(TESTABLE_OBJECTS_PROPERTY_NAME);
 							}
 							return Collections.emptyList();
 						});
+
+						// In cases where the task `relocateMainFor*` doesn't exist (for some reason),
+						//   we can configure the task only when it appears (by name).
+						tasks.withType(UnexportMainSymbol.class).configureEach(named(relocateMainForBinaryTaskName(testExecutable)::equals).using(Task::getName).whenSatisfied(task -> {
+							task.getObjects().setFrom(testableObjects);
+						}));
+
+						// As we cannot use addAllLater because we are using `.all` hook to remove the "core testable objects",
+						//   we use an FileCollection indirection that will either return the testableObjects or an empty list.
+						final ConfigurableFileCollection actualTestableObjects = objects.fileCollection().from(testedComponentOf(testSuite).map(mainComponent -> {
+							if (mainComponent instanceof CppApplication) {
+								return tasks.named(relocateMainForBinaryTaskName(testExecutable), UnexportMainSymbol.class)
+									.map(UnexportMainSymbol::getRelocatedObjects);
+							} else {
+								return testableObjects;
+							}
+						}).orElse(Collections.emptyList()));
 
 						// Assuming a single FileCollectionDependency which should be the Gradle core object files.
 						//   In cases where this code executes **before** normal Gradle code (for some reason),
