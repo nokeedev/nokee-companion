@@ -46,4 +46,12 @@ class CppUnitTestForApplicationFunctionalTests {
 		BuildResult result = runner.withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
 	}
+
+	@Test
+	void baseConfigurationCacheTest() {
+		BuildResult result = runner.withGradleVersion("8.13").withTasks("runTest").withArgument("--configuration-cache").build();
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
+		result = runner.withGradleVersion("8.13").withTasks("runTest").withArgument("--configuration-cache").build();
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
+	}
 }
