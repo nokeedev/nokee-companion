@@ -88,11 +88,21 @@ public final class CppUnitTestExtensions {
 			this.dependencyFactory = objects.newInstance(DependencyFactory.class);
 		}
 
+		//region For displayName on Provider instance
+		/*private*/ interface TestedComponentPropertyProvider {
+			Property<ProductionCppComponent> getTestedComponent();
+		}
+
+		/*private*/ interface TestedBinaryPropertyProvider {
+			Property<CppBinary> getTestedBinary();
+		}
+		//endregion
+
 		@Override
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied("cpp-unit-test", () -> {
 				project.getComponents().withType(CppTestSuite.class).configureEach(testSuite -> {
-					final Property<ProductionCppComponent> testedComponent = objects.property(ProductionCppComponent.class);
+					final Property<ProductionCppComponent> testedComponent = objects.newInstance(TestedComponentPropertyProvider.class).getTestedComponent();
 					testedComponent.set(providers.provider(() -> {
 						if (project.getPlugins().hasPlugin("cpp-application")) {
 							return project.getExtensions().getByType(CppApplication.class);
@@ -105,7 +115,7 @@ public final class CppUnitTestExtensions {
 					((ExtensionAware) testSuite).getExtensions().add(TESTED_COMPONENT_EXTENSION_NAME, testedComponent);
 
 					testSuite.getBinaries().whenElementKnown(CppTestExecutable.class, testExecutable -> {
-						final Property<CppBinary> testedBinary = objects.property(CppBinary.class);
+						final Property<CppBinary> testedBinary = objects.newInstance(TestedBinaryPropertyProvider.class).getTestedBinary();
 						testedBinary.set(testedComponent.map(new TestedBinaryMapper(testExecutable) {
 							@Override
 							protected boolean isTestedBinary(CppTestExecutable testExecutable, ProductionCppComponent mainComponent, CppBinary testedBinary) {
