@@ -1,14 +1,17 @@
 package dev.nokee.companion;
 
+import dev.nokee.commons.backports.ConfigurationRegistry;
 import dev.nokee.commons.backports.DependencyFactory;
 import dev.nokee.commons.gradle.Plugins;
-import dev.nokee.commons.gradle.provider.ZipProvider;
+import dev.nokee.commons.names.CppNames;
 import dev.nokee.companion.util.TestedBinaryMapper;
+import org.gradle.api.NamedDomainObjectProvider;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
+import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.FileCollectionDependency;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.model.ObjectFactory;
@@ -73,19 +76,19 @@ public final class CppUnitTestExtensions {
 
 		private final ObjectFactory objects;
 		private final ProviderFactory providers;
-		private final ZipProvider.Factory zipProviders;
 		private final TaskContainer tasks;
 		private final ConfigurationContainer configurations;
 		private final DependencyFactory dependencyFactory;
+		private final ConfigurationRegistry configurationRegistry;
 
 		@Inject
 		public Rule(ObjectFactory objects, ProviderFactory providers, TaskContainer tasks, ConfigurationContainer configurations) {
 			this.objects = objects;
 			this.providers = providers;
-			this.zipProviders = objects.newInstance(ZipProvider.Factory.class);
 			this.tasks = tasks;
 			this.configurations = configurations;
 			this.dependencyFactory = objects.newInstance(DependencyFactory.class);
+			this.configurationRegistry = objects.newInstance(ConfigurationRegistry.class);
 		}
 
 		//region For displayName on Provider instance
@@ -166,16 +169,14 @@ public final class CppUnitTestExtensions {
 						final Configuration nativeLink = configurations.getByName(nativeLinkConfigurationName(testExecutable));
 						nativeLink.getDependencies().all(dependencyCandidate -> {
 							if (dependencyCandidate instanceof FileCollectionDependency) {
-								if (!((FileCollectionDependency) dependencyCandidate).getFiles().equals(actualTestableObjects)) {
-									nativeLink.getDependencies().remove(dependencyCandidate);
-								}
+								nativeLink.getDependencies().remove(dependencyCandidate);
 							}
 						});
 
-						// TODO: We should be using a declarable dependency bucket instead, instead of relying on linkOnly, use a custom declarable bucket
-
 						// There may-or-may-not have "testable objects" for this test suite
-						nativeLink.getDependencies().add(dependencyFactory.create(actualTestableObjects));
+						final NamedDomainObjectProvider<Configuration> componentUnderTest = configurationRegistry.dependencyScope(CppNames.of(testExecutable).configurationName("componentUnderTest").toString());
+						componentUnderTest.configure(it -> it.getDependencies().addAllLater(objects.listProperty(Dependency.class).value(Collections.singletonList(dependencyFactory.create(actualTestableObjects))).orElse(Collections.emptyList())));
+						nativeLink.extendsFrom(componentUnderTest.get());
 					});
 				});
 			});
