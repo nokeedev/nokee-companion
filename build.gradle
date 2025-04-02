@@ -75,6 +75,7 @@ testing {
 				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'
 				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.release')
 				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
+				implementation('com.google.guava:guava:33.4.6-jre') { because 'TypeToken' }
 			}
 		}
 		functionalTest(JvmTestSuite) {

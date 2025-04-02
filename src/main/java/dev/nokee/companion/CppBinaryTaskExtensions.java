@@ -9,7 +9,6 @@ import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.cpp.CppBinary;
-import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.ComponentWithExecutable;
 import org.gradle.language.nativeplatform.ComponentWithInstallation;
@@ -103,30 +102,30 @@ public final class CppBinaryTaskExtensions {
 		@SuppressWarnings("UnstableApiUsage")
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
-				project.getComponents().withType(CppComponent.class, component -> {
-					component.getBinaries().whenElementKnown(CppBinary.class, binary -> {
-						final TaskProvider<CppCompile> compileTask = tasks.named(compileTaskName(binary), CppCompile.class);
-						((ExtensionAware) binary).getExtensions().add(COMPILE_TASK_PROVIDER_TYPE, "compileTask", compileTask);
+				// Must configure through project binaries to ensure correct configuration ordering.
+				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
+					final TaskProvider<CppCompile> compileTask = tasks.named(compileTaskName(binary), CppCompile.class);
+					((ExtensionAware) binary).getExtensions().add(COMPILE_TASK_PROVIDER_TYPE, "compileTask", compileTask);
 
-						if (binary instanceof ComponentWithExecutable) {
-							final TaskProvider<LinkExecutable> linkTask = tasks.named(linkTaskName(binary), LinkExecutable.class);
-							((ExtensionAware) binary).getExtensions().add(LINK_EXECUTABLE_TASK_PROVIDER_TYPE, "linkTask", linkTask);
-						} else if (binary instanceof ComponentWithSharedLibrary) {
-							final TaskProvider<LinkSharedLibrary> linkTask = tasks.named(linkTaskName(binary), LinkSharedLibrary.class);
-							((ExtensionAware) binary).getExtensions().add(LINK_SHARED_LIBRARY_TASK_PROVIDER_TYPE, "linkTask", linkTask);
-						} else if (binary instanceof ComponentWithStaticLibrary) {
-							final TaskProvider<CreateStaticLibrary> createTask = tasks.named(createTaskName(binary), CreateStaticLibrary.class);
-							((ExtensionAware) binary).getExtensions().add(CREATE_STATIC_LIBRARY_TASK_PROVIDER_TYPE, "createTask", createTask);
-						}
+					if (binary instanceof ComponentWithExecutable) {
+						final TaskProvider<LinkExecutable> linkTask = tasks.named(linkTaskName(binary), LinkExecutable.class);
+						((ExtensionAware) binary).getExtensions().add(LINK_EXECUTABLE_TASK_PROVIDER_TYPE, "linkTask", linkTask);
+					} else if (binary instanceof ComponentWithSharedLibrary) {
+						final TaskProvider<LinkSharedLibrary> linkTask = tasks.named(linkTaskName(binary), LinkSharedLibrary.class);
+						((ExtensionAware) binary).getExtensions().add(LINK_SHARED_LIBRARY_TASK_PROVIDER_TYPE, "linkTask", linkTask);
+					} else if (binary instanceof ComponentWithStaticLibrary) {
+						final TaskProvider<CreateStaticLibrary> createTask = tasks.named(createTaskName(binary), CreateStaticLibrary.class);
+						((ExtensionAware) binary).getExtensions().add(CREATE_STATIC_LIBRARY_TASK_PROVIDER_TYPE, "createTask", createTask);
+					}
 
-						if (binary instanceof ComponentWithInstallation) {
-							final TaskProvider<InstallExecutable> installTask = tasks.named(installTaskName(binary), InstallExecutable.class);
-							((ExtensionAware) binary).getExtensions().add(INSTALL_TASK_PROVIDER_TYPE, "installTask", installTask);
-						}
-					});
+					if (binary instanceof ComponentWithInstallation) {
+						final TaskProvider<InstallExecutable> installTask = tasks.named(installTaskName(binary), InstallExecutable.class);
+						((ExtensionAware) binary).getExtensions().add(INSTALL_TASK_PROVIDER_TYPE, "installTask", installTask);
+					}
 				});
 			});
 
+			// Must wait for the plugin to be applied to ensure configuration ordering (run task gets created).
 			Plugins.forProject(project).whenPluginApplied("cpp-unit-test", () -> {
 				project.getComponents().withType(CppTestSuite.class).configureEach(component -> {
 					component.getBinaries().whenElementKnown(CppTestExecutable.class, binary -> {
