@@ -254,7 +254,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		}
 
 		Compiler<T> transactionalCompiler = perSourceCompiler;
-		if (getOptions().getIncrementalAfterFailure().getOrElse(false)) {
+		if (getOptions().getIncrementalAfterFailure().getOrElse(false) && spec.isIncrementalCompile()) {
 			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler));
 		}
 		Compiler<T> incrementalCompiler = incrementalCompilerOf(this).createCompiler(transactionalCompiler);

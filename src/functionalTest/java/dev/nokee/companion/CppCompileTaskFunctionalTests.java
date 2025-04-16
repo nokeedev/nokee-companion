@@ -16,7 +16,7 @@ import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
 import static dev.gradleplugins.buildscript.syntax.Syntax.*;
 
 @GradleTaskUnderTest(":compile")
-class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilationFunctionalTester, AbstractNativeLanguageIncrementalCompilationFunctionalTester, AbstractNativeLanguageCachingCompilationFunctionalTester, SourceOptionsAwareFunctionalTester, AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
+class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilationFunctionalTester, AbstractNativeLanguageIncrementalCompilationFunctionalTester, AbstractNativeLanguageCachingCompilationFunctionalTester, SourceOptionsAwareFunctionalTester, AbstractNativeLanguageHeaderDiscoveryFunctionalTester, AbstractNativeLanguageIncrementalCompilationAfterFailureFunctionalTester {
 	@GradleProject("project-without-source")
 	public static GradleBuildElement makeEmptyProject() throws IOException {
 		GradleBuildElement result = GradleBuildElement.empty();
@@ -42,7 +42,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 
 	@GradleProject("project-with-failing-source-files")
 	public static GradleBuildElement makeProjectWithFailingSourceFiles() throws IOException {
-		GradleBuildElement result = makeEmptyProject();
+		GradleBuildElement result = makeProjectWithSourceFiles();
 		result.getBuildFile().append(groovyDsl("""
 				compileTask.source('broken.cpp')
 			""".stripIndent()));
