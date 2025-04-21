@@ -49,7 +49,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			dependencies {
 				testTestedComponent(project) {
 					attributes {
-						attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.OBJECTS))
+						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
 					}
 				}
 			}
@@ -66,7 +66,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			dependencies {
 				testTestedComponent(project) {
 					attributes {
-						attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.OBJECTS))
+						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
 					}
 				}
 			}
@@ -86,7 +86,11 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	void product__zzcanReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
 			dependencies {
-				testTestedComponent project
+				testTestedComponent(project) {
+					attributes {
+						attribute(Attribute.of('dev.nokee.testable-type', String), 'library')
+					}
+				}
 			}
 		"""));
 
@@ -100,7 +104,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			dependencies {
 				testTestedComponent(project) {
 					attributes {
-						attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, 'cpp-sources'))
+						attribute(Attribute.of('dev.nokee.testable-type', String), 'sources')
 					}
 				}
 			}
@@ -110,5 +114,6 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		BuildResult result = runner.withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
 		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
+//		throw new UnsupportedOperationException();
 	}
 }

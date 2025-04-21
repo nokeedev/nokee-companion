@@ -65,11 +65,6 @@ public abstract class ShadowProperty<T> {
 		ext.set(propertyName, newValue);
 	}
 
-	public ShadowProperty<T> mut(Transformer<T, T> newValueTransformer) {
-		set(newValueTransformer.transform(get()));
-		return this;
-	}
-
 	/**
 	 * Replace the property value.
 	 * <b>Note:</b> the new value will live in the shadow of the original value, make sure everyone knows.
