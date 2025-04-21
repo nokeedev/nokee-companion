@@ -3,6 +3,7 @@ package dev.nokee.companion.features;
 import dev.nokee.commons.gradle.Factory;
 import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.gradle.file.SourceFileVisitor;
+import dev.nokee.commons.gradle.provider.ProviderUtils;
 import dev.nokee.commons.gradle.tasks.options.*;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
@@ -11,40 +12,53 @@ import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.ListProperty;
-import org.gradle.api.provider.Provider;
-import org.gradle.api.provider.ProviderFactory;
+import org.gradle.api.provider.*;
 import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
 import org.gradle.internal.UncheckedException;
+import org.gradle.internal.io.StreamByteBuffer;
+import org.gradle.internal.operations.*;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
+import org.gradle.internal.os.OperatingSystem;
 import org.gradle.language.base.internal.compile.Compiler;
+import org.gradle.language.base.internal.compile.VersionAwareCompiler;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilerBuilder;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.gradle.nativeplatform.internal.BuildOperationLoggingCompilerDecorator;
 import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
-import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
-import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
-import org.gradle.nativeplatform.toolchain.internal.PlatformToolProvider;
+import org.gradle.nativeplatform.toolchain.internal.*;
 import org.gradle.process.CommandLineArgumentProvider;
+import org.gradle.process.ExecOperations;
+import org.gradle.process.internal.ExecException;
 import org.gradle.util.GradleVersion;
 import org.gradle.work.InputChanges;
+import org.gradle.workers.WorkAction;
+import org.gradle.workers.WorkParameters;
+import org.gradle.workers.WorkQueue;
+import org.gradle.workers.WorkerExecutor;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static dev.nokee.commons.gradle.TransformerUtils.filter;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
@@ -200,7 +214,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		spec.setDebuggable(isDebuggable());
 		spec.setOptimized(isOptimized());
 		spec.setIncrementalCompile(inputs.isIncremental());
-		spec.setOperationLogger(operationLogger);
+		spec.setOperationLogger(new IsolatableBuildOperationLogger(operationLogger));
 
 		this.configureSpec(spec);
 
@@ -224,6 +238,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 					return allOptions.keyOf(file).get();
 				}
 			};
+			WorkQueue queue = executor.noIsolation();
 			perSourceCompiler = new PerSourceCompiler<>(baseCompiler, specProvider, () -> (T) createCompileSpec(), new PerSourceCompiler.SpecConfigure<T>() {
 				@Override
 				public void configureSpec(T spec, ISourceKey key) {
@@ -250,7 +265,42 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 						throw UncheckedException.throwAsUncheckedException(e);
 					}
 				}
-			});
+			}, queue);
+
+			// region Patching BuildOperationExecutor
+			try {
+				Compiler<T> compiler = baseCompiler;
+				while (!(compiler instanceof AbstractCompiler)) {
+					if (compiler instanceof VersionAwareCompiler) {
+						Field VersionAwareCompiler_compiler = compiler.getClass().getDeclaredField("compiler");
+						VersionAwareCompiler_compiler.setAccessible(true);
+						compiler = (Compiler<T>) VersionAwareCompiler_compiler.get(compiler);
+					} else if (compiler instanceof OutputCleaningCompiler) {
+						Field OutputCleaningCompiler_compiler = compiler.getClass().getDeclaredField("compiler");
+						OutputCleaningCompiler_compiler.setAccessible(true);
+						compiler = (Compiler<T>) OutputCleaningCompiler_compiler.get(compiler);
+					}
+				}
+
+				Field AbstractCompiler_buildOperationExecutor = AbstractCompiler.class.getDeclaredField("buildOperationExecutor");
+				AbstractCompiler_buildOperationExecutor.setAccessible(true);
+
+				// remove final on AbstractCompiler#buildOperationExecutor
+				try {
+					Field AbstractCompiler_buildOperationExecutor_modifiers = Field.class.getDeclaredField("modifiers");
+					AbstractCompiler_buildOperationExecutor_modifiers.setAccessible(true);
+					AbstractCompiler_buildOperationExecutor.setInt(AbstractCompiler_buildOperationExecutor, AbstractCompiler_buildOperationExecutor.getModifiers() & ~Modifier.FINAL);
+				} catch (NoSuchFieldException e) {
+					// ignore, may be on JDK 12+
+				}
+
+				AbstractCompiler_buildOperationExecutor.set(compiler, objects.newInstance(WorkerBackedBuildOperationExecutor.class, queue));
+				getLogger().debug("Patching the build operation executor was successful, enjoy light speed compilation!");
+			} catch (NoSuchFieldException | IllegalAccessException e) {
+				// do not patch... serial execution == slower
+				getLogger().info("Could not patch the build operation executor, per-source option buckets will execute serially (aka slower).");
+			}
+			//endregion
 		}
 
 		Compiler<T> transactionalCompiler = perSourceCompiler;
@@ -260,6 +310,221 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		Compiler<T> incrementalCompiler = incrementalCompilerOf(this).createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
 		return loggingCompiler.execute(spec);
+	}
+
+	/*private*/ static abstract /*final*/ class WorkerBackedBuildOperationExecutor implements BuildOperationExecutor {
+		private final WorkQueue queue;
+
+		@Inject
+		public WorkerBackedBuildOperationExecutor(WorkQueue queue) {
+			this.queue = queue;
+		}
+
+		@Override
+		public <O extends RunnableBuildOperation> void runAll(Action<BuildOperationQueue<O>> action) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public <O extends RunnableBuildOperation> void runAll(Action<BuildOperationQueue<O>> action, BuildOperationConstraint buildOperationConstraint) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public <O extends RunnableBuildOperation> void runAllWithAccessToProjectState(Action<BuildOperationQueue<O>> action) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public <O extends RunnableBuildOperation> void runAllWithAccessToProjectState(Action<BuildOperationQueue<O>> action, BuildOperationConstraint buildOperationConstraint) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public <O extends BuildOperation> void runAll(BuildOperationWorker<O> worker, Action<BuildOperationQueue<O>> action) {
+			action.execute(new BuildOperationQueue<O>() {
+				@Override
+				public void add(O o) {
+					assert o instanceof CommandLineToolInvocation;
+
+					CommandLineToolInvocation invocation = (CommandLineToolInvocation) o;
+					queue.submit(CommandLineToolInvocationAction.class, spec -> {
+						spec.getEnvironment().set(invocation.getEnvironment());
+						spec.getPath().from(invocation.getPath());
+						spec.getWorkDirectory().set(invocation.getWorkDirectory());
+						spec.getArgs().addAll(invocation.getArgs());
+						spec.setLogger(invocation.getLogger());
+						spec.getDescription().set(invocation.description().build().getDisplayName());
+						spec.getExecutable().set(executableOf(worker));
+						spec.getName().set(nameOf(worker));
+					});
+				}
+
+				@Override
+				public void cancel() {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public void waitForCompletion() throws MultipleBuildOperationFailures {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public void setLogLocation(String s) {
+					// ignore... only used for error reporting
+				}
+			});
+		}
+
+		@Override
+		public <O extends BuildOperation> void runAll(BuildOperationWorker<O> buildOperationWorker, Action<BuildOperationQueue<O>> action, BuildOperationConstraint buildOperationConstraint) {
+			throw new UnsupportedOperationException();
+		}
+
+		public BuildOperationRef getCurrentOperation() {
+			throw new UnsupportedOperationException();
+		}
+	}
+
+	private static File executableOf(BuildOperationWorker<?> worker) {
+		try {
+			Field DefaultBuildOperationWorker_executable = worker.getClass().getDeclaredField("executable");
+			DefaultBuildOperationWorker_executable.setAccessible(true);
+			return (File) DefaultBuildOperationWorker_executable.get(worker);
+		} catch (IllegalAccessException | NoSuchFieldException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private static String nameOf(BuildOperationWorker<?> worker) {
+		try {
+			Field DefaultBuildOperationWorker_name = worker.getClass().getDeclaredField("name");
+			DefaultBuildOperationWorker_name.setAccessible(true);
+			return (String) DefaultBuildOperationWorker_name.get(worker);
+		} catch (IllegalAccessException | NoSuchFieldException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	// Allow jumping the isolation gap between current thread and worker thread (no-isolated)
+	//   This is a workaround ONLY, we should use a build service that act as, in spirit, as the build operation logger.
+	//   It would be used to track individual cli tool invocation and report success/failure in the log file.
+	private static final class IsolatableBuildOperationLogger implements BuildOperationLogger {
+		private static final Map<String, BuildOperationLogger> LOGGERS = new ConcurrentHashMap<>();
+		private final BuildOperationLogger delegate;
+
+		private IsolatableBuildOperationLogger(BuildOperationLogger delegate) {
+			this.delegate = delegate;
+		}
+
+		public static BuildOperationLogger loggerOf(String id) {
+			return LOGGERS.get(id);
+		}
+
+		public static String idOf(BuildOperationLogger logger) {
+			return logger.toString();
+		}
+
+		@Override
+		public void start() {
+			LOGGERS.put(idOf(delegate), delegate);
+			delegate.start();
+		}
+
+		@Override
+		public void operationSuccess(String description, String output) {
+			delegate.operationSuccess(description, output);
+		}
+
+		@Override
+		public void operationFailed(String description, String output) {
+			delegate.operationFailed(description, output);
+		}
+
+		@Override
+		public void done() {
+			LOGGERS.remove(idOf(delegate));
+			delegate.done();
+		}
+
+		@Override
+		public String getLogLocation() {
+			return delegate.getLogLocation();
+		}
+	}
+
+	/*private*/ static abstract /*final*/ class CommandLineToolInvocationAction implements WorkAction<CommandLineToolInvocationAction.Parameters> {
+		public static abstract class Parameters implements WorkParameters {
+			public abstract ListProperty<String> getArgs();
+			public abstract ConfigurableFileCollection getPath();
+			public abstract MapProperty<String, String> getEnvironment();
+			public abstract DirectoryProperty getWorkDirectory();
+			public abstract Property<String> getDescription();
+			public abstract RegularFileProperty getExecutable();
+			public abstract Property<String> getName();
+
+			protected abstract Property<String> getLoggerId();
+
+			public void setLogger(BuildOperationLogger logger) {
+				getLoggerId().set(IsolatableBuildOperationLogger.idOf(logger));
+			}
+
+			public BuildOperationLogger getLogger() {
+				return IsolatableBuildOperationLogger.loggerOf(getLoggerId().get());
+			}
+		}
+
+		private final ExecOperations execOperations;
+
+		@Inject
+		public CommandLineToolInvocationAction(ExecOperations execOperations) {
+			this.execOperations = execOperations;
+		}
+
+		@Override
+		public void execute() {
+			// Copied from DefaultCommandLineToolInvocationWorker#execute
+			StreamByteBuffer errOutput = new StreamByteBuffer();
+			StreamByteBuffer stdOutput = new StreamByteBuffer();
+			try {
+				execOperations.exec(spec -> {
+					spec.executable(getParameters().getExecutable().get());
+					ProviderUtils.asJdkOptional(getParameters().getWorkDirectory()).ifPresent(it -> {
+						try {
+							Files.createDirectories(it.getAsFile().toPath());
+						} catch (IOException e) {
+							throw new RuntimeException(e);
+						}
+						spec.workingDir(it);
+					});
+
+					spec.args(getParameters().getArgs().get());
+
+					if (!getParameters().getPath().isEmpty()) {
+						String pathVar = OperatingSystem.current().getPathVar();
+						String toolPath = getParameters().getPath().getAsPath();
+						toolPath = toolPath + File.pathSeparator + System.getenv(pathVar);
+						spec.environment(pathVar, toolPath);
+						if (OperatingSystem.current().isWindows()) {
+							spec.getEnvironment().remove(pathVar.toUpperCase(Locale.ROOT));
+						}
+					}
+
+					spec.environment(getParameters().getEnvironment().get());
+					spec.setErrorOutput(errOutput.getOutputStream());
+					spec.setStandardOutput(stdOutput.getOutputStream());
+				});
+				getParameters().getLogger().operationSuccess(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
+			} catch (ExecException var8) {
+				getParameters().getLogger().operationFailed(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
+				throw new RuntimeException(String.format("%s failed while %s.", getParameters().getName().get(), getParameters().getDescription().get()));
+			}
+		}
+
+		private String combineOutput(StreamByteBuffer stdOutput, StreamByteBuffer errOutput) {
+			return stdOutput.readAsString(Charset.defaultCharset()) + errOutput.readAsString(Charset.defaultCharset());
+		}
 	}
 
 	// We have to reach to AbstractNativeSourceCompileTask#incrementalCompiler
@@ -288,10 +553,12 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	ConfigurableFileCollection source;
 
 	private final ObjectFactory objects;
+	private final WorkerExecutor executor;
 
 	@Inject
-	public CppCompileTask(ObjectFactory objects, ProviderFactory providers) {
+	public CppCompileTask(ObjectFactory objects, ProviderFactory providers, WorkerExecutor executor) {
 		this.objects = objects;
+		this.executor = executor;
 		this.source = super.getSource();
 
 		getBundles().set(providers.provider(() -> {

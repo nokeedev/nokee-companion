@@ -118,7 +118,7 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 		}).collect(Collectors.toList());
 	}
 
-	private abstract class StashedFile {
+	private static abstract class StashedFile {
 		public abstract void unstash();
 	}
 

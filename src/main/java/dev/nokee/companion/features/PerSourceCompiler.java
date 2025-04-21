@@ -5,6 +5,7 @@ import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.WorkResults;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
+import org.gradle.workers.WorkQueue;
 
 import java.io.File;
 import java.util.*;
@@ -14,12 +15,14 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 	private final SpecProvider specProvider;
 	private final CompileSpecFactory<T> specFactory;
 	private final SpecConfigure<T> specConfigurer;
+	private final WorkQueue queue;
 
-	public PerSourceCompiler(Compiler<T> delegateCompiler, SpecProvider specProvider, CompileSpecFactory<T> specFactory, SpecConfigure<T> specConfigurer) {
+	public PerSourceCompiler(Compiler<T> delegateCompiler, SpecProvider specProvider, CompileSpecFactory<T> specFactory, SpecConfigure<T> specConfigurer, WorkQueue queue) {
 		this.delegateCompiler = delegateCompiler;
 		this.specProvider = specProvider;
 		this.specFactory = specFactory;
 		this.specConfigurer = specConfigurer;
+		this.queue = queue;
 	}
 
 	@Override
@@ -59,6 +62,9 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 			// Execute all new spec (i.e. per-source bucket)
 			result = result.or(delegateCompiler.execute(newSpec));
 		}
+
+		queue.await(); // force wait on the queue to make sure the operation logger contract is kept
+		// The queue may or may not be empty, ideally, we wouldn't wait but the native compiler infrastructure is clunky.
 
 		return result;
 	}

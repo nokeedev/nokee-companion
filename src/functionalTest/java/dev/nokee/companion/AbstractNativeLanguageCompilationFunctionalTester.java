@@ -32,7 +32,6 @@ public interface AbstractNativeLanguageCompilationFunctionalTester {
 		BuildResult result = runner.withTasks(taskUnderTest).buildAndFail();
 
 		assertThat(result, hasFailureDescription("Execution failed for task '" + taskUnderTest + "'."));
-		assertThat(result, hasFailureCause("A build operation failed."));
 		assertThat(result, hasFailureCause(containsString(expectedCompilationFailureCause)));
 	}
 }
