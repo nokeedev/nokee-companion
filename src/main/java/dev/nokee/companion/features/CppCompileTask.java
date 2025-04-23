@@ -280,16 +280,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				}
 
 				Field AbstractCompiler_buildOperationExecutor = getField(AbstractCompiler.class, "buildOperationExecutor");
-				makeAccessible(AbstractCompiler_buildOperationExecutor);
-
-				// remove final on AbstractCompiler#buildOperationExecutor
-				try {
-					Field AbstractCompiler_buildOperationExecutor_modifiers = Field.class.getDeclaredField("modifiers");
-					makeAccessible(AbstractCompiler_buildOperationExecutor_modifiers);
-					AbstractCompiler_buildOperationExecutor.setInt(AbstractCompiler_buildOperationExecutor, AbstractCompiler_buildOperationExecutor.getModifiers() & ~Modifier.FINAL);
-				} catch (NoSuchFieldException e) {
-					// ignore, may be on JDK 12+
-				}
+				removeFinal(makeAccessible(AbstractCompiler_buildOperationExecutor));
 
 				AbstractCompiler_buildOperationExecutor.set(compiler, objects.newInstance(WorkerBackedBuildOperationExecutor.class, queue));
 				getLogger().debug("Patching the build operation executor was successful, enjoy light speed compilation!");

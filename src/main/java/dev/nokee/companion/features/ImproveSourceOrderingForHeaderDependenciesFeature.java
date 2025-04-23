@@ -12,9 +12,10 @@ import org.gradle.util.GradleVersion;
 
 import javax.inject.Inject;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
+
+import static dev.nokee.companion.features.ReflectionUtils.*;
 
 /*private*/ abstract /*final*/ class ImproveSourceOrderingForHeaderDependenciesFeature implements Plugin<Project> {
 	private final ObjectFactory objects;
@@ -43,36 +44,23 @@ import java.util.concurrent.Callable;
 
 		// We have to reach to AbstractNativeSourceCompileTask#incrementalCompiler
 		private IncrementalCompilerBuilder.IncrementalCompiler incrementalCompiler(AbstractNativeCompileTask self) {
-			try {
-				Field AbstractNativeCompileTask__incrementalCompiler = AbstractNativeCompileTask.class.getDeclaredField("incrementalCompiler");
-				AbstractNativeCompileTask__incrementalCompiler.setAccessible(true);
-				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__incrementalCompiler.get(self);
-			} catch (NoSuchFieldException | IllegalAccessException e) {
-				throw new RuntimeException(e);
-			}
+			return readFieldValue(AbstractNativeCompileTask.class, "incrementalCompiler", self);
 		}
 
 		private void patchSourceFiles(IncrementalCompilerBuilder.IncrementalCompiler incrementalCompiler) {
 			try {
 				// access StateCollectingIncrementalCompiler#sourceFiles
-				Field StateCollectingIncrementalCompiler_sourceFiles = incrementalCompiler.getClass().getDeclaredField("sourceFiles");
-				StateCollectingIncrementalCompiler_sourceFiles.setAccessible(true);
+				Field StateCollectingIncrementalCompiler_sourceFiles = getField(incrementalCompiler.getClass(), "sourceFiles");
+				makeAccessible(StateCollectingIncrementalCompiler_sourceFiles);
 
 				// get current value of StateCollectingIncrementalCompiler#sourceFiles
 				FileCollection sourceFiles = (FileCollection) StateCollectingIncrementalCompiler_sourceFiles.get(incrementalCompiler);
 
-				// remove final on StateCollectingIncrementalCompiler#sourceFiles
-				try {
-					Field StateCollectingIncrementalCompiler_sourceFiles_modifiers = Field.class.getDeclaredField("modifiers");
-					StateCollectingIncrementalCompiler_sourceFiles_modifiers.setAccessible(true);
-					StateCollectingIncrementalCompiler_sourceFiles.setInt(StateCollectingIncrementalCompiler_sourceFiles, StateCollectingIncrementalCompiler_sourceFiles.getModifiers() & ~Modifier.FINAL);
-				} catch (NoSuchFieldException e) {
-					// ignore, may be on JDK 12+
-				}
+				removeFinal(StateCollectingIncrementalCompiler_sourceFiles);
 
 				// override StateCollectingIncrementalCompiler#sourceFiles
 				StateCollectingIncrementalCompiler_sourceFiles.set(incrementalCompiler, objects.fileCollection().from((Callable<?>) () -> new TreeSet<>(sourceFiles.getFiles())).builtBy(sourceFiles));
-			} catch (NoSuchFieldException | IllegalAccessException e) {
+			} catch (IllegalAccessException e) {
 				throw new RuntimeException(e);
 			}
 		}

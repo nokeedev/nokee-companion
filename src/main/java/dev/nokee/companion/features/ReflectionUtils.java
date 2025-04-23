@@ -2,6 +2,7 @@ package dev.nokee.companion.features;
 
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
 final class ReflectionUtils {
 	private ReflectionUtils() {}
@@ -34,5 +35,24 @@ final class ReflectionUtils {
 		} catch (IllegalAccessException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	public static Field removeFinal(Field field) {
+		if (isFinal(field)) {
+			try {
+				Field modifiers = Field.class.getDeclaredField("modifiers");
+				makeAccessible(modifiers);
+				field.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+			} catch (NoSuchFieldException e) {
+				// ignore, may be on JDK 12+
+			} catch (IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
+		}
+		return field;
+	}
+
+	public static boolean isFinal(Field field) {
+		return Modifier.isFinal(field.getModifiers());
 	}
 }
