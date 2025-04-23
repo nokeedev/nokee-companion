@@ -273,13 +273,9 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				Compiler<T> compiler = baseCompiler;
 				while (!(compiler instanceof AbstractCompiler)) {
 					if (compiler instanceof VersionAwareCompiler) {
-						Field VersionAwareCompiler_compiler = getField(compiler.getClass(), "compiler");
-						makeAccessible(VersionAwareCompiler_compiler);
-						compiler = (Compiler<T>) VersionAwareCompiler_compiler.get(compiler);
+						compiler = readFieldValue(getField(compiler.getClass(), "compiler"), compiler);
 					} else if (compiler instanceof OutputCleaningCompiler) {
-						Field OutputCleaningCompiler_compiler = getField(compiler.getClass(),"compiler");
-						makeAccessible(OutputCleaningCompiler_compiler);
-						compiler = (Compiler<T>) OutputCleaningCompiler_compiler.get(compiler);
+						compiler = readFieldValue(getField(compiler.getClass(),"compiler"), compiler);
 					}
 				}
 
@@ -389,23 +385,11 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	}
 
 	private static File executableOf(BuildOperationWorker<?> worker) {
-		try {
-			Field DefaultBuildOperationWorker_executable = getField(worker.getClass(), "executable");
-			makeAccessible(DefaultBuildOperationWorker_executable);
-			return (File) DefaultBuildOperationWorker_executable.get(worker);
-		} catch (IllegalAccessException e) {
-			throw new RuntimeException(e);
-		}
+		return readFieldValue(getField(worker.getClass(), "executable"), worker);
 	}
 
 	private static String nameOf(BuildOperationWorker<?> worker) {
-		try {
-			Field DefaultBuildOperationWorker_name = getField(worker.getClass(), "name");
-			makeAccessible(DefaultBuildOperationWorker_name);
-			return (String) DefaultBuildOperationWorker_name.get(worker);
-		} catch (IllegalAccessException e) {
-			throw new RuntimeException(e);
-		}
+		return readFieldValue(getField(worker.getClass(), "name"), worker);
 	}
 
 	// Allow jumping the isolation gap between current thread and worker thread (no-isolated)
@@ -540,13 +524,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				throw new RuntimeException(e);
 			}
 		} else { // On Gradle <8.11, we use `incrementalCompiler` field
-			try {
-				Field AbstractNativeCompileTask__incrementalCompiler = getField(AbstractNativeCompileTask.class, "incrementalCompiler");
-				makeAccessible(AbstractNativeCompileTask__incrementalCompiler);
-				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__incrementalCompiler.get(self);
-			} catch (IllegalAccessException e) {
-				throw new RuntimeException(e);
-			}
+			return readFieldValue(AbstractNativeCompileTask.class, "incrementalCompiler", self);
 		}
 	}
 
