@@ -62,6 +62,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static dev.nokee.commons.gradle.TransformerUtils.filter;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
+import static dev.nokee.companion.features.ReflectionUtils.makeAccessible;
 import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 @CacheableTask
@@ -273,22 +274,22 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				while (!(compiler instanceof AbstractCompiler)) {
 					if (compiler instanceof VersionAwareCompiler) {
 						Field VersionAwareCompiler_compiler = compiler.getClass().getDeclaredField("compiler");
-						VersionAwareCompiler_compiler.setAccessible(true);
+						makeAccessible(VersionAwareCompiler_compiler);
 						compiler = (Compiler<T>) VersionAwareCompiler_compiler.get(compiler);
 					} else if (compiler instanceof OutputCleaningCompiler) {
 						Field OutputCleaningCompiler_compiler = compiler.getClass().getDeclaredField("compiler");
-						OutputCleaningCompiler_compiler.setAccessible(true);
+						makeAccessible(OutputCleaningCompiler_compiler);
 						compiler = (Compiler<T>) OutputCleaningCompiler_compiler.get(compiler);
 					}
 				}
 
 				Field AbstractCompiler_buildOperationExecutor = AbstractCompiler.class.getDeclaredField("buildOperationExecutor");
-				AbstractCompiler_buildOperationExecutor.setAccessible(true);
+				makeAccessible(AbstractCompiler_buildOperationExecutor);
 
 				// remove final on AbstractCompiler#buildOperationExecutor
 				try {
 					Field AbstractCompiler_buildOperationExecutor_modifiers = Field.class.getDeclaredField("modifiers");
-					AbstractCompiler_buildOperationExecutor_modifiers.setAccessible(true);
+					makeAccessible(AbstractCompiler_buildOperationExecutor_modifiers);
 					AbstractCompiler_buildOperationExecutor.setInt(AbstractCompiler_buildOperationExecutor, AbstractCompiler_buildOperationExecutor.getModifiers() & ~Modifier.FINAL);
 				} catch (NoSuchFieldException e) {
 					// ignore, may be on JDK 12+
@@ -390,7 +391,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	private static File executableOf(BuildOperationWorker<?> worker) {
 		try {
 			Field DefaultBuildOperationWorker_executable = worker.getClass().getDeclaredField("executable");
-			DefaultBuildOperationWorker_executable.setAccessible(true);
+			makeAccessible(DefaultBuildOperationWorker_executable);
 			return (File) DefaultBuildOperationWorker_executable.get(worker);
 		} catch (IllegalAccessException | NoSuchFieldException e) {
 			throw new RuntimeException(e);
@@ -400,7 +401,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	private static String nameOf(BuildOperationWorker<?> worker) {
 		try {
 			Field DefaultBuildOperationWorker_name = worker.getClass().getDeclaredField("name");
-			DefaultBuildOperationWorker_name.setAccessible(true);
+			makeAccessible(DefaultBuildOperationWorker_name);
 			return (String) DefaultBuildOperationWorker_name.get(worker);
 		} catch (IllegalAccessException | NoSuchFieldException e) {
 			throw new RuntimeException(e);
@@ -533,7 +534,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		if (GradleVersion.current().compareTo(GradleVersion.version("8.11")) >= 0) {
 			try {
 				Method AbstractNativeCompileTask__getIncrementalCompiler = AbstractNativeCompileTask.class.getDeclaredMethod("getIncrementalCompiler");
-				AbstractNativeCompileTask__getIncrementalCompiler.setAccessible(true);
+				makeAccessible(AbstractNativeCompileTask__getIncrementalCompiler);
 				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__getIncrementalCompiler.invoke(self);
 			} catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
 				throw new RuntimeException(e);
@@ -541,7 +542,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		} else { // On Gradle <8.11, we use `incrementalCompiler` field
 			try {
 				Field AbstractNativeCompileTask__incrementalCompiler = AbstractNativeCompileTask.class.getDeclaredField("incrementalCompiler");
-				AbstractNativeCompileTask__incrementalCompiler.setAccessible(true);
+				makeAccessible(AbstractNativeCompileTask__incrementalCompiler);
 				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__incrementalCompiler.get(self);
 			} catch (NoSuchFieldException | IllegalAccessException e) {
 				throw new RuntimeException(e);
