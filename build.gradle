@@ -74,7 +74,7 @@ testing {
 				implementation 'dev.gradleplugins:gradle-api:latest.release'
 				implementation libs.hamcrest.core
 				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'
-				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.release')
+				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.integration')
 				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
 				implementation('com.google.guava:guava:33.4.6-jre') { because 'TypeToken' }
 			}
@@ -89,7 +89,7 @@ testing {
 				implementation 'org.jetbrains:annotations:26.0.2'
 				implementation libs.hamcrest.core
 				implementation 'dev.nokee.commons:commons-names:latest.release'
-				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.release')
+				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.integration')
 				implementation testFixtures('dev.gradleplugins:gradle-runner-kit:latest.release')
 				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'
 			}
