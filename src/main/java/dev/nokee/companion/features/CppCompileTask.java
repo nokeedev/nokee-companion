@@ -47,10 +47,8 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -279,10 +277,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 					}
 				}
 
-				Field AbstractCompiler_buildOperationExecutor = getField(AbstractCompiler.class, "buildOperationExecutor");
-				removeFinal(makeAccessible(AbstractCompiler_buildOperationExecutor));
-
-				AbstractCompiler_buildOperationExecutor.set(compiler, objects.newInstance(WorkerBackedBuildOperationExecutor.class, queue));
+				updateFieldValue(getField(AbstractCompiler.class, "buildOperationExecutor"), compiler, objects.newInstance(WorkerBackedBuildOperationExecutor.class, queue));
 				getLogger().debug("Patching the build operation executor was successful, enjoy light speed compilation!");
 			} catch (Throwable e) {
 				// do not patch... serial execution == slower

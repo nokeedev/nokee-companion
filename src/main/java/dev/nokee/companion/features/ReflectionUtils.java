@@ -37,6 +37,14 @@ final class ReflectionUtils {
 		}
 	}
 
+	public static void updateFieldValue(Field field, Object instance, Object value) {
+		try {
+			removeFinal(makeAccessible(field)).set(instance, value);
+		} catch (IllegalAccessException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	public static Field removeFinal(Field field) {
 		if (isFinal(field)) {
 			try {

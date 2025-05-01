@@ -48,21 +48,14 @@ import static dev.nokee.companion.features.ReflectionUtils.*;
 		}
 
 		private void patchSourceFiles(IncrementalCompilerBuilder.IncrementalCompiler incrementalCompiler) {
-			try {
-				// access StateCollectingIncrementalCompiler#sourceFiles
-				Field StateCollectingIncrementalCompiler_sourceFiles = getField(incrementalCompiler.getClass(), "sourceFiles");
-				makeAccessible(StateCollectingIncrementalCompiler_sourceFiles);
+			// access StateCollectingIncrementalCompiler#sourceFiles
+			Field StateCollectingIncrementalCompiler_sourceFiles = getField(incrementalCompiler.getClass(), "sourceFiles");
 
-				// get current value of StateCollectingIncrementalCompiler#sourceFiles
-				FileCollection sourceFiles = (FileCollection) StateCollectingIncrementalCompiler_sourceFiles.get(incrementalCompiler);
+			// get current value of StateCollectingIncrementalCompiler#sourceFiles
+			FileCollection sourceFiles = readFieldValue(StateCollectingIncrementalCompiler_sourceFiles, incrementalCompiler);
 
-				removeFinal(StateCollectingIncrementalCompiler_sourceFiles);
-
-				// override StateCollectingIncrementalCompiler#sourceFiles
-				StateCollectingIncrementalCompiler_sourceFiles.set(incrementalCompiler, objects.fileCollection().from((Callable<?>) () -> new TreeSet<>(sourceFiles.getFiles())).builtBy(sourceFiles));
-			} catch (IllegalAccessException e) {
-				throw new RuntimeException(e);
-			}
+			// override StateCollectingIncrementalCompiler#sourceFiles
+			updateFieldValue(StateCollectingIncrementalCompiler_sourceFiles, incrementalCompiler, objects.fileCollection().from((Callable<?>) () -> new TreeSet<>(sourceFiles.getFiles())).builtBy(sourceFiles));
 		}
 	}
 }
