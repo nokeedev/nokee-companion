@@ -36,48 +36,66 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 
 		// TODO: We should coerce the per-source options to ensure logging happens (start and done at the end)
 		BuildOperationLogger delegate = spec.getOperationLogger();
-		spec.setOperationLogger(new BuildOperationLogger() {
-			private boolean failed = false;
-
-			@Override
-			public void start() {
-				// already happened...
-			}
-
-			@Override
-			public void operationSuccess(String description, String output) {
-				delegate.operationSuccess(description, output);
-			}
-
-			@Override
-			public void operationFailed(String description, String output) {
-				failed = true;
-				delegate.operationFailed(description, output);
-			}
-
-			@Override
-			public void done() {
-				if (failed) {
-					stashedFiles.forEach(StashedFile::unstash);
-					backupFiles.forEach(StashedFile::unstash);
-				} else {
-					try {
-						FileUtils.deleteDirectory(temporaryDirectory);
-					} catch (IOException e) {
-						throw new RuntimeException(e);
-					}
-				}
-				delegate.done();
-			}
-
-			@Override
-			public String getLogLocation() {
-				return delegate.getLogLocation();
-			}
-		});
+		spec.setOperationLogger(new RollbackAwareBuildOperationLogger(delegate, stashedFiles, backupFiles, temporaryDirectory));
 
 		// capture CommandLineToolInvocationFailure with message "C++ compiler failed while compiling " suffix
 		return delegateCompiler.execute(spec);
+	}
+
+	private static final class RollbackAwareBuildOperationLogger implements BuildOperationLogger, BuildOperationLoggerRef {
+		private final BuildOperationLogger delegate;
+		private final List<StashedFile> stashedFiles;
+		private final List<StashedFile> backupFiles;
+		private final File temporaryDirectory;
+		private boolean failed = false;
+
+		private RollbackAwareBuildOperationLogger(BuildOperationLogger delegate, List<StashedFile> stashedFiles, List<StashedFile> backupFiles, File temporaryDirectory) {
+			this.delegate = delegate;
+			this.stashedFiles = stashedFiles;
+			this.backupFiles = backupFiles;
+			this.temporaryDirectory = temporaryDirectory;
+		}
+
+		@Override
+		public void start() {
+			// already happened...
+		}
+
+		@Override
+		public void operationSuccess(String description, String output) {
+			delegate.operationSuccess(description, output);
+		}
+
+		@Override
+		public void operationFailed(String description, String output) {
+			failed = true;
+			delegate.operationFailed(description, output);
+		}
+
+		@Override
+		public void done() {
+			if (failed) {
+				stashedFiles.forEach(StashedFile::unstash);
+				backupFiles.forEach(StashedFile::unstash);
+			} else {
+				try {
+					FileUtils.deleteDirectory(temporaryDirectory);
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
+			}
+			delegate.done();
+		}
+
+		@Override
+		public String getLogLocation() {
+			return delegate.getLogLocation();
+		}
+
+		@Override
+		public UseCount useCount() {
+			return ((BuildOperationLoggerRef) delegate).useCount();
+		}
 	}
 
 	List<StashedFile> stashFiles(List<File> filesToStash, File objectFileDir, File stashDirectory) {

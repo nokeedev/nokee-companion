@@ -381,9 +381,10 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	// Allow jumping the isolation gap between current thread and worker thread (no-isolated)
 	//   This is a workaround ONLY, we should use a build service that act as, in spirit, as the build operation logger.
 	//   It would be used to track individual cli tool invocation and report success/failure in the log file.
-	private static final class IsolatableBuildOperationLogger implements BuildOperationLogger {
+	private static final class IsolatableBuildOperationLogger implements BuildOperationLogger, BuildOperationLoggerRef {
 		private static final Map<String, BuildOperationLogger> LOGGERS = new ConcurrentHashMap<>();
 		private final BuildOperationLogger delegate;
+		private final UseCount count = new UseCount();
 
 		private IsolatableBuildOperationLogger(BuildOperationLogger delegate) {
 			this.delegate = delegate;
@@ -397,9 +398,19 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			return logger.toString();
 		}
 
+		public static void incrementUsage(BuildOperationLogger logger) {
+			((BuildOperationLoggerRef) logger).useCount().increment();
+			LOGGERS.put(idOf(logger), logger);
+		}
+
+		public static void decrementUsage(BuildOperationLogger logger) {
+			if (((BuildOperationLoggerRef) logger).useCount().decrement() == 0) {
+				LOGGERS.remove(idOf(logger));
+			}
+		}
+
 		@Override
 		public void start() {
-			LOGGERS.put(idOf(delegate), delegate);
 			delegate.start();
 		}
 
@@ -415,13 +426,17 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		@Override
 		public void done() {
-			LOGGERS.remove(idOf(delegate));
 			delegate.done();
 		}
 
 		@Override
 		public String getLogLocation() {
 			return delegate.getLogLocation();
+		}
+
+		@Override
+		public UseCount useCount() {
+			return count;
 		}
 	}
 
@@ -438,6 +453,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			protected abstract Property<String> getLoggerId();
 
 			public void setLogger(BuildOperationLogger logger) {
+				IsolatableBuildOperationLogger.incrementUsage(logger);
 				getLoggerId().set(IsolatableBuildOperationLogger.idOf(logger));
 			}
 
@@ -487,9 +503,12 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 					spec.setStandardOutput(stdOutput.getOutputStream());
 				});
 				getParameters().getLogger().operationSuccess(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
-			} catch (ExecException var8) {
+			} catch (ExecException e) {
+				e.printStackTrace();
 				getParameters().getLogger().operationFailed(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
 				throw new RuntimeException(String.format("%s failed while %s.", getParameters().getName().get(), getParameters().getDescription().get()));
+			} finally {
+				IsolatableBuildOperationLogger.decrementUsage(getParameters().getLogger());
 			}
 		}
 
