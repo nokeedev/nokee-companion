@@ -14,6 +14,7 @@ plugins {
 	id 'dev.nokee.samples.copy-source'
 	id 'nokeebuild.publishing'
 	id 'nokeebuild.signing'
+	id 'nokeebuild.test-kit-directory-in-test-suites'
 	id 'nokeebuild.use-latest-java-lts-in-test-suites'
 	id 'nokeebuild.use-junit-platform-in-test-suites'
 }
