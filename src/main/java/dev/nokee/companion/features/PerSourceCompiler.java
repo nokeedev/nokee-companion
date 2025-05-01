@@ -63,6 +63,7 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 			result = result.or(delegateCompiler.execute(newSpec));
 		}
 
+		// TODO: Unpack the "multiple failures and show a similar exception as before
 		queue.await(); // force wait on the queue to make sure the operation logger contract is kept
 		// The queue may or may not be empty, ideally, we wouldn't wait but the native compiler infrastructure is clunky.
 
