@@ -504,7 +504,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				});
 				getParameters().getLogger().operationSuccess(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
 			} catch (ExecException e) {
-				e.printStackTrace();
 				getParameters().getLogger().operationFailed(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
 				throw new RuntimeException(String.format("%s failed while %s.", getParameters().getName().get(), getParameters().getDescription().get()));
 			} finally {
