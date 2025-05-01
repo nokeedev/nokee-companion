@@ -10,6 +10,7 @@ import org.gradle.nativeplatform.plugins.NativeComponentPlugin;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.Notation.plugin;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
@@ -240,4 +241,20 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		""".stripIndent()));
 		return result;
 	}
+
+	@GradleProject("project-with-many-source-options-buckets")
+	public static GradleBuildElement makeProjectWithManySourceOptionsBuckets() throws IOException {
+		GradleBuildElement build = makeProjectWithSourceFiles();
+		for (int i = 0; i < 400; ++i) {
+			Path file = build.file("src/main/cpp/file" + i + ".cpp");
+			Files.writeString(file, "int foo" + i + "() { return " + i + "; }");
+			build.getBuildFile().append(groovyDsl("""
+			compileTask.source('%s') { compilerArgs.add('-DMY_MACRO=%d') }
+		""".stripIndent().formatted(file.toString().substring(1), i)));
+		}
+
+		return build;
+	}
+
+
 }
