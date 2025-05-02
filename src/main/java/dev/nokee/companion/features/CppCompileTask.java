@@ -283,7 +283,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				getLogger().debug("Patching the build operation executor was successful, enjoy light speed compilation!");
 			} catch (Throwable e) {
 				// do not patch... serial execution == slower
-				getLogger().info("Could not patch the build operation executor, per-source option buckets will execute serially (aka slower).");
+				getLogger().info("Could not patch the build operation executor, per-source option buckets will execute serially (aka slower).", e);
 			}
 			//endregion
 		}
