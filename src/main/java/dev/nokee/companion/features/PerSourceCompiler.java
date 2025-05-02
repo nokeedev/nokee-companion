@@ -1,8 +1,6 @@
 package dev.nokee.companion.features;
 
 import dev.nokee.commons.gradle.tasks.options.ISourceKey;
-import org.gradle.api.logging.Logger;
-import org.gradle.api.logging.Logging;
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.WorkResults;
 import org.gradle.language.base.internal.compile.Compiler;
@@ -13,7 +11,6 @@ import java.io.File;
 import java.util.*;
 
 final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T> {
-	private static final Logger LOGGER = Logging.getLogger(PerSourceCompiler.class);
 	private final Compiler<T> delegateCompiler;
 	private final SpecProvider specProvider;
 	private final CompileSpecFactory<T> specFactory;
@@ -50,7 +47,6 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 
 		// Execute the default bucket
 		//   it will delete the "file to remove" while the per-source bucket will only compile
-		LOGGER.debug("Executing default bucket");
 		result = result.or(delegateCompiler.execute(defaultSpec));
 
 		// Execute each per-source bucket
@@ -64,7 +60,6 @@ final class PerSourceCompiler<T extends NativeCompileSpec> implements Compiler<T
 			newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
 
 			// Execute all new spec (i.e. per-source bucket)
-			LOGGER.debug("Executing bucket " + entry.getKey());
 			result = result.or(delegateCompiler.execute(newSpec));
 		}
 
