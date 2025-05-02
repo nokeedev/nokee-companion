@@ -14,6 +14,8 @@ import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
 import org.gradle.api.reflect.TypeOf;
@@ -296,6 +298,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	}
 
 	/*private*/ static abstract /*final*/ class WorkerBackedBuildOperationExecutor implements BuildOperationExecutor {
+		private static final Logger LOGGER = Logging.getLogger(WorkerBackedBuildOperationExecutor.class);
 		private final WorkQueue queue;
 
 		@Inject
@@ -331,6 +334,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 					assert o instanceof CommandLineToolInvocation;
 
 					CommandLineToolInvocation invocation = (CommandLineToolInvocation) o;
+					LOGGER.debug("Submitting " + invocation.description().build().getDisplayName());
 					queue.submit(CommandLineToolInvocationAction.class, spec -> {
 						spec.getEnvironment().set(invocation.getEnvironment());
 						spec.getPath().from(invocation.getPath());
@@ -462,6 +466,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			}
 		}
 
+		private static final Logger LOGGER = Logging.getLogger(CommandLineToolInvocationAction.class);
 		private final ExecOperations execOperations;
 
 		@Inject
@@ -475,6 +480,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			StreamByteBuffer errOutput = new StreamByteBuffer();
 			StreamByteBuffer stdOutput = new StreamByteBuffer();
 			try {
+				LOGGER.debug("Start exec operation " + getParameters().getDescription().get());
 				execOperations.exec(spec -> {
 					spec.executable(getParameters().getExecutable().get());
 					ProviderUtils.asJdkOptional(getParameters().getWorkDirectory()).ifPresent(it -> {
@@ -507,6 +513,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				getParameters().getLogger().operationFailed(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
 				throw new RuntimeException(String.format("%s failed while %s.", getParameters().getName().get(), getParameters().getDescription().get()));
 			} finally {
+				LOGGER.debug("Finish exec operation " + getParameters().getDescription().get());
 				IsolatableBuildOperationLogger.decrementUsage(getParameters().getLogger());
 			}
 		}

@@ -255,6 +255,4 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 
 		return build;
 	}
-
-
 }
