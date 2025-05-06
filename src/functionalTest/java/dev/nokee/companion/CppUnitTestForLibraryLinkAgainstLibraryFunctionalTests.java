@@ -46,13 +46,18 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	@Test
 	void objectFiles__canReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
-			dependencies {
-				testTestedComponent(project) {
-					attributes {
-						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
-					}
+			unitTest {
+				testedComponent {
+					linkAgainst(objects)
 				}
 			}
+//			dependencies {
+//				testTestedComponent(project) {
+//					attributes {
+//						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
+//					}
+//				}
+//			}
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
@@ -63,13 +68,18 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	@Test
 	void releaseobjectFiles__canReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
-			dependencies {
-				testTestedComponent(project) {
-					attributes {
-						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
-					}
+			unitTest {
+				testedComponent {
+					linkAgainst(objects)
 				}
 			}
+//			dependencies {
+//				testTestedComponent(project) {
+//					attributes {
+//						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
+//					}
+//				}
+//			}
 			unitTest {
 				binaries.configureEach {
 					ext.optimized = true
@@ -85,13 +95,18 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	@Test
 	void product__zzcanReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
-			dependencies {
-				testTestedComponent(project) {
-					attributes {
-						attribute(Attribute.of('dev.nokee.testable-type', String), 'library')
-					}
+			unitTest {
+				testedComponent {
+					linkAgainst(product)
 				}
 			}
+//			dependencies {
+//				testTestedComponent(project) {
+//					attributes {
+//						attribute(Attribute.of('dev.nokee.testable-type', String), 'library')
+//					}
+//				}
+//			}
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
@@ -101,13 +116,18 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	@Test
 	void sourceFiles__zzzcanReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
-			dependencies {
-				testTestedComponent(project) {
-					attributes {
-						attribute(Attribute.of('dev.nokee.testable-type', String), 'sources')
-					}
+			unitTest {
+				testedComponent {
+					linkAgainst(sources)
 				}
 			}
+//			dependencies {
+//				testTestedComponent(project) {
+//					attributes {
+//						attribute(Attribute.of('dev.nokee.testable-type', String), 'sources')
+//					}
+//				}
+//			}
 		"""));
 
 //		runner.withTasks("outgoingVariants").build();
