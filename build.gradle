@@ -24,9 +24,9 @@ version = '1.0-milestone-24'
 description = 'Quality-of-life enhancements for Gradle core native plugins.'
 
 repositories {
+	mavenLocal()
 	mavenCentral()
 	gradlePluginPortal()
-	mavenLocal()
 }
 
 java {
