@@ -51,13 +51,6 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 					linkAgainst(objects)
 				}
 			}
-//			dependencies {
-//				testTestedComponent(project) {
-//					attributes {
-//						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
-//					}
-//				}
-//			}
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
@@ -73,13 +66,6 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 					linkAgainst(objects)
 				}
 			}
-//			dependencies {
-//				testTestedComponent(project) {
-//					attributes {
-//						attribute(Attribute.of('dev.nokee.testable-type', String), 'objects')
-//					}
-//				}
-//			}
 			unitTest {
 				binaries.configureEach {
 					ext.optimized = true
@@ -100,13 +86,6 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 					linkAgainst(product)
 				}
 			}
-//			dependencies {
-//				testTestedComponent(project) {
-//					attributes {
-//						attribute(Attribute.of('dev.nokee.testable-type', String), 'library')
-//					}
-//				}
-//			}
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
@@ -121,19 +100,10 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 					linkAgainst(sources)
 				}
 			}
-//			dependencies {
-//				testTestedComponent(project) {
-//					attributes {
-//						attribute(Attribute.of('dev.nokee.testable-type', String), 'sources')
-//					}
-//				}
-//			}
 		"""));
 
-//		runner.withTasks("outgoingVariants").build();
 		BuildResult result = runner.withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
 		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
-//		throw new UnsupportedOperationException();
 	}
 }

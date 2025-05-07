@@ -38,6 +38,7 @@ import org.gradle.language.nativeplatform.*;
 import org.gradle.nativeplatform.MachineArchitecture;
 import org.gradle.nativeplatform.OperatingSystemFamily;
 import org.gradle.nativeplatform.tasks.AbstractLinkTask;
+import org.gradle.nativeplatform.tasks.InstallExecutable;
 import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 import org.gradle.nativeplatform.test.cpp.CppTestSuite;
 
@@ -68,6 +69,11 @@ import static dev.nokee.companion.CppSourceFiles.cppSourceOf;
  */
 public final class CppUnitTestExtensions {
 
+	public static CppTestSuite testedComponent(CppTestSuite testSuite, Action<? super TestedComponentExtension> action) {
+		((ExtensionAware) testSuite).getExtensions().configure("testedComponent", action);
+		return testSuite;
+	}
+
 	/**
 	 * Returns a property to configure the tested component of a C++ test suite.
 	 * Note that this property is distinct from Gradle's internal property of the same name.
@@ -96,8 +102,6 @@ public final class CppUnitTestExtensions {
 
 	@SuppressWarnings("UnstableApiUsage")
 	static abstract /*final*/ class Rule implements Plugin<Project> {
-		private static final String TESTABLE_OBJECTS_PROPERTY_NAME = "testableObjects";
-		private static final String TESTED_BINARY_EXTENSION_NAME = "testedBinary";
 		private static final String TESTED_COMPONENT_EXTENSION_NAME = "testedComponent";
 
 		private final ObjectFactory objects;
@@ -116,16 +120,6 @@ public final class CppUnitTestExtensions {
 			this.dependencyFactory = objects.newInstance(DependencyFactory.class);
 			this.configurationRegistry = objects.newInstance(ConfigurationRegistry.class);
 		}
-
-		//region For displayName on Provider instance
-		/*private*/ interface TestedComponentPropertyProvider {
-			Property<ProductionCppComponent> getTestedComponent();
-		}
-
-		/*private*/ interface TestedBinaryPropertyProvider {
-			Property<CppBinary> getTestedBinary();
-		}
-		//endregion
 
 		private static String libraryElementsOf(CppBinary binary) {
 			if (binary instanceof CppStaticLibrary) {
@@ -146,6 +140,7 @@ public final class CppUnitTestExtensions {
 
 			@Override
 			public void transform(TransformOutputs outputs) {
+				System.out.println("TRANSFORM OBJECT_FILES");
 				try {
 					Files.walkFileTree(getInputArtifact().get().getAsFile().toPath(), new SimpleFileVisitor<Path>() {
 						@Override
@@ -157,6 +152,7 @@ public final class CppUnitTestExtensions {
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
+				System.out.println("BLAH");
 			}
 		}
 
@@ -166,7 +162,7 @@ public final class CppUnitTestExtensions {
 
 			@Override
 			public void execute(MultipleCandidatesDetails<LibraryElements> details) {
-				Map<String, LibraryElements> vals = details.getCandidateValues().stream().collect(Collectors.toMap(it -> it.getName(), it -> it));
+				Map<String, LibraryElements> vals = details.getCandidateValues().stream().collect(Collectors.toMap(Named::getName, it -> it));
 				vals.remove("objects");
 				LibraryElements result = vals.get(LibraryElements.DYNAMIC_LIB);
 				if (result == null) {
@@ -190,11 +186,92 @@ public final class CppUnitTestExtensions {
 			}
 		}
 
+
+		static abstract class LibElemDisamEx implements AttributeDisambiguationRule<String> {
+			@Inject
+			public LibElemDisamEx() {}
+
+			@Override
+			public void execute(MultipleCandidatesDetails<String> details) {
+				System.out.println("DISAM " + details);
+				if (details.getConsumerValue().equals("dev.nokee.linkable-objects")) {
+					if (details.getCandidateValues().contains("dev.nokee.linkable-objects")) {
+						details.closestMatch("dev.nokee.linkable-objects");
+					} else if (details.getCandidateValues().contains("com.apple.mach-o-dylib")) {
+						details.closestMatch("com.apple.mach-o-dylib");
+					}
+				}
+			}
+		}
+
+		static abstract class LibElemCompatEx implements AttributeCompatibilityRule<String> {
+			@Inject
+			public LibElemCompatEx() {}
+
+			@Override
+			public void execute(CompatibilityCheckDetails<String> details) {
+				System.out.println("COMAPT " + details.getProducerValue() + " -- " + details.getConsumerValue());
+				if (details.getConsumerValue().equals("dev.nokee.linkable-objects")) {
+					System.out.println("WAT??");
+					if (Arrays.asList("dylib", "com.apple.mach-o-dylib", "public.object-code"/*, "public.object-code-directory"*/).contains(details.getProducerValue())) {
+						details.compatible();
+					}
+//				} else if (details.getConsumerValue().equals("public.object-code-directory")) {
+//					if (Arrays.asList("public.object-code").contains(details.getProducerValue())) {
+//						details.compatible();
+//					}
+				}
+			}
+		}
+
 		@Override
 		public void apply(Project project) {
 			project.getPluginManager().apply(CppBinaryConfigurationRule.class);
 			project.getPluginManager().apply(CppBinaryProperties.Rule.class);
 			project.getPluginManager().apply(TestableElementsPlugin.class);
+
+			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
+				project.getComponents().withType(ProductionCppComponent.class).configureEach(component -> {
+					component.getBinaries().configureEach(CppBinary.class, binary -> {
+						if (binary instanceof ComponentWithLinkFile) {
+							configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
+								configuration.outgoing(outgoing -> {
+//									outgoing.getArtifacts().clear();
+//									outgoing.artifact(((ComponentWithLinkFile) binary).getLinkFile(), it -> it.setType("com.apple.mach-o-dylib"));
+									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+//										artifact.setType("public.unix-shared-library"); // FIXME: set correct type
+										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
+										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
+										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
+									});
+								});
+							});
+						}
+
+						if (binary instanceof ComponentWithRuntimeFile) {
+							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
+								configuration.outgoing(outgoing -> {
+									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+//										artifact.setType("public.unix-executable"); // FIXME: set correct type
+										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
+									});
+								});
+							});
+						}
+
+						if (binary instanceof ComponentWithExecutable) {
+							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
+								configuration.outgoing(outgoing -> {
+									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+//										artifact.setType("public.unix-executable"); // FIXME: set correct type
+										artifact.setType("com.apple.mach-o-executable"); // FIXME: set correct type
+									});
+								});
+							});
+						}
+					});
+				});
+			});
 
 
 			Plugins.forProject(project).whenPluginApplied("cpp-unit-test", () -> {
@@ -203,13 +280,16 @@ public final class CppUnitTestExtensions {
 				project.getDependencies().registerTransform(UnpackObjectFiles.class, spec -> {
 					spec.getFrom()
 						.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, LibraryElements.OBJECTS))
-//						.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "objects-directory")
+						.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "public.object-code-directory")
 						;
 					spec.getTo()
 						.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, LibraryElements.OBJECTS))
-//						.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "linkable-objects")
+						.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "public.object-code")
 						;
 				});
+
+				project.getDependencies().getAttributesSchema().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).getCompatibilityRules().add(LibElemCompatEx.class);
+				project.getDependencies().getAttributesSchema().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).getDisambiguationRules().add(LibElemDisamEx.class);
 
 				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getCompatibilityRules().add(LibElemCompat.class);
 				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getDisambiguationRules().add(LibElemDisam.class);
@@ -234,95 +314,6 @@ public final class CppUnitTestExtensions {
 						});
 					});
 				});
-
-//				project.getComponents().withType(ProductionCppComponent.class).configureEach(component -> {
-//					component.getBinaries().configureEach(binary -> {
-////						// objects
-////
-////						// TODO: For application, create a linkElements configuration with visibility set to false to expose the objects
-//						configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
-//							// TODO: attach objects as variant
-//							configuration.outgoing(outgoing -> {
-//								outgoing.attributes(attributes -> {
-//									attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, libraryElementsOf(binary)));
-//								});
-//								outgoing.variants(variants -> {
-//									variants.create("objects", variant -> {
-//										variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "objects").toString(), Sync.class, task -> {
-//											task.from(objectsOf(binary));
-//											task.setDestinationDir(project.file(project.getLayout().getBuildDirectory().dir("generated-objs/main/cpp")));
-//										}), it -> it.setType("objects-directory"));
-//										variant.attributes(attributes -> {
-//											attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, LibraryElements.OBJECTS));
-//										});
-//										// TODO: Transforms directory into object-files
-//									});
-//									variants.create("sources", variant -> {
-//										variant.attributes(attributes -> {
-//											attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "cpp-sources"));
-//										});
-//									});
-//								});
-//							});
-//						});
-//						configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
-//							// TODO: attach objects as variant
-//							configuration.outgoing(outgoing -> {
-//								outgoing.attributes(attributes -> {
-//									attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, libraryElementsOf(binary)));
-//								});
-//								outgoing.variants(variants -> {
-//									variants.create("objects", variant -> {
-//										variant.attributes(attributes -> {
-//											attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, LibraryElements.OBJECTS));
-//										});
-//									});
-//									variants.create("sources", variant -> {
-//										variant.attributes(attributes -> {
-//											attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "cpp-sources"));
-//										});
-//									});
-//								});
-//							});
-//						});
-//						configurationRegistry.consumable(CppNames.of(binary).configurationName("sourceElements")).configure(configuration -> {
-//							configuration.extendsFrom(configurations.getByName(CppNames.of(binary).implementationConfigurationName().toString()));
-//							configuration.attributes(attributes -> {
-//								attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, "cplusplus-testable-sources"));
-//								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(new ShadowProperty<>(binary, "optimized", binary::isOptimized)::get));
-//								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(new ShadowProperty<>(binary, "debuggable", binary::isDebuggable)::get));
-//								attributes.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE, binary.getTargetMachine().getArchitecture());
-//								attributes.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE, binary.getTargetMachine().getOperatingSystemFamily());
-////								attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "cpp-sources"));
-//
-////								attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.class, "external"));
-////								attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, "verification"));
-////								attributes.attribute(VerificationType.VERIFICATION_TYPE_ATTRIBUTE, objects.named(VerificationType.class, "main-sources"));
-//							});
-//							configuration.outgoing(outgoing -> {
-//								outgoing.getVariants().create("source", variant -> {
-//									variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "sourceElements").toString(), Sync.class, task -> {
-//										task.from(CppSourceFiles.cppSourceOf(binary));
-//										task.setDestinationDir(project.file(project.getLayout().getBuildDirectory().dir("generated-src/main/cpp")));
-//									}));
-//									variant.attributes(attributes -> {
-//										attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "cpp-sources"));
-//									});
-//								});
-//								outgoing.getVariants().create("objects", variant -> {
-//									variant.attributes(attributes -> {
-//										attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, LibraryElements.OBJECTS));
-//									});
-//								});
-//								outgoing.getVariants().create("link", variant -> {
-//									variant.attributes(attributes -> {
-//										attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "linkable-objects"));
-//									});
-//								});
-//							});
-//						});
-//					});
-//				});
 
 				project.getComponents().withType(CppTestSuite.class).configureEach(testSuite -> {
 					TestedComponentExtension testedComponentExtension = ((ExtensionAware) testSuite).getExtensions().create(TESTED_COMPONENT_EXTENSION_NAME, TestedComponentExtension.class);
@@ -361,7 +352,6 @@ public final class CppUnitTestExtensions {
 							configuration.extendsFrom(testedComponent.get());
 							configuration.attributes(attributes -> {
 								attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, "cplusplus-sources"));
-//								attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, "cplusplus-sources"));
 								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(testExecutable)::get));
 								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(testExecutable)::get));
 								attributes.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE, testExecutable.getTargetMachine().getArchitecture());
@@ -373,7 +363,7 @@ public final class CppUnitTestExtensions {
 						});
 						cppSourceOf(testExecutable).mut(testedSources.map(it -> {
 							return it.getIncoming().artifactView(v -> v.attributes(attributes -> {
-								attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "cpp-source-directory");
+								attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "public.c-plus-plus-source-directory");
 							})).getArtifacts().getArtifactFiles();
 						}).get().getAsFileTree()::plus);
 
@@ -420,11 +410,18 @@ public final class CppUnitTestExtensions {
 //						objectsOf(testExecutable).mut(testedObjects.map(it -> it.getIncoming().artifactView(t -> t.attributes(attributes -> {
 //							attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "native-library"));
 //						})).getArtifacts().getArtifactFiles()).get()::plus);
+
 						configurations.named(nativeLinkConfigurationName(testExecutable)).configure(configuration -> {
 							configuration.attributes(attributes -> {
 								attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "linkable-objects"));
 							});
 						});
+
+//						configurations.named(nativeRuntimeConfigurationName(testExecutable)).configure(configuration -> {
+//							configuration.attributes(attributes -> {
+//								attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "dynamic-lib"));
+//							});
+//						});
 
 						tasks.named(linkTaskName(testExecutable), AbstractLinkTask.class).configure(task -> {
 							task.doFirst(__ -> {
@@ -440,39 +437,46 @@ public final class CppUnitTestExtensions {
 //								}
 							});
 //							task.getLibs().from(libs);
-							task.getLibs().setFrom(configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().getArtifacts().getResolvedArtifacts().map(it -> {
+
+							ArtifactView view = configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().artifactView(it -> {
+								it.attributes(attributes -> {
+									attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "dev.nokee.linkable-objects");
+								});
+							});
+							task.getLibs().setFrom(view.getArtifacts().getResolvedArtifacts().map(it -> {
 								List<Object> result = new ArrayList<>();
 								for (ResolvedArtifactResult t : it) {
-//									System.out.println(t);
-//									System.out.println(objects.newInstance(Attributes.Extension.class).of(t.getVariant()).getAsMap().get());
-//									System.out.println(t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE));
-									if (t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).equals("objects-directory")) {
-										result.add(objects.fileCollection().from(t.getFile()).getAsFileTree());
-									} else {
-										result.add(t.getFile());
-									}
+									System.out.println(t);
+									System.out.println(objects.newInstance(Attributes.Extension.class).of(t.getVariant()).getAsMap().get());
+									System.out.println(t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE));
+									result.add(t.getFile());
 								}
 								return result;
 							}));
+							task.getLibs().builtBy(view.getFiles());
+
+//							task.getLibs().setFrom(configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().getArtifacts().getResolvedArtifacts().map(it -> {
+//								List<Object> result = new ArrayList<>();
+//								for (ResolvedArtifactResult t : it) {
+////									System.out.println(t);
+////									System.out.println(objects.newInstance(Attributes.Extension.class).of(t.getVariant()).getAsMap().get());
+////									System.out.println(t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE));
+//									if (t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).equals("public.object-code-directory")) {
+//										result.add(objects.fileCollection().from(t.getFile()).getAsFileTree());
+//									} else {
+//										result.add(t.getFile());
+//									}
+//								}
+//								return result;
+//							}));
+						});
+						tasks.named(installTaskName(testExecutable), InstallExecutable.class).configure(task -> {
+							task.setLibs(configurations.getByName(nativeRuntimeConfigurationName(testExecutable)).getIncoming().getArtifacts().getArtifactFiles());
 						});
 					});
 				});
 
 				project.getComponents().withType(CppTestSuite.class).configureEach(testSuite -> {
-//					final Property<ProductionCppComponent> testedComponent = objects.newInstance(TestedComponentPropertyProvider.class).getTestedComponent();
-//					testedComponent.set(providers.provider(() -> {
-//						if (project.getPlugins().hasPlugin("cpp-application")) {
-//							return project.getExtensions().getByType(CppApplication.class);
-//						} else if (project.getPlugins().hasPlugin("cpp-library")) {
-//							return project.getExtensions().getByType(CppLibrary.class);
-//						} else {
-//							return null;
-//						}
-//					}));
-//					((ExtensionAware) testSuite).getExtensions().add(TESTED_COMPONENT_EXTENSION_NAME, testedComponent);
-
-//					((DefaultCppTestSuite) testSuite).getTestedComponent().set((CppComponent) null);
-
 					// Detach implementation configuration from testedComponent
 					testSuite.getBinaries().whenElementFinalized(CppTestExecutable.class, testExecutable -> {
 						configurations.named(implementationConfigurationName(testExecutable)).configure(it -> {
@@ -481,48 +485,12 @@ public final class CppUnitTestExtensions {
 					});
 
 					testSuite.getBinaries().whenElementKnown(CppTestExecutable.class, testExecutable -> {
-//						final Property<CppBinary> testedBinary = objects.newInstance(TestedBinaryPropertyProvider.class).getTestedBinary();
-//						testedBinary.set(testedComponent.map(new TestedBinaryMapper(testExecutable) {
-//							@Override
-//							protected boolean isTestedBinary(CppTestExecutable testExecutable, ProductionCppComponent mainComponent, CppBinary testedBinary) {
-//								return testedBinary.getTargetMachine().getOperatingSystemFamily().getName().equals(testExecutable.getTargetMachine().getOperatingSystemFamily().getName())
-//									&& testedBinary.getTargetMachine().getArchitecture().getName().equals(testExecutable.getTargetMachine().getArchitecture().getName())
-//									&& !testedBinary.isOptimized()
-//									&& hasDevelopmentBinaryLinkage(mainComponent, testedBinary);
-//							}
-//						}));
-//						((ExtensionAware) testExecutable).getExtensions().add(TESTED_BINARY_EXTENSION_NAME, testedBinary);
-//
-//						// To allow reassignment, we must use extra properties
-//						((ExtensionAware) testExecutable).getExtensions().getExtraProperties().set(TESTABLE_OBJECTS_PROPERTY_NAME, objects.fileCollection().from((Callable<?>) () -> objectsOf(testedBinaryOf(testExecutable).get())));
-//
-//						// Recreate testable objects
-//						final ConfigurableFileCollection testableObjects = objects.fileCollection();
-//						testableObjects.from((Callable<?>) () -> {
-//							final ExtraPropertiesExtension testExecutableExts = ((ExtensionAware) testExecutable).getExtensions().getExtraProperties();
-//							if (testExecutableExts.has(TESTABLE_OBJECTS_PROPERTY_NAME)) {
-//								return testExecutableExts.get(TESTABLE_OBJECTS_PROPERTY_NAME);
-//							}
-//							return Collections.emptyList();
-//						});
-//
 //						// In cases where the task `relocateMainFor*` doesn't exist (for some reason),
 //						//   we can configure the task only when it appears (by name).
 //						tasks.withType(UnexportMainSymbol.class).configureEach(named(relocateMainForBinaryTaskName(testExecutable)::equals).using(Task::getName).whenSatisfied(task -> {
 //							task.getObjects().setFrom(testableObjects);
 //						}));
 //
-//						// As we cannot use addAllLater because we are using `.all` hook to remove the "core testable objects",
-//						//   we use an FileCollection indirection that will either return the testableObjects or an empty list.
-//						final ConfigurableFileCollection actualTestableObjects = objects.fileCollection().from(testedComponentOf(testSuite).map(mainComponent -> {
-//							if (mainComponent instanceof CppApplication) {
-//								return tasks.named(relocateMainForBinaryTaskName(testExecutable), UnexportMainSymbol.class)
-//									.map(UnexportMainSymbol::getRelocatedObjects);
-//							} else {
-//								return testableObjects;
-//							}
-//						}).orElse(Collections.emptyList()));
-
 						// Detach testedObjects from nativeLinkTest
 						// Assuming a single FileCollectionDependency which should be the Gradle core object files.
 						//   In cases where this code executes **before** normal Gradle code (for some reason),
@@ -536,11 +504,6 @@ public final class CppUnitTestExtensions {
 								nativeLink.getDependencies().remove(dependencyCandidate);
 							}
 						});
-
-//						// There may-or-may-not have "testable objects" for this test suite
-//						final NamedDomainObjectProvider<Configuration> componentUnderTest = configurationRegistry.dependencyScope(CppNames.of(testExecutable).configurationName("componentUnderTest").toString());
-//						componentUnderTest.configure(it -> it.getDependencies().addAllLater(objects.listProperty(Dependency.class).value(Collections.singletonList(dependencyFactory.create(actualTestableObjects))).orElse(Collections.emptyList())));
-//						nativeLink.extendsFrom(componentUnderTest.get());
 					});
 				});
 			});
@@ -636,8 +599,8 @@ public final class CppUnitTestExtensions {
 					testable.getRuntimeElements().configure(it -> it.extendsFrom(configurations.getByName(runtimeElementsConfigurationName(binary)).getExtendsFrom().toArray(new Configuration[0])));
 
 					testable.getSourceElements().configure(it -> attributes.of(it, details -> {
-						details.attribute(CppBinary.OPTIMIZED_ATTRIBUTE).of(providers.provider(ShadowProperty.of(binary, "optimized", binary::isOptimized)::get));
-						details.attribute(CppBinary.DEBUGGABLE_ATTRIBUTE).of(providers.provider(ShadowProperty.of(binary, "debuggable", binary::isDebuggable)::get));
+						details.attribute(CppBinary.OPTIMIZED_ATTRIBUTE).of(providers.provider(optimizationOf(binary)::get));
+						details.attribute(CppBinary.DEBUGGABLE_ATTRIBUTE).of(providers.provider(debuggabilityOf(binary)::get));
 						details.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE).of(binary.getTargetMachine().getArchitecture());
 						details.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE).of(binary.getTargetMachine().getOperatingSystemFamily());
 					}));
@@ -659,7 +622,7 @@ public final class CppUnitTestExtensions {
 							variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "sources").toString(), Sync.class, task -> {
 								task.from(CppSourceFiles.cppSourceOf(binary));
 								task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
-							}), spec -> spec.setType("cpp-source-directory"));
+							}), spec -> spec.setType("public.c-plus-plus-source-directory"));
 						});
 						it.getVariants().create("private-sources", variant -> {
 							attributes.of(variant, details -> {
@@ -670,34 +633,8 @@ public final class CppUnitTestExtensions {
 						it.getVariants().create("objects", variant -> { /* nothing */ });
 						it.getVariants().create("library", variant -> { /* nothing */ }); // TODO: SHOULD NOT EXISTS ON APP
 					}));
-//					testable.getCppApiElements().configure(outgoing(it -> {
-//						it.getVariants().configureEach(variant -> attributes.of(variant, details -> {
-//							details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of(variant.getName());
-//						}));
-//
-//						if (component instanceof CppLibrary) {
-//							TaskProvider<Sync> syncPublicHeaders = tasks.register(CppNames.of(binary).taskName("sync", "publicHeaders").toString(), Sync.class, task -> {
-//								task.from(((CppLibrary) component).getPublicHeaderFiles());
-//								task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
-//							});
-//							it.getVariants().configureEach(variant -> variant.artifact(syncPublicHeaders, spec -> spec.setType(ArtifactTypeDefinition.DIRECTORY_TYPE)));
-//						}
-//
-//						it.getVariants().create("sources", variant -> {
-//							variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "privateHeaders").toString(), Sync.class, task -> {
-//								FileCollection privateHeaders = component.getHeaderFiles();
-//								if (component instanceof CppLibrary) {
-//									privateHeaders = privateHeaders.minus(((CppLibrary) component).getPublicHeaderFiles());
-//								}
-//								task.from(privateHeaders);
-//								task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
-//							}), spec -> spec.setType(ArtifactTypeDefinition.DIRECTORY_TYPE));
-//						});
-//						it.getVariants().create("objects", variant -> {});
-//						it.getVariants().create("library", variant -> {}); // TODO: SHOULD NOT EXISTS ON APP
-//					}));
 					testable.getLinkElements().configure(it -> attributes.of(it, details -> {
-						details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of("linkable-objects");
+//						details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of("linkable-objects");
 					}));
 					testable.getLinkElements().configure(outgoing(it -> {
 						it.getVariants().configureEach(variant -> attributes.of(variant, details -> {
@@ -712,16 +649,16 @@ public final class CppUnitTestExtensions {
 							variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "objects").toString(), Sync.class, task -> {
 								task.from(objectsOf(binary));
 								task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
-							}), spec -> spec.setType("objects-directory"));
+							}), spec -> spec.setType("public.object-code-directory"));
 						});
-							it.getVariants().create("library", variant -> {
-								attributes.of(variant, details -> {
-									details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of(LibraryElements.DYNAMIC_LIB);
-								});
-						if (component instanceof CppLibrary) {
-								variant.artifact(((ComponentWithLinkFile) binary).getLinkFile());  // TODO: SHOULD NOT EXISTS ON APP
-						}
+						it.getVariants().create("library", variant -> {
+							attributes.of(variant, details -> {
+								details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of(LibraryElements.DYNAMIC_LIB);
 							});
+							if (component instanceof CppLibrary) {
+								variant.artifact(((ComponentWithLinkFile) binary).getLinkFile(), t -> t.setType("com.apple.mach-o-dylib"));  // TODO: SHOULD NOT EXISTS ON APP
+							}
+						});
 					}));
 					testable.getRuntimeElements().configure(outgoing(it -> {
 						it.getVariants().configureEach(variant -> attributes.of(variant, details -> {
@@ -742,8 +679,8 @@ public final class CppUnitTestExtensions {
 				}
 
 				private void binaryAttributes(Attributes.Details details) {
-					details.attribute(CppBinary.DEBUGGABLE_ATTRIBUTE).of(providers.provider(ShadowProperty.of(binary, "debuggable", binary::isDebuggable)::get));
-					details.attribute(CppBinary.OPTIMIZED_ATTRIBUTE).of(providers.provider(ShadowProperty.of(binary, "optimized", binary::isOptimized)::get));
+					details.attribute(CppBinary.DEBUGGABLE_ATTRIBUTE).of(providers.provider(debuggabilityOf(binary)::get));
+					details.attribute(CppBinary.OPTIMIZED_ATTRIBUTE).of(providers.provider(optimizationOf(binary)::get));
 					details.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE).of(binary.getTargetMachine().getArchitecture());
 					details.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE).of(binary.getTargetMachine().getOperatingSystemFamily());
 				}
@@ -765,7 +702,6 @@ public final class CppUnitTestExtensions {
 			this.runtimeElements = configurations.consumable(names.configurationName("runtimeElements"));
 
 			sourceElements.configure(it -> it.setVisible(false));
-//			cppApiElements.configure(it -> it.setVisible(false));
 			linkElements.configure(it -> it.setVisible(false));
 			runtimeElements.configure(it -> it.setVisible(false));
 
@@ -780,10 +716,12 @@ public final class CppUnitTestExtensions {
 //			}));
 			linkElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.NATIVE_LINK);
+//				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
 //				details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of("none");
 			}));
 			runtimeElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.NATIVE_RUNTIME);
+//				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
 //				details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of("none");
 			}));
 		}
