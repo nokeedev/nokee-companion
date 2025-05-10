@@ -334,7 +334,7 @@ public final class CppUnitTestExtensions {
 					NamedDomainObjectProvider<Configuration> testedComponent = configurationRegistry.dependencyScope(CppNames.of(testSuite).configurationName("testedComponent"));
 					testedComponent.configure(configuration -> {
 						final Provider<ModuleDependency> dependency = testedComponentExtension.testedComponent.map(it -> dependencyFactory.create(project).attributes(attributes -> {
-							attributes.attributeProvider(Attribute.of("dev.nokee.testable-type", String.class), testedComponentExtension.testableType);
+							attributes.attributeProvider(Attribute.of("dev.nokee.testable-type", String.class), testedComponentExtension.testableTypeProvider);
 						}));
 						configuration.getDependencies().addAllLater(objects.listProperty(Dependency.class).value(dependency.map(Collections::singletonList).orElse(Collections.emptyList())));
 					});
@@ -523,10 +523,18 @@ public final class CppUnitTestExtensions {
 	public static class TestedComponentExtension {
 		private final Property<ProductionCppComponent> testedComponent;
 		private final Property<String> testableType;
+		private final Provider<String> testableTypeProvider;
 
 		public TestedComponentExtension(ObjectFactory objects) {
 			this.testedComponent = objects.property(ProductionCppComponent.class);
 			this.testableType = objects.property(String.class).convention("objects");
+
+			this.testableTypeProvider = testedComponent.zip(testableType, (a,b) -> {
+				if (a instanceof CppApplication && Arrays.asList("sources", "library").contains(b)) {
+					throw new UnsupportedOperationException(String.format("Cannot integrate as %s for application", b));
+				}
+				return b;
+			});
 		}
 
 		public TestedComponentExtension from(Provider<? extends ProductionCppComponent> testedComponent) {
