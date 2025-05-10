@@ -6,10 +6,7 @@ import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.gradle.attributes.Attributes;
 import dev.nokee.commons.names.CppNames;
 import dev.nokee.commons.names.Names;
-import org.gradle.api.Action;
-import org.gradle.api.NamedDomainObjectProvider;
-import org.gradle.api.Plugin;
-import org.gradle.api.Project;
+import org.gradle.api.*;
 import org.gradle.api.artifacts.*;
 import org.gradle.api.artifacts.result.ResolvedArtifactResult;
 import org.gradle.api.artifacts.transform.InputArtifact;
@@ -44,7 +41,6 @@ import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 import org.gradle.nativeplatform.test.cpp.CppTestSuite;
 
 import javax.inject.Inject;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -56,7 +52,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.*;
-import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 import static dev.nokee.commons.names.CppNames.*;
@@ -228,6 +223,19 @@ public final class CppUnitTestExtensions {
 			}
 		}
 
+		static abstract class TestableTypeCompat implements AttributeCompatibilityRule<String> {
+			@Inject
+			public TestableTypeCompat() {}
+
+			@Override
+			public void execute(CompatibilityCheckDetails<String> details) {
+				System.out.println("??? COMAPT " + details.getProducerValue() + " -- " + details.getConsumerValue());
+				if (Arrays.asList(details.getProducerValue().split("\\+")).contains(details.getConsumerValue())) {
+					details.compatible();
+				}
+			}
+		}
+
 		@Override
 		public void apply(Project project) {
 			project.getPluginManager().apply(CppBinaryConfigurationRule.class);
@@ -298,6 +306,8 @@ public final class CppUnitTestExtensions {
 				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getCompatibilityRules().add(LibElemCompat.class);
 				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getDisambiguationRules().add(LibElemDisam.class);
 
+				project.getDependencies().getAttributesSchema().attribute(Attribute.of("dev.nokee.testable-type", String.class)).getCompatibilityRules().add(TestableTypeCompat.class);
+
 				// Rewire compileIncludePath
 				project.getComponents().withType(CppTestSuite.class).configureEach(testSuite -> {
 					testSuite.getBinaries().whenElementKnown(CppTestExecutable.class, testExecutable -> {
@@ -332,23 +342,14 @@ public final class CppUnitTestExtensions {
 					}));
 
 					NamedDomainObjectProvider<Configuration> testedComponent = configurationRegistry.dependencyScope(CppNames.of(testSuite).configurationName("testedComponent"));
+					testedComponent.configure(configuration -> configuration.setVisible(false));
 					testedComponent.configure(configuration -> {
 						final Provider<ModuleDependency> dependency = testedComponentExtension.testedComponent.map(it -> dependencyFactory.create(project).attributes(attributes -> {
 							attributes.attributeProvider(Attribute.of("dev.nokee.testable-type", String.class), testedComponentExtension.testableTypeProvider);
 						}));
 						configuration.getDependencies().addAllLater(objects.listProperty(Dependency.class).value(dependency.map(Collections::singletonList).orElse(Collections.emptyList())));
 					});
-
 					testSuite.getImplementationDependencies().extendsFrom(testedComponent.get());
-
-//					NamedDomainObjectProvider<Configuration> testedSources = configurationRegistry.resolvable(CppNames.of(testSuite).configurationName(it -> it.prefix("testedSources")));
-//					testedSources.configure(configuration -> {
-//						configuration.extendsFrom(testedComponent.get());
-//						configuration.attributes(attributes -> {
-//							attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "native-library"));
-//						});
-//					});
-//					cppSourceOf(testSuite).mut(testedSources.get()::plus);
 
 					testSuite.getBinaries().configureEach(testExecutable -> {
 						NamedDomainObjectProvider<Configuration> testedSources = configurationRegistry.resolvable(CppNames.of(testExecutable).configurationName(it -> it.prefix("testedSources")));
@@ -383,71 +384,7 @@ public final class CppUnitTestExtensions {
 //							})).getArtifacts().getArtifactFiles();
 //						})::get)::plus);
 
-//						compileTask(testExecutable).configure(task -> {
-//							task.doFirst(__ -> {
-//								for (File include : task.getIncludes()) {
-//									System.out.println("--> " + include);
-//								}
-//
-//								for (File file : testedSources.map(it -> {
-//									return it.getIncoming().artifactView(v -> v.attributes(attributes -> {
-//										attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE);
-//									})).getArtifacts().getArtifactFiles();
-//								}).get().getFiles()) {
-//									System.out.println(file);
-//								}
-//							});
-//							task.includes(testedSources.map(it -> {
-//								return it.getIncoming().artifactView(v -> v.attributes(attributes -> {
-//									attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE);
-//								})).getArtifacts().getArtifactFiles();
-//							}).get());
-//						});
-//
-//
-//
-//						NamedDomainObjectProvider<Configuration> testedObjects = configurationRegistry.resolvable(CppNames.of(testExecutable).configurationName(it -> it.prefix("testedObjects")));
-//						testedObjects.configure(configuration -> {
-//							configuration.extendsFrom(testedComponent.get());
-//							configuration.attributes(attributes -> {
-//								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(ShadowProperty.of(testExecutable, "optimized", testExecutable::isOptimized)::get));
-//								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(ShadowProperty.of(testExecutable, "debuggable", testExecutable::isDebuggable)::get));
-//								attributes.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE, testExecutable.getTargetMachine().getArchitecture());
-//								attributes.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE, testExecutable.getTargetMachine().getOperatingSystemFamily());
-//								attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "native-library"));
-//							});
-//						});
-//						objectsOf(testExecutable).mut(testedObjects.map(it -> it.getIncoming().artifactView(t -> t.attributes(attributes -> {
-//							attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "native-library"));
-//						})).getArtifacts().getArtifactFiles()).get()::plus);
-
-//						configurations.named(nativeLinkConfigurationName(testExecutable)).configure(configuration -> {
-//							configuration.attributes(attributes -> {
-//								attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "linkable-objects"));
-//							});
-//						});
-
-//						configurations.named(nativeRuntimeConfigurationName(testExecutable)).configure(configuration -> {
-//							configuration.attributes(attributes -> {
-//								attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "dynamic-lib"));
-//							});
-//						});
-
 						tasks.named(linkTaskName(testExecutable), AbstractLinkTask.class).configure(task -> {
-//							task.doFirst(__ -> {
-//								for (File file : configurations.getByName(nativeLinkConfigurationName(testExecutable))) {
-//									System.out.println("-=-=> " + file);
-//								}
-////								for (File file : configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().artifactView(it -> {
-////									it.attributes(attributes -> {
-////										attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "linkable-objects");
-////									});
-////								}).getFiles()) {
-////									System.out.println("FOO " + file);
-////								}
-//							});
-//							task.getLibs().from(libs);
-
 							ArtifactView view = configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().artifactView(it -> {
 								it.attributes(attributes -> {
 									attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "dev.nokee.linkable-objects");
@@ -464,21 +401,6 @@ public final class CppUnitTestExtensions {
 								return result;
 							}));
 							task.getLibs().builtBy(view.getFiles());
-
-//							task.getLibs().setFrom(configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().getArtifacts().getResolvedArtifacts().map(it -> {
-//								List<Object> result = new ArrayList<>();
-//								for (ResolvedArtifactResult t : it) {
-////									System.out.println(t);
-////									System.out.println(objects.newInstance(Attributes.Extension.class).of(t.getVariant()).getAsMap().get());
-////									System.out.println(t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE));
-//									if (t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).equals("public.object-code-directory")) {
-//										result.add(objects.fileCollection().from(t.getFile()).getAsFileTree());
-//									} else {
-//										result.add(t.getFile());
-//									}
-//								}
-//								return result;
-//							}));
 						});
 						tasks.named(installTaskName(testExecutable), InstallExecutable.class).configure(task -> {
 							task.setLibs(configurations.getByName(nativeRuntimeConfigurationName(testExecutable)).getIncoming().getArtifacts().getArtifactFiles());
@@ -507,7 +429,7 @@ public final class CppUnitTestExtensions {
 						//   we can remove the Gradle (previous) testableObjects dependency to replace it with our own.
 						//   Note that we should normally be able to inspect the dependencies directly via:
 						//     nativeLink.getDependencies().removeIf(it -> it instanceof FileCollectionDependency)
-						//   Instead, we remove any current and future, FileCollectionDependency that doesn't match our testableObjects.
+						//   Instead, we remove any current and future, FileCollectionDependency.
 						final Configuration nativeLink = configurations.getByName(nativeLinkConfigurationName(testExecutable));
 						nativeLink.getDependencies().all(dependencyCandidate -> {
 							if (dependencyCandidate instanceof FileCollectionDependency) {
@@ -656,31 +578,11 @@ public final class CppUnitTestExtensions {
 						}
 					}));
 					testable.getCppApiElements().configure(outgoing(it -> {
-						it.getVariants().configureEach(variant -> attributes.of(variant, details -> {
-							details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of(variant.getName());
-						}));
-
 						TaskProvider<Sync> allHeadersTask = tasks.register(CppNames.of(binary).taskName("sync", "cppHeaders").toString(), Sync.class, task -> {
 							task.from(component.getHeaderFiles());
 							task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
 						});
-
-						if (component instanceof CppLibrary) {
-							it.getVariants().create("sources", variant -> {
-								variant.artifact(allHeadersTask, spec -> spec.setType("public.c-plus-plus-header-directory"));
-							});
-						}
-						it.getVariants().create("objects", variant -> {
-							variant.artifact(allHeadersTask, spec -> spec.setType("public.c-plus-plus-header-directory"));
-						});
-						if (component instanceof CppLibrary) {
-							it.getVariants().create("library", variant -> {
-									variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "publicHeaders").toString(), Sync.class, task -> {
-										task.from(((CppLibrary) component).getPublicHeaderFiles());
-										task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
-									}), spec -> spec.setType("public-c-plus-plus-header-directory"));
-							});
-						}
+						it.artifact(allHeadersTask, spec -> spec.setType("public.c-plus-plus-header-directory"));
 					}));
 //					testable.getLinkElements().configure(it -> attributes.of(it, details -> {
 ////						details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of("linkable-objects");
@@ -722,22 +624,6 @@ public final class CppUnitTestExtensions {
 								}
 							});
 						}
-					}));
-					testable.getRuntimeElements().configure(outgoing(it -> {
-						it.getVariants().configureEach(variant -> attributes.of(variant, details -> {
-							details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of(variant.getName());
-						}));
-						it.getVariants().create("sources", variant -> { /* nothing */ });
-						it.getVariants().create("objects", variant -> { /* nothing */ });
-						it.getVariants().create("library", variant -> {
-							if (binary instanceof CppSharedLibrary) {
-								attributes.of(variant, details -> details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of(LibraryElements.DYNAMIC_LIB));
-								variant.artifact(((CppSharedLibrary) binary).getRuntimeFile(), spec -> spec.setType("com.apple.mach-o-dylib"));
-							} else if (binary instanceof CppExecutable) {
-								attributes.of(variant, details -> details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of("executable"));
-								variant.artifact(((CppExecutable) binary).getExecutableFile(), spec -> spec.setType("com.apple.mach-o-executable"));
-							}
-						});
 					}));
 				}
 
@@ -783,14 +669,19 @@ public final class CppUnitTestExtensions {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.C_PLUS_PLUS_API);
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
 				details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of(LibraryElements.HEADERS_CPLUSPLUS);
+				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), "sources+objects");
 			}));
 			linkElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.NATIVE_LINK);
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
 			}));
+
+			// TODO: ONLY FOR LIBRARY
 			runtimeElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.NATIVE_RUNTIME);
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
+				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), "sources+objects");
+				/* nothing to export for both sources and objects */
 			}));
 		}
 
