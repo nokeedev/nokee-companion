@@ -15,10 +15,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
+import static dev.gradleplugins.fixtures.runnerkit.BuildResultMatchers.hasFailureCause;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.*;
 
 class CppUnitTestForApplicationLinkAgainstLibraryFunctionalTests {
 	GradleBuildElement build;
@@ -79,7 +79,7 @@ class CppUnitTestForApplicationLinkAgainstLibraryFunctionalTests {
 	}
 
 	@Test
-	void product__zzcanReselectTestedBinaryToOptimizedVariant() {
+	void product__debugvariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
 				testedComponent {
@@ -88,10 +88,10 @@ class CppUnitTestForApplicationLinkAgainstLibraryFunctionalTests {
 			}
 		"""));
 
-		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
+		BuildResult result = runner.withTasks("runTest").buildAndFail();
+		assertThat(result, hasFailureCause("Cannot integrate as library for application"));
+//		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
 	}
-
 	@Test
 	void sourceFiles__zzzcanReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
@@ -102,8 +102,11 @@ class CppUnitTestForApplicationLinkAgainstLibraryFunctionalTests {
 			}
 		"""));
 
-		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
-		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
+		BuildResult result = runner.withTasks("runTest").buildAndFail();
+		assertThat(result, hasFailureCause("Cannot integrate as sources for application"));
+//		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
+//		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
 	}
+
+
 }

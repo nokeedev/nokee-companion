@@ -72,6 +72,7 @@ public final class CppBinaryProperties {
 		@Override
 		@SuppressWarnings("UnstableApiUsage")
 		public void apply(Project project) {
+			Plugins.forProject(project).apply(CppBinaryTaskExtensions.Rule.class);
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				// Rewire optimized/debuggable to be shadow property aware
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {

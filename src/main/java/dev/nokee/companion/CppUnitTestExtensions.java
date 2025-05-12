@@ -27,6 +27,7 @@ import org.gradle.api.tasks.Sync;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.cpp.*;
+import org.gradle.language.cpp.internal.DefaultCppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.ComponentWithExecutable;
 import org.gradle.language.nativeplatform.ComponentWithLinkFile;
@@ -35,10 +36,13 @@ import org.gradle.language.nativeplatform.*;
 import org.gradle.language.nativeplatform.tasks.UnexportMainSymbol;
 import org.gradle.nativeplatform.MachineArchitecture;
 import org.gradle.nativeplatform.OperatingSystemFamily;
+import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
 import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 import org.gradle.nativeplatform.tasks.InstallExecutable;
 import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 import org.gradle.nativeplatform.test.cpp.CppTestSuite;
+import org.gradle.nativeplatform.toolchain.NativeToolChain;
+import org.gradle.nativeplatform.toolchain.internal.NativeToolChainInternal;
 
 import javax.inject.Inject;
 import java.io.IOException;
@@ -182,22 +186,22 @@ public final class CppUnitTestExtensions {
 			}
 		}
 
-		static abstract class LibElemDisamEx implements AttributeDisambiguationRule<String> {
-			@Inject
-			public LibElemDisamEx() {}
-
-			@Override
-			public void execute(MultipleCandidatesDetails<String> details) {
-				System.out.println("DISAM " + details);
-				if (details.getConsumerValue().equals("dev.nokee.linkable-objects")) {
-					if (details.getCandidateValues().contains("dev.nokee.linkable-objects")) {
-						details.closestMatch("dev.nokee.linkable-objects");
-					} else if (details.getCandidateValues().contains("com.apple.mach-o-dylib")) {
-						details.closestMatch("com.apple.mach-o-dylib");
-					}
-				}
-			}
-		}
+//		static abstract class LibElemDisamEx implements AttributeDisambiguationRule<String> {
+//			@Inject
+//			public LibElemDisamEx() {}
+//
+//			@Override
+//			public void execute(MultipleCandidatesDetails<String> details) {
+//				System.out.println("DISAM " + details);
+//				if (details.getConsumerValue().equals("dev.nokee.linkable-objects")) {
+//					if (details.getCandidateValues().contains("dev.nokee.linkable-objects")) {
+//						details.closestMatch("dev.nokee.linkable-objects");
+//					} else if (details.getCandidateValues().contains("com.apple.mach-o-dylib")) {
+//						details.closestMatch("com.apple.mach-o-dylib");
+//					}
+//				}
+//			}
+//		}
 
 		static abstract class LibElemCompatEx implements AttributeCompatibilityRule<String> {
 			@Inject
@@ -245,42 +249,45 @@ public final class CppUnitTestExtensions {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(ProductionCppComponent.class).configureEach(component -> {
 					component.getBinaries().configureEach(CppBinary.class, binary -> {
-						if (binary instanceof ComponentWithLinkFile) {
-							configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
-								configuration.outgoing(outgoing -> {
-//									outgoing.getArtifacts().clear();
-//									outgoing.artifact(((ComponentWithLinkFile) binary).getLinkFile(), it -> it.setType("com.apple.mach-o-dylib"));
-									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
-//										artifact.setType("public.unix-shared-library"); // FIXME: set correct type
-										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
-										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
-										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
-									});
-								});
-							});
-						}
+//						if (binary instanceof ComponentWithLinkFile) {
+//							configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
+//								configuration.outgoing(outgoing -> {
+////									outgoing.getArtifacts().clear();
+////									outgoing.artifact(((ComponentWithLinkFile) binary).getLinkFile(), it -> it.setType("com.apple.mach-o-dylib"));
+//									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+////										artifact.setType("public.unix-shared-library"); // FIXME: set correct type
+////										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
+//										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
+//										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
+//									});
+//								});
+//							});
+//						}
 
-						if (binary instanceof ComponentWithRuntimeFile) {
-							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
-								configuration.outgoing(outgoing -> {
-									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
-//										artifact.setType("public.unix-executable"); // FIXME: set correct type
-										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
-									});
-								});
-							});
-						}
-
-						if (binary instanceof ComponentWithExecutable) {
-							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
-								configuration.outgoing(outgoing -> {
-									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
-//										artifact.setType("public.unix-executable"); // FIXME: set correct type
-										artifact.setType("com.apple.mach-o-executable"); // FIXME: set correct type
-									});
-								});
-							});
-						}
+//						if (binary instanceof ComponentWithRuntimeFile) {
+//							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
+//								configuration.outgoing(outgoing -> {
+//									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+//										if (binary.getTargetMachine().getOperatingSystemFamily().isMacOs()) {
+//											artifact.setType("")
+//										}
+////										artifact.setType("public.unix-executable"); // FIXME: set correct type
+//										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
+//									});
+//								});
+//							});
+//						}
+//
+//						if (binary instanceof ComponentWithExecutable) {
+//							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
+//								configuration.outgoing(outgoing -> {
+//									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+////										artifact.setType("public.unix-executable"); // FIXME: set correct type
+//										artifact.setType("com.apple.mach-o-executable"); // FIXME: set correct type
+//									});
+//								});
+//							});
+//						}
 					});
 				});
 			});
@@ -301,10 +308,10 @@ public final class CppUnitTestExtensions {
 				});
 
 				project.getDependencies().getAttributesSchema().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).getCompatibilityRules().add(LibElemCompatEx.class);
-				project.getDependencies().getAttributesSchema().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).getDisambiguationRules().add(LibElemDisamEx.class);
+//				project.getDependencies().getAttributesSchema().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).getDisambiguationRules().add(LibElemDisamEx.class);
 
-				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getCompatibilityRules().add(LibElemCompat.class);
-				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getDisambiguationRules().add(LibElemDisam.class);
+//				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getCompatibilityRules().add(LibElemCompat.class);
+//				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getDisambiguationRules().add(LibElemDisam.class);
 
 				project.getDependencies().getAttributesSchema().attribute(Attribute.of("dev.nokee.testable-type", String.class)).getCompatibilityRules().add(TestableTypeCompat.class);
 
@@ -549,15 +556,6 @@ public final class CppUnitTestExtensions {
 							details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of(variant.getName());
 						}));
 
-//						TaskProvider<Sync> privateHeadersTask = tasks.register(CppNames.of(binary).taskName("sync", "privateHeaders").toString(), Sync.class, task -> {
-//							FileCollection privateHeaders = component.getHeaderFiles();
-//							if (component instanceof CppLibrary) {
-//								privateHeaders = privateHeaders.minus(((CppLibrary) component).getPublicHeaderFiles());
-//							}
-//							task.from(privateHeaders);
-//							task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
-//						});
-
 						if (component instanceof CppLibrary) {
 							it.getVariants().create("sources", variant -> {
 								variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "sources").toString(), Sync.class, task -> {
@@ -566,12 +564,6 @@ public final class CppUnitTestExtensions {
 								}), spec -> spec.setType("public.c-plus-plus-source-directory"));
 							});
 						}
-//						it.getVariants().create("private-sources", variant -> {
-//							attributes.of(variant, details -> {
-//								details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of("sources");
-//							});
-//							variant.artifact(privateHeadersTask, spec -> spec.setType(ArtifactTypeDefinition.DIRECTORY_TYPE));
-//						});
 						it.getVariants().create("objects", variant -> { /* nothing */ });
 						if (!(component instanceof CppApplication)) {
 							it.getVariants().create("library", variant -> { /* nothing */ }); // TODO: SHOULD NOT EXISTS ON APP
@@ -584,9 +576,6 @@ public final class CppUnitTestExtensions {
 						});
 						it.artifact(allHeadersTask, spec -> spec.setType("public.c-plus-plus-header-directory"));
 					}));
-//					testable.getLinkElements().configure(it -> attributes.of(it, details -> {
-////						details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of("linkable-objects");
-//					}));
 					testable.getLinkElements().configure(outgoing(it -> {
 						it.getVariants().configureEach(variant -> attributes.of(variant, details -> {
 							details.attribute(Attribute.of("dev.nokee.testable-type", String.class)).of(variant.getName());
@@ -609,21 +598,6 @@ public final class CppUnitTestExtensions {
 								}), spec -> spec.setType("public.object-code-directory"));
 							}
 						});
-						if (component instanceof CppLibrary) {
-							it.getVariants().create("library", variant -> {
-								if (binary instanceof CppSharedLibrary) {
-									attributes.of(variant, details -> {
-										details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of(LibraryElements.DYNAMIC_LIB);
-									});
-									variant.artifact(((CppSharedLibrary) binary).getLinkFile(), t -> t.setType("com.apple.mach-o-dylib"));  // TODO: SHOULD NOT EXISTS ON APP
-								} else if (binary instanceof CppStaticLibrary) {
-									attributes.of(variant, details -> {
-										details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of(LibraryElements.LINK_ARCHIVE);
-									});
-									variant.artifact(((CppStaticLibrary) binary).getLinkFile(), t -> t.setType("public.native-archive"));  // TODO: SHOULD NOT EXISTS ON APP
-								}
-							});
-						}
 					}));
 				}
 
@@ -674,6 +648,8 @@ public final class CppUnitTestExtensions {
 			linkElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.NATIVE_LINK);
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
+//				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), "sources+objects");
+				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), providers.provider(() -> c.getOutgoing().getVariants().stream().map(t -> t.getAttributes().getAttribute(Attribute.of("dev.nokee.testable-type", String.class))).collect(Collectors.joining("+"))));
 			}));
 
 			// TODO: ONLY FOR LIBRARY

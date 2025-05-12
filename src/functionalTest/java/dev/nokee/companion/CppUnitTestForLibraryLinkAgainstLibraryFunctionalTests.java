@@ -79,7 +79,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	}
 
 	@Test
-	void product__zzcanReselectTestedBinaryToOptimizedVariant() {
+	void product__debugvariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
 				testedComponent {
@@ -88,8 +88,28 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			}
 		"""));
 
+//		runner.withTasks("outgoingVariants").build();
 		BuildResult result = runner.withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
+	}
+
+	@Test
+	void releaseproduct__zzcanReselectTestedBinaryToOptimizedVariant() {
+		build.getBuildFile().append(groovyDsl("""
+			unitTest {
+				testedComponent {
+					linkAgainst(product)
+				}
+			}
+			unitTest {
+				binaries.configureEach {
+					ext.optimized = true
+				}
+			}
+		"""));
+
+		BuildResult result = runner.withTasks("runTest").build();
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":linkRelease", ":compileTestCpp", ":linkTest", ":runTest"));
 	}
 
 	@Test
@@ -98,6 +118,34 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			unitTest {
 				testedComponent {
 					linkAgainst(sources)
+				}
+			}
+		"""));
+
+		BuildResult result = runner.withTasks("runTest").build();
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
+	}
+
+	@Test
+	void releasesourceFiles__zzzcanReselectTestedBinaryToOptimizedVariant() throws IOException {
+		Files.writeString(build.file("src/main/cpp/release-only.cpp"), """
+		#ifndef RELEASE
+		# error "NOT IN RELEASE"
+		#endif
+		""");
+		build.getBuildFile().append(groovyDsl("""
+			unitTest {
+				testedComponent {
+					linkAgainst(sources)
+				}
+			}
+			unitTest {
+				binaries.configureEach {
+					ext.optimized = true
+					compileTask.get().with { task ->
+						task.compilerArgs.add(task.options.optimized.map { it ? '-DRELEASE' : '-DDEBUG' })
+					}
 				}
 			}
 		"""));
