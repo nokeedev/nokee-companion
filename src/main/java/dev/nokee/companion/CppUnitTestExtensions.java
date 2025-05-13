@@ -56,6 +56,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 import static dev.nokee.commons.names.CppNames.*;
@@ -156,35 +157,35 @@ public final class CppUnitTestExtensions {
 			}
 		}
 
-		static abstract class LibElemDisam implements AttributeDisambiguationRule<LibraryElements> {
-			@Inject
-			public LibElemDisam() {}
-
-			@Override
-			public void execute(MultipleCandidatesDetails<LibraryElements> details) {
-				Map<String, LibraryElements> vals = details.getCandidateValues().stream().collect(Collectors.toMap(Named::getName, it -> it));
-				vals.remove("objects");
-				LibraryElements result = vals.get(LibraryElements.DYNAMIC_LIB);
-				if (result == null) {
-					result = vals.get(LibraryElements.LINK_ARCHIVE);
-				}
-				details.closestMatch(result);
-			}
-		}
-
-		static abstract class LibElemCompat implements AttributeCompatibilityRule<LibraryElements> {
-			@Inject
-			public LibElemCompat() {}
-
-			@Override
-			public void execute(CompatibilityCheckDetails<LibraryElements> details) {
-				if (details.getConsumerValue().getName().equals("linkable-objects")) {
-					if (Arrays.asList(LibraryElements.DYNAMIC_LIB, LibraryElements.OBJECTS, LibraryElements.LINK_ARCHIVE).contains(details.getProducerValue().getName())) {
-						details.compatible();
-					}
-				}
-			}
-		}
+//		static abstract class LibElemDisam implements AttributeDisambiguationRule<LibraryElements> {
+//			@Inject
+//			public LibElemDisam() {}
+//
+//			@Override
+//			public void execute(MultipleCandidatesDetails<LibraryElements> details) {
+//				Map<String, LibraryElements> vals = details.getCandidateValues().stream().collect(Collectors.toMap(Named::getName, it -> it));
+//				vals.remove("objects");
+//				LibraryElements result = vals.get(LibraryElements.DYNAMIC_LIB);
+//				if (result == null) {
+//					result = vals.get(LibraryElements.LINK_ARCHIVE);
+//				}
+//				details.closestMatch(result);
+//			}
+//		}
+//
+//		static abstract class LibElemCompat implements AttributeCompatibilityRule<LibraryElements> {
+//			@Inject
+//			public LibElemCompat() {}
+//
+//			@Override
+//			public void execute(CompatibilityCheckDetails<LibraryElements> details) {
+//				if (details.getConsumerValue().getName().equals("linkable-objects")) {
+//					if (Arrays.asList(LibraryElements.DYNAMIC_LIB, LibraryElements.OBJECTS, LibraryElements.LINK_ARCHIVE).contains(details.getProducerValue().getName())) {
+//						details.compatible();
+//					}
+//				}
+//			}
+//		}
 
 //		static abstract class LibElemDisamEx implements AttributeDisambiguationRule<String> {
 //			@Inject
@@ -211,18 +212,13 @@ public final class CppUnitTestExtensions {
 			public void execute(CompatibilityCheckDetails<String> details) {
 				System.out.println("COMAPT " + details.getProducerValue() + " -- " + details.getConsumerValue());
 				if (details.getConsumerValue().equals("dev.nokee.linkable-objects")) {
-					System.out.println("WAT??");
-					if (Arrays.asList("dylib", "com.apple.mach-o-dylib", "public.object-code"/*, "public.object-code-directory"*/).contains(details.getProducerValue())) {
+					if (Arrays.asList("dylib", "so", "lib", "public.object-code").contains(details.getProducerValue())) {
 						details.compatible();
 					}
 				} else if (details.getConsumerValue().equals("directory")) {
 					if (details.getProducerValue().endsWith("-directory")) {
 						details.compatible();
 					}
-//				} else if (details.getConsumerValue().equals("public.object-code-directory")) {
-//					if (Arrays.asList("public.object-code").contains(details.getProducerValue())) {
-//						details.compatible();
-//					}
 				}
 			}
 		}
@@ -249,45 +245,53 @@ public final class CppUnitTestExtensions {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(ProductionCppComponent.class).configureEach(component -> {
 					component.getBinaries().configureEach(CppBinary.class, binary -> {
-//						if (binary instanceof ComponentWithLinkFile) {
-//							configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
-//								configuration.outgoing(outgoing -> {
-////									outgoing.getArtifacts().clear();
-////									outgoing.artifact(((ComponentWithLinkFile) binary).getLinkFile(), it -> it.setType("com.apple.mach-o-dylib"));
-//									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
-////										artifact.setType("public.unix-shared-library"); // FIXME: set correct type
-////										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
-//										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
-//										System.out.println("HERE??? " + artifact.getName() + " -- " + artifact.getType());
-//									});
-//								});
-//							});
-//						}
+						if (binary instanceof ComponentWithLinkFile) {
+							configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
+								configuration.outgoing(outgoing -> {
+									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+										if (binary.getTargetMachine().getOperatingSystemFamily().isMacOs()) {
+											artifact.setType(binary instanceof CppStaticLibrary ? "a" : "dylib");
+										} else if (binary.getTargetMachine().getOperatingSystemFamily().isLinux()) {
+											artifact.setType(binary instanceof CppStaticLibrary ? "a" : "so");
+										} else if (binary.getTargetMachine().getOperatingSystemFamily().isWindows()) {
+											artifact.setType(binary instanceof CppStaticLibrary ? "lib" : "dll");
+										}
+									});
+								});
+							});
+						}
 
-//						if (binary instanceof ComponentWithRuntimeFile) {
-//							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
-//								configuration.outgoing(outgoing -> {
-//									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
-//										if (binary.getTargetMachine().getOperatingSystemFamily().isMacOs()) {
-//											artifact.setType("")
-//										}
-////										artifact.setType("public.unix-executable"); // FIXME: set correct type
-//										artifact.setType("com.apple.mach-o-dylib"); // FIXME: set correct type
-//									});
-//								});
-//							});
-//						}
-//
-//						if (binary instanceof ComponentWithExecutable) {
-//							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
-//								configuration.outgoing(outgoing -> {
-//									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
-////										artifact.setType("public.unix-executable"); // FIXME: set correct type
-//										artifact.setType("com.apple.mach-o-executable"); // FIXME: set correct type
-//									});
-//								});
-//							});
-//						}
+						if (binary instanceof ComponentWithRuntimeFile) {
+							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
+								configuration.outgoing(outgoing -> {
+									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+										if (binary.getTargetMachine().getOperatingSystemFamily().isMacOs()) {
+											artifact.setType(binary instanceof CppExecutable ? "mach-o-executable" : "dylib");
+										} else if (binary.getTargetMachine().getOperatingSystemFamily().isLinux()) {
+											artifact.setType(binary instanceof CppExecutable ? "elf-executable" : "so");
+										} else if (binary.getTargetMachine().getOperatingSystemFamily().isWindows()) {
+											artifact.setType(binary instanceof CppExecutable ? "exe" : "dll");
+										}
+									});
+								});
+							});
+						}
+
+						if (binary instanceof ComponentWithExecutable) {
+							configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
+								configuration.outgoing(outgoing -> {
+									outgoing.getArtifacts().withType(ConfigurablePublishArtifact.class).configureEach(artifact -> {
+										if (binary.getTargetMachine().getOperatingSystemFamily().isMacOs()) {
+											artifact.setType(binary instanceof CppExecutable ? "mach-o-executable" : "dylib");
+										} else if (binary.getTargetMachine().getOperatingSystemFamily().isLinux()) {
+											artifact.setType(binary instanceof CppExecutable ? "elf-executable" : "so");
+										} else if (binary.getTargetMachine().getOperatingSystemFamily().isWindows()) {
+											artifact.setType(binary instanceof CppExecutable ? "exe" : "dll");
+										}
+									});
+								});
+							});
+						}
 					});
 				});
 			});
@@ -314,27 +318,6 @@ public final class CppUnitTestExtensions {
 //				project.getDependencies().getAttributesSchema().attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).getDisambiguationRules().add(LibElemDisam.class);
 
 				project.getDependencies().getAttributesSchema().attribute(Attribute.of("dev.nokee.testable-type", String.class)).getCompatibilityRules().add(TestableTypeCompat.class);
-
-				// Rewire compileIncludePath
-				project.getComponents().withType(CppTestSuite.class).configureEach(testSuite -> {
-					testSuite.getBinaries().whenElementKnown(CppTestExecutable.class, testExecutable -> {
-						ArtifactView includeDirs = configurations.getByName(cppCompileConfigurationName(testExecutable)).getIncoming().artifactView(viewConfiguration -> {
-							viewConfiguration.attributes(attributeContainer -> {
-								attributeContainer.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE);
-							});
-						});
-						ShadowProperty<FileCollection> compileIncludePath = compileIncludePathOf(testExecutable);
-						compileIncludePath.set(testSuite.getPrivateHeaderDirs().plus(includeDirs.getFiles()));
-						compileTask(testExecutable).configure(task -> {
-							task.getIncludes().setFrom(compileIncludePath);
-							task.doFirst(__ -> {
-								for (ResolvedArtifactResult artifact : includeDirs.getArtifacts().getArtifacts()) {
-									System.out.println("=====> " + artifact);
-								}
-							});
-						});
-					});
-				});
 
 				project.getComponents().withType(CppTestSuite.class).configureEach(testSuite -> {
 					TestedComponentExtension testedComponentExtension = ((ExtensionAware) testSuite).getExtensions().create(TESTED_COMPONENT_EXTENSION_NAME, TestedComponentExtension.class);
@@ -370,44 +353,25 @@ public final class CppUnitTestExtensions {
 								attributes.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE, testExecutable.getTargetMachine().getOperatingSystemFamily());
 								attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, Category.VERIFICATION));
 								attributes.attribute(VerificationType.VERIFICATION_TYPE_ATTRIBUTE, objects.named(VerificationType.class, VerificationType.MAIN_SOURCES));
-//								attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.class, "linkable-objects"));
 								attributes.attribute(Attribute.of("testable", String.class), "yes");
 							});
 						});
 						cppSourceOf(testExecutable).mut(testedSources.map(it -> {
-							System.out.println("FOO " + it);
 							ArtifactView view = it.getIncoming().artifactView(v -> v.attributes(attributes -> {
 								attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "public.c-plus-plus-source-directory");
 							}));
-
 							return view.getArtifacts().getArtifactFiles();
 						}).get().getAsFileTree()::plus);
 
-						// SHould be
-//						ShadowProperty<FileCollection> compileIncludePath = compileIncludePathOf(testExecutable);
-//						compileIncludePath.mut(objects.fileCollection().from((Callable<?>) testedSources.map(it -> {
-//							return it.getIncoming().artifactView(v -> v.attributes(attributes -> {
-//								attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE);
-//							})).getArtifacts().getArtifactFiles();
-//						})::get)::plus);
-
 						tasks.named(linkTaskName(testExecutable), AbstractLinkTask.class).configure(task -> {
-							ArtifactView view = configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().artifactView(it -> {
-								it.attributes(attributes -> {
-									attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "dev.nokee.linkable-objects");
+							task.getLibs().setFrom((Callable<?>) () -> {
+								ArtifactView view = configurations.getByName(nativeLinkConfigurationName(testExecutable)).getIncoming().artifactView(it -> {
+									it.attributes(attributes -> {
+										attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "dev.nokee.linkable-objects");
+									});
 								});
+								return view.getArtifacts().getArtifactFiles();
 							});
-							task.getLibs().setFrom(view.getArtifacts().getResolvedArtifacts().map(it -> {
-								List<Object> result = new ArrayList<>();
-								for (ResolvedArtifactResult t : it) {
-									System.out.println(t);
-									System.out.println(objects.newInstance(Attributes.Extension.class).of(t.getVariant()).getAsMap().get());
-									System.out.println(t.getVariant().getAttributes().getAttribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE));
-									result.add(t.getFile());
-								}
-								return result;
-							}));
-							task.getLibs().builtBy(view.getFiles());
 						});
 						tasks.named(installTaskName(testExecutable), InstallExecutable.class).configure(task -> {
 							task.setLibs(configurations.getByName(nativeRuntimeConfigurationName(testExecutable)).getIncoming().getArtifacts().getArtifactFiles());
@@ -416,6 +380,23 @@ public final class CppUnitTestExtensions {
 				});
 
 				project.getComponents().withType(CppTestSuite.class).configureEach(testSuite -> {
+					// Detach compileIncludePath from testedComponent
+					testSuite.getBinaries().whenElementKnown(CppTestExecutable.class, testExecutable -> {
+						final FileCollection includeDirs = objects.fileCollection().from((Callable<?>) () -> {
+							ArtifactView view = configurations.getByName(cppCompileConfigurationName(testExecutable)).getIncoming().artifactView(viewConfiguration -> {
+								viewConfiguration.attributes(attributeContainer -> {
+									attributeContainer.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE);
+								});
+							});
+							return view.getFiles();
+						});
+						final ShadowProperty<FileCollection> compileIncludePath = compileIncludePathOf(testExecutable);
+						compileIncludePath.set(testSuite.getPrivateHeaderDirs().plus(includeDirs));
+						compileTask(testExecutable).configure(task -> {
+							task.getIncludes().setFrom(compileIncludePath);
+						});
+					});
+
 					// Detach implementation configuration from testedComponent
 					testSuite.getBinaries().whenElementFinalized(CppTestExecutable.class, testExecutable -> {
 						configurations.named(implementationConfigurationName(testExecutable)).configure(it -> {
@@ -451,18 +432,18 @@ public final class CppUnitTestExtensions {
 
 	public static class TestedComponentExtension {
 		private final Property<ProductionCppComponent> testedComponent;
-		private final Property<String> testableType;
+		private final Property<Object> testableType;
 		private final Provider<String> testableTypeProvider;
 
 		public TestedComponentExtension(ObjectFactory objects) {
 			this.testedComponent = objects.property(ProductionCppComponent.class);
-			this.testableType = objects.property(String.class).convention("objects");
+			this.testableType = objects.property(Object.class).convention("objects");
 
 			this.testableTypeProvider = testedComponent.zip(testableType, (a,b) -> {
-				if (a instanceof CppApplication && Arrays.asList("sources", "library").contains(b)) {
+				if (a instanceof CppApplication && Arrays.asList("sources", "library").contains(b.toString())) {
 					throw new UnsupportedOperationException(String.format("Cannot integrate as %s for application", b));
 				}
-				return b;
+				return b.toString();
 			});
 		}
 
@@ -471,7 +452,7 @@ public final class CppUnitTestExtensions {
 			return this;
 		}
 
-		public TestedComponentExtension linkAgainst(String type) {
+		public TestedComponentExtension linkAgainst(Object type) {
 			this.testableType.set(type);
 			return this;
 		}
@@ -591,7 +572,6 @@ public final class CppUnitTestExtensions {
 									task.setDestinationDir(layout.getBuildDirectory().dir("tmp/" + task.getName()).get().getAsFile());
 								}), spec -> spec.setType("public.object-code-directory"));
 							} else if (component instanceof CppApplication) {
-								System.out.println("WAT??? export " + component);
 								variant.artifact(tasks.register(CppNames.of(binary).taskName("relocateMain").toString(), UnexportMainSymbol.class, task -> {
 									task.getObjects().from(objectsOf(binary));
 									task.getOutputDirectory().set(layout.getBuildDirectory().dir("tmp/" + task.getName()));
@@ -638,27 +618,31 @@ public final class CppUnitTestExtensions {
 			sourceElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.VERIFICATION);
 				details.attribute(VerificationType.VERIFICATION_TYPE_ATTRIBUTE).of(VerificationType.MAIN_SOURCES);
+				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), providers.provider(() -> testableType(c.getOutgoing())));
 			}));
 			cppApiElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.C_PLUS_PLUS_API);
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
 				details.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE).of(LibraryElements.HEADERS_CPLUSPLUS);
-				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), "sources+objects");
+				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), linkElements.map(it -> testableType(it.getOutgoing())));
 			}));
 			linkElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.NATIVE_LINK);
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
-//				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), "sources+objects");
-				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), providers.provider(() -> c.getOutgoing().getVariants().stream().map(t -> t.getAttributes().getAttribute(Attribute.of("dev.nokee.testable-type", String.class))).collect(Collectors.joining("+"))));
+				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), providers.provider(() -> testableType(c.getOutgoing())));
 			}));
 
 			// TODO: ONLY FOR LIBRARY
 			runtimeElements.configure(c -> attributes.of(c, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of(Usage.NATIVE_RUNTIME);
 				details.attribute(Category.CATEGORY_ATTRIBUTE).of(Category.LIBRARY);
-				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), "sources+objects");
+				details.attribute(Attribute.of("dev.nokee.testable-type", String.class), linkElements.map(it -> testableType(it.getOutgoing())));
 				/* nothing to export for both sources and objects */
 			}));
+		}
+
+		private String testableType(ConfigurationPublications outgoing) {
+			return outgoing.getVariants().stream().map(t -> t.getAttributes().getAttribute(Attribute.of("dev.nokee.testable-type", String.class))).collect(Collectors.joining("+"));
 		}
 
 		public NamedDomainObjectProvider<Configuration> getSourceElements() {
