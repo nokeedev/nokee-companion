@@ -13,6 +13,7 @@ import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.ComponentWithExecutable;
 import org.gradle.language.nativeplatform.ComponentWithLinkFile;
 import org.gradle.language.nativeplatform.ComponentWithRuntimeFile;
+import org.gradle.language.nativeplatform.ComponentWithRuntimeUsage;
 
 import javax.inject.Inject;
 
@@ -33,12 +34,6 @@ abstract /*final*/ class CppBinaryConfigurationRule implements Plugin<Project> {
 	public void apply(Project project) {
 		Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 			project.getComponents().withType(CppBinary.class).configureEach(binary -> {
-				configurations.named(cppCompileConfigurationName(binary)).configure(configuration -> {
-					configuration.attributes(attributes -> {
-						attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, Category.LIBRARY));
-					});
-				});
-
 				if (binary instanceof ComponentWithLinkFile || binary instanceof ComponentWithExecutable) {
 					configurations.named(nativeLinkConfigurationName(binary)).configure(configuration -> {
 						configuration.attributes(attributes -> {
@@ -49,6 +44,13 @@ abstract /*final*/ class CppBinaryConfigurationRule implements Plugin<Project> {
 
 				if (binary instanceof ComponentWithRuntimeFile || binary instanceof ComponentWithExecutable) {
 					configurations.named(nativeRuntimeConfigurationName(binary)).configure(configuration -> {
+						configuration.attributes(attributes -> {
+							attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, Category.LIBRARY));
+						});
+					});
+				}
+				if (binary instanceof ComponentWithRuntimeUsage) {
+					configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
 						configuration.attributes(attributes -> {
 							attributes.attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.class, Category.LIBRARY));
 						});

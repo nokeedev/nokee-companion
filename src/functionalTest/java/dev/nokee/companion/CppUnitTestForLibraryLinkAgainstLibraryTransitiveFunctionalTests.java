@@ -1,5 +1,6 @@
 package dev.nokee.companion;
 
+import dev.gradleplugins.buildscript.io.GradleBuildFile;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
@@ -19,7 +20,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
 
-class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
+class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 	GradleBuildElement build;
 	@TempDir Path testDirectory;
 	GradleRunner runner;
@@ -31,14 +32,30 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		build = GradleBuildElement.inDirectory(testDirectory);
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.all-features.enabled=true");
 		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withGradleVersion("7.6.4");
-		build.getSettingsFile().append(groovyDsl("rootProject.name = 'test'"));
+		build.getSettingsFile().plugins(it -> it.id("dev.nokee.native-companion"));
+		build.getSettingsFile().append(groovyDsl("""
+			rootProject.name = 'test'
+			include 'impl'
+		"""));
+		GradleBuildFile.inDirectory(build.dir("impl")).plugins(it -> it.id("cpp-library")).append(groovyDsl("""
+			library.linkage = [Linkage.SHARED, Linkage.STATIC]
+		"""));
 		build.getBuildFile().plugins(it -> {
-			it.id("dev.nokee.native-companion");
 			it.id("cpp-library");
 		});
 		build.getBuildFile().plugins(it -> it.id("cpp-unit-test"));
+		build.getBuildFile().append(groovyDsl("""
+			library {
+				dependencies {
+					implementation project(':impl')
+				}
+			}
+		"""));
 
-		new CppGreeterLib().writeToProject(testDirectory);
+
+//		new CppGreeterLib().withImplementationAsSubproject("impl").writeToProject(testDirectory);
+		new CppGreeterLib().getElementUsingGreeter().writeToProject(testDirectory);
+		new CppGreeterLib().getGreeter().writeToProject(testDirectory.resolve("impl"));
 		new CppGreeterTest().writeToProject(testDirectory);
 	}
 
@@ -87,7 +104,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			}
 		"""));
 
-		BuildResult result = runner.withTasks("runTest").build();
+		BuildResult result = runner.publishBuildScans().withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
 	}
 
@@ -247,8 +264,8 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			}
 		"""));
 
-		runner.withTasks("outgoingVariants").build();
-		runner.withTasks("resolvableConfigurations").build();
+//		runner.withTasks("outgoingVariants").build();
+//		runner.withTasks("resolvableConfigurations").build();
 //		runner.publishBuildScans().withTasks("dependencies").build();
 		BuildResult result = runner.publishBuildScans().withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageCpp", ":compileTestCpp", ":linkTest", ":runTest"));

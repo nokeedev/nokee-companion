@@ -19,7 +19,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
 
-class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
+class CppUnitTestForLibraryLinkAgainstLibraryDualLinkageFunctionalTests {
 	GradleBuildElement build;
 	@TempDir Path testDirectory;
 	GradleRunner runner;
@@ -30,13 +30,18 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 
 		build = GradleBuildElement.inDirectory(testDirectory);
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.all-features.enabled=true");
-		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withGradleVersion("7.6.4");
+		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput();//.withGradleVersion("7.6.4");
 		build.getSettingsFile().append(groovyDsl("rootProject.name = 'test'"));
 		build.getBuildFile().plugins(it -> {
 			it.id("dev.nokee.native-companion");
 			it.id("cpp-library");
 		});
 		build.getBuildFile().plugins(it -> it.id("cpp-unit-test"));
+		build.getBuildFile().append(groovyDsl("""
+			library {
+				linkage = [Linkage.SHARED, Linkage.STATIC]
+			}
+		"""));
 
 		new CppGreeterLib().writeToProject(testDirectory);
 		new CppGreeterTest().writeToProject(testDirectory);
@@ -53,8 +58,8 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":compileTestCpp", ":linkTest", ":runTest"));
-		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebug")));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugSharedCpp", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebugShared")));
 	}
 
 	@Test
@@ -73,8 +78,8 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":compileTestCpp", ":linkTest", ":runTest"));
-		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkRelease")));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseSharedCpp", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkReleaseShared", ":createReleaseStatic")));
 	}
 
 	@Test
@@ -88,16 +93,22 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugSharedCpp", ":linkDebugShared", ":compileTestCpp", ":linkTest", ":runTest"));
 	}
 
 	@Test
 	void product__debugvariant_so_version() {
-		build.getBuildFile().append(groovyDsl("""
+		build.getBuildFile().append(groovyDsl(
+			"""
 			library {
 				binaries.configureEach {
-					def linkedFile = linkTask.get().linkedFile.get().asFile
-					linkTask.get().linkedFile.set(new File(linkedFile.absolutePath + ".1.0.2"))
+					if (it instanceof CppSharedLibrary) {
+						def outputFile = linkTask.get().linkedFile.get().asFile
+						linkTask.get().linkedFile.set(new File(outputFile.absolutePath + ".1.0.2"))
+					} else if (it instanceof CppStaticLibrary) {
+						def outputFile = createTask.get().outputFile.get().asFile
+						createTask.get().outputFile.set(new File(outputFile.absolutePath + ".1.0.2"))
+					}
 				}
 			}
 			unitTest {
@@ -108,7 +119,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugSharedCpp", ":linkDebugShared", ":compileTestCpp", ":linkTest", ":runTest"));
 	}
 
 	@Test
@@ -127,7 +138,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":linkRelease", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseSharedCpp", ":linkReleaseShared", ":compileTestCpp", ":linkTest", ":runTest"));
 	}
 
 	@Test
@@ -140,9 +151,10 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 			}
 		"""));
 
-		BuildResult result = runner.withTasks("runTest").build();
+		runner.withTasks("outgoingVariants").build();
+		BuildResult result = runner.publishBuildScans().withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
-		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
+		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugSharedCpp", ":linkDebugShared")));
 	}
 
 	@Test
@@ -170,7 +182,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 
 		BuildResult result = runner.withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
-		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
+		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugSharedCpp", ":linkDebugShared")));
 	}
 
 	@Test
@@ -236,22 +248,19 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 					linkAgainst("coverage-objects")
 				}
 				binaries.configureEach {
-					println 'set optimized ...'
 					ext.optimized = linkTask.flatMap { it.linkerArgs }.map {
-						new Throwable((it + ' -- ' + name).toString()).printStackTrace()
 						return !it.contains('--coverage')
 					}
 					linkTask.get().linkerArgs.add('--coverage')
-					println 'after set coverage args'
 				}
 			}
 		"""));
 
 		runner.withTasks("outgoingVariants").build();
-		runner.withTasks("resolvableConfigurations").build();
+//		runner.withTasks("resolvableConfigurations").build();
 //		runner.publishBuildScans().withTasks("dependencies").build();
 		BuildResult result = runner.publishBuildScans().withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageCpp", ":compileTestCpp", ":linkTest", ":runTest"));
-		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebug", ":linkRelease")));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageSharedCpp", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebugShared", ":linkReleaseShared", ":linkDebugStatic", ":linkReleaseStatic")));
 	}
 }
