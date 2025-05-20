@@ -4,8 +4,8 @@ import dev.gradleplugins.buildscript.io.GradleBuildFile;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.companion.fixtures.CoverageObjectMockPluginFixture;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterApp;
-import dev.nokee.platform.nativebase.fixtures.CppGreeterLib;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -107,9 +107,9 @@ class CppUnitTestForApplicationLinkAgainstLibraryTransitiveFunctionalTests {
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").buildAndFail();
-		assertThat(result, hasFailureCause("Cannot integrate as library for application"));
-//		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result, hasFailureCause("Cannot integrate as product for application"));
 	}
+
 	@Test
 	void sourceFiles__zzzcanReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
@@ -122,92 +122,25 @@ class CppUnitTestForApplicationLinkAgainstLibraryTransitiveFunctionalTests {
 
 		BuildResult result = runner.withTasks("runTest").buildAndFail();
 		assertThat(result, hasFailureCause("Cannot integrate as sources for application"));
-//		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
-//		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
 	}
 
 	@Test
 	void objectFiles__canSelectCoverageObjects() {
+		build.getBuildFile().append(groovyDsl(new CoverageObjectMockPluginFixture().asGroovyScript()));
 		build.getBuildFile().append(groovyDsl("""
-			import dev.nokee.commons.names.CppNames
-			import static dev.nokee.commons.names.CppNames.*
-			import static dev.nokee.companion.CppBinaryProperties.*
-			import dev.nokee.commons.names.NamingScheme
-			import dev.nokee.language.cpp.tasks.CppCompile
-			import dev.nokee.companion.ObjectFiles
-
-			import static dev.nokee.companion.util.CopyFromAction.copyFrom;
-
-			application {
-				binaries.configureEach { binary ->
-					if (!optimized) {
-						def names = CppNames.of(binary)//.with('buildTypeName', 'coverage')
-						def coverageTask = tasks.register(names.taskName('compile', 'cpp').toString().replace('Debug', 'Coverage'), CppCompile.clazz())
-						coverageTask.configure(copyFrom(compileTask))
-						coverageTask.configure {
-							objectFileDir = layout.buildDirectory.dir("obj/" + names.toString(NamingScheme.dirNames()).replace('debug', 'coverage'))
-							compilerArgs.add('-coverage')
-						}
-						def cppApiElements = configurations.named(CppNames.qualifyingName(binary).toString() + 'TestableCppApiElements')
-						cppApiElements.configure {
-							outgoing {
-								capability("testable-type:coverage-objects:1.0");
-							}
-						}
-						def linkElements = configurations.register(CppNames.qualifyingName(binary).toString() + 'CoverageTestableLinkElements')
-						linkElements.configure {
-							if (binary instanceof CppExecutable) {
-								extendsFrom(configurations.getByName(implementationConfigurationName(binary)));
-							} else {
-								extendsFrom(configurations.getByName(linkElementsConfigurationName(binary)).getExtendsFrom().toArray(new Configuration[0]));
-							}
-						    attributes {
-						    	attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage, Usage.NATIVE_LINK))
-								attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, provider(debuggabilityOf(binary)))
-								attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, provider(optimizationOf(binary)))
-								attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE, binary.getTargetMachine().getArchitecture());
-			  					attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE, binary.getTargetMachine().getOperatingSystemFamily());
-						    }
-							outgoing {
-								capability("testable-type:coverage-objects:1.0");
-								artifact(tasks.register('syncCoverageObjects', Sync) { task ->
-									task.from(coverageTask.map { ObjectFiles.of(it) })
-									task.into(layout.buildDirectory.dir("tmp/${task.name}"))
-								}) { type = 'public.object-code-directory'}
-							}
-						}
-						def runtimeElements = configurations.named(CppNames.qualifyingName(binary).toString() + 'TestableRuntimeElements')
-						runtimeElements.configure {
-							outgoing {
-								capability("testable-type:coverage-objects:1.0");
-							}
-						}
-						configurations.named(CppNames.qualifyingName(binary).toString() + 'TestableSourceElements') {
-							outgoing {
-								variants.create('coverage-objects')
-							}
-						}
-					}
-				}
-			}
 			unitTest {
 				testedComponent {
 					linkAgainst("coverage-objects")
 				}
 				binaries.configureEach {
-					ext.optimized = linkTask.flatMap { it.linkerArgs }.map {
-						return !it.contains('--coverage')
-					}
+					ext.optimized = linkTask.flatMap { it.linkerArgs }.map { !it.contains('--coverage') }
 					linkTask.get().linkerArgs.add('--coverage')
 				}
 			}
 		"""));
 
-//		runner.withTasks("outgoingVariants").build();
-//		runner.withTasks("resolvableConfigurations").build();
-//		runner.publishBuildScans().withTasks("dependencies").build();
-		BuildResult result = runner.publishBuildScans().withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageSharedCpp", ":compileTestCpp", ":linkTest", ":runTest"));
+		BuildResult result = runner.withTasks("runTest").build();
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageCpp", ":relocateMainCoverage", ":compileTestCpp", ":linkTest", ":runTest"));
 		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebugShared", ":linkReleaseShared", ":linkDebugStatic", ":linkReleaseStatic")));
 	}
 }

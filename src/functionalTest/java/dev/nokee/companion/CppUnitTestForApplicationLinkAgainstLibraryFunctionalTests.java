@@ -3,6 +3,7 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.companion.fixtures.CoverageObjectMockPluginFixture;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterApp;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterLib;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
@@ -89,8 +90,7 @@ class CppUnitTestForApplicationLinkAgainstLibraryFunctionalTests {
 		"""));
 
 		BuildResult result = runner.withTasks("runTest").buildAndFail();
-		assertThat(result, hasFailureCause("Cannot integrate as library for application"));
-//		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":linkDebug", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result, hasFailureCause("Cannot integrate as product for application"));
 	}
 	@Test
 	void sourceFiles__zzzcanReselectTestedBinaryToOptimizedVariant() {
@@ -104,9 +104,25 @@ class CppUnitTestForApplicationLinkAgainstLibraryFunctionalTests {
 
 		BuildResult result = runner.withTasks("runTest").buildAndFail();
 		assertThat(result, hasFailureCause("Cannot integrate as sources for application"));
-//		assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":linkTest", ":runTest"));
-//		assertThat(result.getExecutedTaskPaths(), not(hasItems(":compileDebugCpp", ":linkDebug")));
 	}
 
+	@Test
+	void objectFiles__canSelectCoverageObjects() {
+		build.getBuildFile().append(groovyDsl(new CoverageObjectMockPluginFixture().asGroovyScript()));
+		build.getBuildFile().append(groovyDsl("""
+			unitTest {
+				testedComponent {
+					linkAgainst("coverage-objects")
+				}
+				binaries.configureEach {
+					ext.optimized = linkTask.flatMap { it.linkerArgs }.map { !it.contains('--coverage') }
+					linkTask.get().linkerArgs.add('--coverage')
+				}
+			}
+		"""));
 
+		BuildResult result = runner.withTasks("runTest").build();
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageCpp", ":relocateMainCoverage", ":compileTestCpp", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebugShared", ":linkReleaseShared", ":linkDebugStatic", ":linkReleaseStatic")));
+	}
 }

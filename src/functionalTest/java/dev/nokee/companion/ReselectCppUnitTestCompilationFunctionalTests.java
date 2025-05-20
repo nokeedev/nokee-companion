@@ -78,6 +78,6 @@ class ReselectCppUnitTestCompilationFunctionalTests {
 		""".stripIndent()));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":compileReleaseC", ":compileTestCpp", ":relocateMainForTest", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":compileReleaseC", ":compileTestCpp", ":relocateMainRelease", ":linkTest", ":runTest"));
 	}
 }

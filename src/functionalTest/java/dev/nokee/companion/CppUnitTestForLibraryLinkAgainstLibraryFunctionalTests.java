@@ -3,6 +3,7 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.companion.fixtures.CoverageObjectMockPluginFixture;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterLib;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 
 		build = GradleBuildElement.inDirectory(testDirectory);
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.all-features.enabled=true");
-		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withGradleVersion("7.6.4");
+		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput();//.withGradleVersion("7.6.4");
 		build.getSettingsFile().append(groovyDsl("rootProject.name = 'test'"));
 		build.getBuildFile().plugins(it -> {
 			it.id("dev.nokee.native-companion");
@@ -175,82 +176,20 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 
 	@Test
 	void objectFiles__canSelectCoverageObjects() {
+		build.getBuildFile().append(groovyDsl(new CoverageObjectMockPluginFixture().asGroovyScript()));
 		build.getBuildFile().append(groovyDsl("""
-			import dev.nokee.commons.names.CppNames
-			import static dev.nokee.commons.names.CppNames.*
-			import dev.nokee.commons.names.NamingScheme
-			import dev.nokee.language.cpp.tasks.CppCompile
-			import dev.nokee.companion.ObjectFiles
-
-			import static dev.nokee.companion.util.CopyFromAction.copyFrom
-
-			library {
-				binaries.configureEach { binary ->
-					if (!optimized) {
-						def names = CppNames.of(binary)//.with('buildTypeName', 'coverage')
-						def coverageTask = tasks.register(names.taskName('compile', 'cpp').toString().replace('Debug', 'Coverage'), CppCompile.clazz())
-						coverageTask.configure(copyFrom(compileTask))
-						coverageTask.configure {
-							objectFileDir = layout.buildDirectory.dir("obj/" + names.toString(NamingScheme.dirNames()).replace('debug', 'coverage'))
-							compilerArgs.add('-coverage')
-						}
-						def cppApiElements = configurations.named(CppNames.qualifyingName(binary).toString() + 'TestableCppApiElements')
-						cppApiElements.configure {
-							outgoing {
-								capability("testable-type:coverage-objects:1.0");
-							}
-						}
-						def linkElements = configurations.register(CppNames.qualifyingName(binary).toString() + 'CoverageTestableLinkElements')
-						linkElements.configure {
-						    extendsFrom = configurations.getByName(linkElementsConfigurationName(binary)).extendsFrom
-						    attributes {
-						        def delegate = configurations.getByName(linkElementsConfigurationName(binary)).attributes
-						        delegate.keySet().each {
-						        	attribute(it, delegate.getAttribute(it))
-								}
-						    }
-							outgoing {
-								capability("testable-type:coverage-objects:1.0");
-									artifact(tasks.register('syncCoverageObjects', Sync) { task ->
-										task.from(coverageTask.map { ObjectFiles.of(it) })
-										task.into(layout.buildDirectory.dir("tmp/${task.name}"))
-									}) { type = 'public.object-code-directory'}
-							}
-						}
-						def runtimeElements = configurations.named(CppNames.qualifyingName(binary).toString() + 'TestableRuntimeElements')
-						runtimeElements.configure {
-							outgoing {
-								capability("testable-type:coverage-objects:1.0");
-							}
-						}
-						configurations.named(CppNames.qualifyingName(binary).toString() + 'TestableSourceElements') {
-							outgoing {
-								variants.create('coverage-objects')
-							}
-						}
-					}
-				}
-			}
 			unitTest {
 				testedComponent {
 					linkAgainst("coverage-objects")
 				}
 				binaries.configureEach {
-					println 'set optimized ...'
-					ext.optimized = linkTask.flatMap { it.linkerArgs }.map {
-						new Throwable((it + ' -- ' + name).toString()).printStackTrace()
-						return !it.contains('--coverage')
-					}
+					ext.optimized = linkTask.flatMap { it.linkerArgs }.map { !it.contains('--coverage') }
 					linkTask.get().linkerArgs.add('--coverage')
-					println 'after set coverage args'
 				}
 			}
 		"""));
 
-		runner.withTasks("outgoingVariants").build();
-		runner.withTasks("resolvableConfigurations").build();
-//		runner.publishBuildScans().withTasks("dependencies").build();
-		BuildResult result = runner.publishBuildScans().withTasks("runTest").build();
+		BuildResult result = runner.withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageCpp", ":compileTestCpp", ":linkTest", ":runTest"));
 		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebug", ":linkRelease")));
 	}
