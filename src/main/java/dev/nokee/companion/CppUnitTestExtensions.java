@@ -4,7 +4,6 @@ import dev.nokee.commons.backports.ConfigurationRegistry;
 import dev.nokee.commons.backports.DependencyFactory;
 import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.gradle.attributes.Attributes;
-import dev.nokee.commons.gradle.provider.ProviderUtils;
 import dev.nokee.commons.names.CppNames;
 import dev.nokee.commons.names.Names;
 import org.gradle.api.*;
@@ -23,6 +22,7 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.ProviderConvertible;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.Sync;
 import org.gradle.api.tasks.TaskContainer;
@@ -34,8 +34,9 @@ import org.gradle.nativeplatform.MachineArchitecture;
 import org.gradle.nativeplatform.OperatingSystemFamily;
 import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 import org.gradle.nativeplatform.test.cpp.CppTestSuite;
-import org.jetbrains.annotations.Nullable;
+import org.gradle.util.GradleVersion;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -204,14 +205,12 @@ public final class CppUnitTestExtensions {
 					}));
 
 					NamedDomainObjectProvider<Configuration> testedComponent = configurationRegistry.dependencyScope(CppNames.of(testSuite).configurationName("testedComponent"));
-					testedComponent.configure(configuration -> configuration.setVisible(false));
+					testedComponent.configure(asHidden());
 					testedComponent.configure(configuration -> {
 						final Provider<ModuleDependency> dependency = testedComponentExtension.getTestedComponent().map(it -> {
 							ModuleDependency result = dependencyFactory.create(project);
 							result.capabilities(capabilities -> {
-								ProviderUtils.asJdkOptional(testedComponentExtension.getTestableTypeProvider().map(t -> "testable-type:" + t + ":1.0")).ifPresent(cap -> {
-									capabilities.requireCapability(cap);
-								});
+								capabilities.requireCapability(Capabilities.forProvider(testedComponentExtension.getTestableTypeProvider().map(TestableCapability::of)));
 							});
 							return result;
 						});
@@ -529,7 +528,7 @@ public final class CppUnitTestExtensions {
 			elements.add(linkElements.get());
 			elements.add(runtimeElements.get());
 
-			elements.all(it -> it.setVisible(false));
+			elements.all(asHidden());
 
 			compileElements.configure(attributes(objects, details -> {
 				details.attribute(Usage.USAGE_ATTRIBUTE).of("native-compile");
@@ -577,7 +576,7 @@ public final class CppUnitTestExtensions {
 			return runtimeElements;
 		}
 
-		public DomainObjectSet<Configuration> getConfigurations() {
+		public NamedDomainObjectSet<Configuration> getConfigurations() {
 			return elements;
 		}
 	}
@@ -586,27 +585,8 @@ public final class CppUnitTestExtensions {
 		private static final String GROUP = "testable-type";
 		private static final String VERSION = "1.0";
 
-		public static Object of(String name) {
+		public static String of(String name) {
 			return GROUP + ":" + name + ":" + VERSION;
-		}
-
-		public static Object of(Provider<String> name) {
-			return new Capability() {
-				@Override
-				public String getGroup() {
-					return GROUP;
-				}
-
-				@Override
-				public String getName() {
-					return name.get();
-				}
-
-				@Override
-				public @Nullable String getVersion() {
-					return VERSION;
-				}
-			};
 		}
 	}
 
@@ -624,5 +604,140 @@ public final class CppUnitTestExtensions {
 
 	private static Action<Configuration> outgoing(Action<? super ConfigurationPublications> action) {
 		return it -> it.outgoing(action);
+	}
+
+	private static Action<Configuration> asHidden() {
+		return it -> it.setVisible(false);
+	}
+
+	private static class Capabilities {
+		public static Object forProvider(Provider<? extends String> notation) {
+			if (GradleVersion.current().compareTo(GradleVersion.version("8.11")) >= 0) {
+				return notation;
+			} else {
+				return new Capability() {
+					@Override
+					public String getGroup() {
+						return notation.get().split(":")[0];
+					}
+
+					@Override
+					public String getName() {
+						return notation.get().split(":")[1];
+					}
+
+					@Override
+					public @Nullable String getVersion() {
+						return notation.get().split(":")[2];
+					}
+				};
+			}
+		}
+
+
+		public static <T> Action<T> capabilities(ObjectFactory objects, Action<? super Details> action) {
+			return it -> {
+				if (it instanceof ModuleDependencyCapabilitiesHandler) {
+					action.execute(new Details(new MinimalModuleDependencyCapabilitiesCollectionAdapter((ModuleDependencyCapabilitiesHandler) it)));
+				} else if (it instanceof ConfigurationPublications) {
+					action.execute(new Details(new MinimalConfigurationPublicationsCollectionAdapter((ConfigurationPublications) it)));
+				} else {
+					throw new UnsupportedOperationException();
+				}
+			};
+		}
+
+		@NonExtensible
+		public static class Details {
+			private final MinimalCapabilitiesCollection collection;
+
+			public Details(MinimalCapabilitiesCollection collection) {
+				this.collection = collection;
+			}
+
+			public void capability(String notation) {
+				collection.addCapability(notation);
+			}
+
+			public void capability(Provider<? extends String> notation) {
+				collection.addCapability(notation);
+			}
+
+			public void capability(ProviderConvertible<? extends String> notation) {
+				collection.addCapability(notation.asProvider());
+			}
+
+			public void capabilities(String... notations) {
+				for (String notation : notations) {
+					collection.addCapability(notation);
+				}
+			}
+		}
+
+		private interface MinimalCapabilitiesCollection {
+			void addCapability(String notation);
+
+			void addCapability(Provider<? extends String> notation);
+
+			void addFeature(String featureName);
+
+			void addFeature(Provider<? extends String> featureName);
+		}
+
+		private static final class MinimalModuleDependencyCapabilitiesCollectionAdapter implements MinimalCapabilitiesCollection {
+			private final ModuleDependencyCapabilitiesHandler delegate;
+
+			private MinimalModuleDependencyCapabilitiesCollectionAdapter(ModuleDependencyCapabilitiesHandler delegate) {
+				this.delegate = delegate;
+			}
+
+			@Override
+			public void addCapability(String notation) {
+				delegate.requireCapability(notation);
+			}
+
+			@Override
+			public void addCapability(Provider<? extends String> notation) {
+				delegate.requireCapability(notation);
+			}
+
+			@Override
+			public void addFeature(String featureName) {
+				delegate.requireFeature(featureName);
+			}
+
+			@Override
+			public void addFeature(Provider<? extends String> featureName) {
+				delegate.requireFeature(featureName.map(it -> it));
+			}
+		}
+
+		private static final class MinimalConfigurationPublicationsCollectionAdapter implements MinimalCapabilitiesCollection {
+			private final ConfigurationPublications delegate;
+
+			private MinimalConfigurationPublicationsCollectionAdapter(ConfigurationPublications delegate) {
+				this.delegate = delegate;
+			}
+
+			@Override
+			public void addCapability(String notation) {
+				delegate.capability(notation);
+			}
+
+			@Override
+			public void addCapability(Provider<? extends String> notation) {
+				delegate.capability(notation);
+			}
+
+			@Override
+			public void addFeature(String featureName) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public void addFeature(Provider<? extends String> featureName) {
+				throw new UnsupportedOperationException();
+			}
+		}
 	}
 }
