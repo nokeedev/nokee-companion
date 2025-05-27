@@ -40,6 +40,7 @@ import javax.inject.Inject;
 		plugins.apply(CppUnitTestExtensions.Rule.class);
 		plugins.apply(CppBinaryTaskExtensions.Rule.class);
 		plugins.apply(CppBinaryConfigurationExtensions.Rule.class);
+		plugins.apply(CppBinaryConfigurationRule.class);
 		feature.apply("binary-task-extensions");
 		feature.apply("objects-lifecycle-tasks");
 

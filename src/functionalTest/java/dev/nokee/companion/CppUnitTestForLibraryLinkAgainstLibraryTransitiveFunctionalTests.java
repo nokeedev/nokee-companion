@@ -64,8 +64,12 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 	void objectFiles__canReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(objects)
+				dependencies {
+					implementation(project) {
+						attributes {
+							attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.OBJECTS))
+						}
+					}
 				}
 			}
 		"""));
@@ -79,8 +83,12 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 	void releaseobjectFiles__canReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(objects)
+				dependencies {
+					implementation(project) {
+						attributes {
+							attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.OBJECTS))
+						}
+					}
 				}
 			}
 			unitTest {
@@ -99,8 +107,8 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 	void product__debugvariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(product)
+				dependencies {
+					implementation project
 				}
 			}
 		"""));
@@ -119,8 +127,8 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 				}
 			}
 			unitTest {
-				testedComponent {
-					linkAgainst(product)
+				dependencies {
+					implementation project
 				}
 			}
 		"""));
@@ -133,8 +141,8 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 	void releaseproduct__zzcanReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(product)
+				dependencies {
+					implementation project
 				}
 			}
 			unitTest {
@@ -152,8 +160,12 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 	void sourceFiles__zzzcanReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(sources)
+				dependencies {
+					implementation(project) {
+						attributes {
+							attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, 'sources'))
+						}
+					}
 				}
 			}
 		"""));
@@ -172,8 +184,12 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 		""");
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(sources)
+				dependencies {
+					implementation(project) {
+						attributes {
+							attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, 'sources'))
+						}
+					}
 				}
 			}
 			unitTest {
@@ -196,17 +212,22 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 		build.getBuildFile().append(groovyDsl(new CoverageObjectMockPluginFixture().asGroovyScript()));
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst("coverage-objects")
+				dependencies {
+					implementation(project) {
+						attributes {
+							attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements, LibraryElements.OBJECTS))
+							attribute(Attribute.of("coverage", String), "yes")
+						}
+					}
 				}
 				binaries.configureEach {
-					ext.optimized = linkTask.flatMap { it.linkerArgs }.map { !it.contains('--coverage') }
 					linkTask.get().linkerArgs.add('--coverage')
 				}
 			}
 		"""));
 
-		BuildResult result = runner.withTasks("runTest").build();
+		runner.withTasks("outgoingVariants").build();
+		BuildResult result = runner.publishBuildScans().withTasks("runTest").build();
 		assertThat(result.getExecutedTaskPaths(), hasItems(":compileCoverageCpp", ":compileTestCpp", ":linkTest", ":runTest"));
 		assertThat(result.getExecutedTaskPaths(), not(hasItems(":linkDebug", ":linkRelease")));
 	}

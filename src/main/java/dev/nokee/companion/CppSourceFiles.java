@@ -1,6 +1,8 @@
 package dev.nokee.companion;
 
 import dev.nokee.commons.gradle.Plugins;
+import dev.nokee.commons.names.CppNames;
+import org.gradle.api.DomainObjectSet;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
@@ -12,6 +14,9 @@ import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.cpp.tasks.CppCompile;
 
 import javax.inject.Inject;
+
+import java.io.File;
+import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.names.CppNames.compileTaskName;
 
@@ -52,17 +57,35 @@ public final class CppSourceFiles {
 		@Override
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
-				project.getComponents().withType(CppComponent.class).configureEach(component -> {
-					component.getBinaries().whenElementKnown(binary -> {
-						cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOf(component)));
+				DomainObjectSet<String> s = objects.domainObjectSet(String.class);
+				project.getComponents().withType(CppComponent.class).all(component -> {
+//					s.add(component.getName()); // a callback is issued HERE!
+//					component.getBinaries().whenElementKnown(binary -> {
+//						System.out.println(">>>>> CONFIGURE SOURCES C++ " + binary);
+//						cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOf(component)));
+//					});
+					project.getComponents().withType(CppBinary.class).configureEach(binary -> {
+						if (binary.getName().startsWith(component.getName())) {
+							System.out.println(">>>>> CONFIGURE SOURCES C++ " + binary);
+							cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOf(component)));
+						}
 					});
 				});
+//				s.all(componentName -> {
+//
+//				});
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					tasks.named(compileTaskName(binary), CppCompile.class).configure(task -> {
+						System.out.println("CONFIGURE SOURCES C++ " + task);
 						try {
 							// Note: We are **not** using `setFrom` as some projects configures generated source files through Project:
 							//   project.tasks.withType(CppCompile).configureEach { source(...) }
-							task.getSource().from(cppSourceOf(binary));
+							task.getSource().from((Callable<?>) () -> {
+								for (File file : cppSourceOf(binary).call().getFiles()) {
+									System.out.println(file);
+								}
+								return cppSourceOf(binary);
+							});
 						} catch (IllegalStateException e) {
 							// We only log the failure as the `cppSource` may be wired through a different process
 							//   See per-source file compiler args sample.

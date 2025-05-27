@@ -105,6 +105,7 @@ class CppBinaryObjectsFunctionalTests {
 				it.id("cpp-unit-test");
 				it.id("cpp-application");
 			});
+			runner.withTasks("outgoingVariants").build();
 			result = runner.withTasks("objects").build();
 			assertThat(result.getExecutedTaskPaths(), hasItems(":compileTestCpp", ":compileDebugCpp", ":compileReleaseCpp", ":objects"));
 		}

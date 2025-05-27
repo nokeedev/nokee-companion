@@ -6,6 +6,8 @@ import org.gradle.api.Project;
 import org.gradle.api.artifacts.ConfigurablePublishArtifact;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
+import org.gradle.api.attributes.AttributeCompatibilityRule;
+import org.gradle.api.attributes.CompatibilityCheckDetails;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.CppExecutable;
 import org.gradle.language.cpp.CppStaticLibrary;
@@ -17,6 +19,8 @@ import org.gradle.language.nativeplatform.ComponentWithRuntimeFile;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
+
+import java.util.Arrays;
 
 import static dev.nokee.commons.names.CppNames.linkElementsConfigurationName;
 import static dev.nokee.commons.names.CppNames.runtimeElementsConfigurationName;
@@ -52,6 +56,10 @@ public class NativeArtifactTypeDefinition {
 		return artifactType != null && artifactType.endsWith("-directory");
 	}
 
+	public static boolean isObjectsCompatibleType(@Nullable String artifactType) {
+		return artifactType != null && artifactType.endsWith("-objects");
+	}
+
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
 		private final ConfigurationContainer configurations;
 
@@ -64,6 +72,8 @@ public class NativeArtifactTypeDefinition {
 		@SuppressWarnings("UnstableApiUsage")
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
+				project.getDependencies().getAttributesSchema().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE).getCompatibilityRules().add(LibElemCompatEx.class);
+
 				project.getComponents().withType(ProductionCppComponent.class).configureEach(component -> {
 					component.getBinaries().configureEach(CppBinary.class, binary -> {
 						if (binary instanceof ComponentWithLinkFile) {
@@ -116,6 +126,20 @@ public class NativeArtifactTypeDefinition {
 					});
 				});
 			});
+		}
+
+		/*private*/ static abstract class LibElemCompatEx implements AttributeCompatibilityRule<String> {
+			@Inject
+			public LibElemCompatEx() {}
+
+			@Override
+			public void execute(CompatibilityCheckDetails<String> details) {
+				if (details.getConsumerValue() != null && details.getConsumerValue().equals(ArtifactTypeDefinition.DIRECTORY_TYPE)) {
+					if (isDirectoryCompatibleType(details.getProducerValue())) {
+						details.compatible();
+					}
+				}
+			}
 		}
 	}
 }

@@ -47,8 +47,10 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	void objectFiles__canReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(objects)
+				dependencies {
+					implementation(project) {
+						attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.OBJECTS))
+					}
 				}
 			}
 		"""));
@@ -62,8 +64,10 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 	void releaseobjectFiles__canReselectTestedBinaryToOptimizedVariant() {
 		build.getBuildFile().append(groovyDsl("""
 			unitTest {
-				testedComponent {
-					linkAgainst(objects)
+				dependencies {
+					implementation(project) {
+						attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.OBJECTS))
+					}
 				}
 			}
 			unitTest {

@@ -29,22 +29,9 @@ public final class CoverageObjectMockPluginFixture {
 			import dev.nokee.companion.ObjectFiles
 			import static dev.nokee.companion.NativeArtifactTypeDefinition.*
 			import static dev.nokee.companion.CppBinaryObjects.*
+			import static dev.nokee.companion.CppBinaryProperties.*
 
 			import static dev.nokee.companion.util.CopyFromAction.copyFrom
-
-			def linkArtifact(CppComponent component, CppBinary binary, TaskProvider coverageTask) {
-				if (component instanceof CppLibrary) {
-					return tasks.register(CppNames.of(binary).taskName('sync').toString().replace('Debug', 'Coverage'), Sync) {
-						from(coverageTask.map { ObjectFiles.of(it) })
-						into(layout.buildDirectory.dir("tmp/${name}"))
-					}
-				} else {
-					return tasks.register(CppNames.of(binary).taskName('relocateMain').toString().replace('Debug', 'Coverage'), UnexportMainSymbol) {
-						objects.from(coverageTask.map { ObjectFiles.of(it) })
-			   			outputDirectory = layout.buildDirectory.dir("tmp/${name}")
-					}
-				}
-			}
 
 			components.withType(ProductionCppComponent).configureEach { component ->
 				binaries.configureEach { binary ->
@@ -57,27 +44,46 @@ public final class CoverageObjectMockPluginFixture {
 							compilerArgs.add('-coverage')
 						}
 
-						def linkArtifact = linkArtifact(component, binary, coverageTask)
-
-						testable.elements.create('coverage-objects') {
-							cppApiElements.configure {
-								outgoing {
-									artifact(tasks.register(names.taskName('sync', 'headers').toString(), Sync) {
-										from(component instanceof CppLibrary ? publicHeaderFiles : headerFiles)
-										into(layout.buildDirectory.dir("tmp/${name}"))
-									}) { type = directoryType(C_PLUS_PLUS_HEADER_TYPE) }
+						configurations.register(CppNames.of(binary).configurationName('linkTestableObjectsElements').toString().replace("debug", "coverage")) {
+							canBeConsumed = true
+							canBeResolved = false
+							extendsFrom = configurations.getByName(linkElementsConfigurationName(binary)).extendsFrom
+							attributes {
+								attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage, Usage.NATIVE_LINK))
+								attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, provider(debuggabilityOf(binary)))
+								attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, provider(optimizationOf(binary)))
+								if (component instanceof CppLibrary) {
+									attribute(CppBinary.LINKAGE_ATTRIBUTE, binary instanceof CppSharedLibrary ? Linkage.SHARED : Linkage.STATIC)
 								}
+								attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE, binary.targetMachine.architecture)
+								attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE, binary.targetMachine.operatingSystemFamily)
+								attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category, Category.LIBRARY))
+								attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements, 'objects'))
+								attribute(Attribute.of("coverage", String.class), "yes");
+								attribute(Attribute.of("testable", String.class), "no");
+								attribute(Attribute.of("internal-local-to-project-name", String.class), project.path);
 							}
-							linkElements.configure {
-								outgoing {
-									artifact(linkArtifact) { type = directoryType(OBJECT_CODE_TYPE) }
+							outgoing {
+								def t = tasks.register(CppNames.of(binary).taskName { it.forObject('coverageObjects') }.toString(), Sync) {
+									from(coverageTask.map { ObjectFiles.of(it) })
+									into(layout.buildDirectory.dir("tmp/${name}"))
+									eachFile { println it }
+								}
+								artifact(t) {
+									type = directoryType(OBJECT_CODE_TYPE)
 								}
 							}
 						}
 					}
 				}
 			}
-			""";
+
+			components.withType(CppTestExecutable).configureEach {
+				if (toolChain instanceof GccCompatibleToolChain) {
+					ext.optimized = linkTask.flatMap { it.linkerArgs }.map { !it.contains('--coverage') }
+				}
+			}
+		""";
 	}
 
 	private void _writeToDirectory(Path directory) throws IOException {
