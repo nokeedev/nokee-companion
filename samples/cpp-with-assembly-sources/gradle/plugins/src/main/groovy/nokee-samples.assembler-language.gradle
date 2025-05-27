@@ -9,7 +9,7 @@ components.withType(CppComponent).configureEach { component ->
 		compileTasks.addLater tasks.register(names.compileTaskName('asm').toString(), Assemble) {
 			targetPlatform = compileTask.flatMap { it.targetPlatform }
 			toolChain = compileTask.flatMap { it.toolChain }
-			objectFileDir = layout.buildDirectory.dir(names.append('asm').toString(NamingScheme.dirNames())).get().asFile
+			objectFileDir = layout.buildDirectory.dir('obj/' + names.append('asm').toString(NamingScheme.dirNames())).get().asFile
 			includes(component.privateHeaderDirs)
 			source({
 				def languageName = 'asm'
@@ -21,7 +21,7 @@ components.withType(CppComponent).configureEach { component ->
 			assemblerArgs = []
 		}
 		compileTask(binary).configure {
-			objectFileDir = layout.buildDirectory.dir(names.append('cpp').toString(NamingScheme.dirNames()))
+			objectFileDir = layout.buildDirectory.dir('obj/' + names.append('cpp').toString(NamingScheme.dirNames()))
 		}
 	}
 }

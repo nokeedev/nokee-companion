@@ -12,12 +12,12 @@ components.withType(CppComponent).configureEach { component ->
 			positionIndependentCode = true
 			targetPlatform = compileTask.flatMap { it.targetPlatform }
 			toolChain = compileTask.flatMap { it.toolChain }
-			objectFileDir = layout.buildDirectory.dir(names.append('c').toString(NamingScheme.dirNames()))
+			objectFileDir = layout.buildDirectory.dir('obj/' + names.append('c').toString(NamingScheme.dirNames()))
 			includes(component.privateHeaderDirs)
 			source(fileTree("src/${component.name}/c"))
 		}
 		compileTask(binary).configure {
-			objectFileDir = layout.buildDirectory.dir(names.append('cpp').toString(NamingScheme.dirNames()))
+			objectFileDir = layout.buildDirectory.dir('obj/' + names.append('cpp').toString(NamingScheme.dirNames()))
 		}
 	}
 }
