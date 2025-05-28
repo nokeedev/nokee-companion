@@ -31,7 +31,7 @@ class ShadowPropertyIntegrationTests {
 	}
 
 	MyObject object = objectFactory().newInstance(MyObject.class);
-	ShadowProperty<String> subject = new ShadowProperty<>(object, "value", object::getValue);
+	ShadowProperty<String> subject = ShadowProperty.of(object, "value", object::getValue);
 
 	@Test
 	void byDefaultReturnsValueFromOriginalGetter() {
@@ -84,7 +84,7 @@ class ShadowPropertyIntegrationTests {
 
 	@Test
 	void canMutatedExtraPropertyProvider() {
-		Provider<String> provider = providerFactory().provider(new Callable<String>() {
+		Provider<String> provider = providerFactory().provider(new Callable<>() {
 			private int count = 0;
 
 			@Override

@@ -26,7 +26,7 @@ public final class CppSourceFiles {
 	 * @return the property
 	 */
 	public static ShadowProperty<FileCollection> cppSourceOf(CppBinary binary) {
-		return new ShadowProperty<>(binary, "cppSource", binary::getCppSource);
+		return ShadowProperty.of(binary, "cppSource", binary::getCppSource);
 	}
 
 	/**
@@ -36,7 +36,7 @@ public final class CppSourceFiles {
 	 * @return the property
 	 */
 	public static ShadowProperty<FileCollection> cppSourceOf(CppComponent component) {
-		return new ShadowProperty<>(component, "cppSource", component::getCppSource);
+		return ShadowProperty.of(component, "cppSource", component::getCppSource);
 	}
 
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {

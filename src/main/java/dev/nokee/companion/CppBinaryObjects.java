@@ -37,7 +37,7 @@ public final class CppBinaryObjects {
 	 * @return the property
 	 */
 	public static ShadowProperty<FileCollection> objectsOf(ComponentWithObjectFiles binary) {
-		return new ShadowProperty<>(binary, "objects", binary::getObjects);
+		return ShadowProperty.of(binary, "objects", binary::getObjects);
 	}
 
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {

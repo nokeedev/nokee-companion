@@ -15,19 +15,12 @@ import java.util.function.Supplier;
  *
  * @param <T> the property type
  */
-public final class ShadowProperty<T> implements Callable<Object> {
+public abstract class ShadowProperty<T> {
 	private final Object self;
 	private final String propertyName;
 	private final Supplier<T> getter;
 
-	/**
-	 * Constructs a shadow property.
-	 *
-	 * @param self  the target object
-	 * @param propertyName  the property name (in terms of Groovy/Kotlin)
-	 * @param getter  the plain object getter to the read-only value
-	 */
-	public ShadowProperty(Object self, String propertyName, Supplier<T> getter) {
+	private ShadowProperty(Object self, String propertyName, Supplier<T> getter) {
 		this.self = self;
 		this.propertyName = propertyName;
 		this.getter = getter;
@@ -104,7 +97,7 @@ public final class ShadowProperty<T> implements Callable<Object> {
 		return this;
 	}
 
-	private Object rawValue() {
+	protected Object rawValue() {
 		final ExtraPropertiesExtension ext = ((ExtensionAware) self).getExtensions().getExtraProperties();
 		if (ext.has(propertyName)) {
 			@Nullable final Object value = ext.get(propertyName);
@@ -116,18 +109,6 @@ public final class ShadowProperty<T> implements Callable<Object> {
 		return getter.get();
 	}
 
-	/**
-	 * Convenience to use in {@code project.files(shadowProperty)} (for provider, use {@code project.provider(shadowProperty::get)}).
-	 * In both cases, the value will be deferred.
-	 * <b>Note:</b> Must NOT be used during self-assign.
-	 *
-	 * @return the property value
-	 * @throws Exception if {@link #get()} fails
-	 */
-	@Override
-	public Object call() throws Exception {
-		return rawValue();
-	}
 
 	/**
 	 * {@inheritDoc}
@@ -135,5 +116,35 @@ public final class ShadowProperty<T> implements Callable<Object> {
 	@Override
 	public String toString() {
 		return "shadow property '" + propertyName + "' on " + self;
+	}
+
+	/**
+	 * Constructs a shadow property.
+	 *
+	 * @param self  the target object
+	 * @param propertyName  the property name (in terms of Groovy/Kotlin)
+	 * @param getter  the plain object getter to the read-only value
+	 */
+	public static <T> ShadowProperty<T> of(Object self, String propertyName, Supplier<T> getter) {
+		return new Impl<>(self, propertyName, getter);
+	}
+
+	private static final class Impl<T> extends ShadowProperty<T> implements Callable<Object> {
+		private Impl(Object self, String propertyName, Supplier<T> getter) {
+			super(self, propertyName, getter);
+		}
+
+		/**
+		 * Convenience to use in {@code project.files(shadowProperty)} (for provider, use {@code project.provider(shadowProperty::get)}).
+		 * In both cases, the value will be deferred.
+		 * <b>Note:</b> Must NOT be used during self-assign.
+		 *
+		 * @return the property value
+		 * @throws Exception if {@link #get()} fails
+		 */
+		@Override
+		public Object call() throws Exception {
+			return rawValue();
+		}
 	}
 }
