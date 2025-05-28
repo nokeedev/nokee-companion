@@ -124,7 +124,7 @@ class CppBinaryObjectsFunctionalTests {
 						targetPlatform = binary.targetPlatform.nativePlatform
 						objectFileDir = layout.buildDirectory.dir("obj/main/c/${binary.name - 'main' - 'Executable'}")
 					}
-					compileTask.get().objectFileDir = layout.buildDirectory.dir("obj/main/cpp/${binary.name - 'main' - 'Executable'}"
+					compileTask.get().objectFileDir = layout.buildDirectory.dir("obj/main/cpp/${binary.name - 'main' - 'Executable'}")
 				}
 			""".stripIndent()));
 		}
