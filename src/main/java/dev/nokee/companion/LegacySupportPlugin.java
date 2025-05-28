@@ -36,8 +36,10 @@ import javax.inject.Inject;
 		plugins.apply(CppSourceFiles.Rule.class);
 		plugins.apply("native-companion.replace-cpp-compile-task");
 		plugins.apply(CppBinaryObjects.Rule.class);
+		plugins.apply(CppBinaryProperties.Rule.class);
 		plugins.apply(CppUnitTestExtensions.Rule.class);
 		plugins.apply(CppBinaryTaskExtensions.Rule.class);
+		plugins.apply(CppBinaryConfigurationExtensions.Rule.class);
 		feature.apply("binary-task-extensions");
 		feature.apply("objects-lifecycle-tasks");
 
