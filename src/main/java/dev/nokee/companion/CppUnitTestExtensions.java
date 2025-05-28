@@ -36,6 +36,7 @@ import static dev.nokee.commons.gradle.SpecUtils.named;
 import static dev.nokee.commons.names.CppNames.nativeLinkConfigurationName;
 import static dev.nokee.commons.names.CppNames.relocateMainForBinaryTaskName;
 import static dev.nokee.companion.CppBinaryObjects.objectsOf;
+import static dev.nokee.companion.CppBinaryProperties.optimizationOf;
 
 /**
  * Represents missing properties that matches the tested component/binary for C++ test suites.
@@ -124,7 +125,7 @@ public final class CppUnitTestExtensions {
 							protected boolean isTestedBinary(CppTestExecutable testExecutable, ProductionCppComponent mainComponent, CppBinary testedBinary) {
 								return testedBinary.getTargetMachine().getOperatingSystemFamily().getName().equals(testExecutable.getTargetMachine().getOperatingSystemFamily().getName())
 									&& testedBinary.getTargetMachine().getArchitecture().getName().equals(testExecutable.getTargetMachine().getArchitecture().getName())
-									&& !testedBinary.isOptimized()
+									&& optimizationOf(testExecutable).get() == optimizationOf(testedBinary).get()
 									&& hasDevelopmentBinaryLinkage(mainComponent, testedBinary);
 							}
 						}));

@@ -3,8 +3,6 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
-import dev.nokee.platform.nativebase.fixtures.CGreeterApp;
-import dev.nokee.platform.nativebase.fixtures.CGreeterTest;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterApp;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static dev.gradleplugins.buildscript.syntax.Syntax.*;
+import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
@@ -59,20 +57,21 @@ class ReselectCppUnitTestCompilationFunctionalTests {
 	void canReselectTestedBinaryToOptimizedVariant() {
 		new CppGreeterTest().writeToProject(testDirectory);
 		build.getBuildFile().plugins(it -> it.id("cpp-unit-test"));
-		build.getBuildFile().append(importClass("dev.nokee.companion.util.TestedBinaryMapper"));
-		build.getBuildFile().append(staticImportClass("dev.nokee.companion.CppUnitTestExtensions"));
 		build.getBuildFile().append(groovyDsl("""
 			unitTest { component ->
 				binaries.configureEach { binary ->
-					testedBinaryOf(binary).set(testedComponentOf(component).map(new TestedBinaryMapper(binary) {
-						@Override
-						protected boolean isTestedBinary(CppTestExecutable testExecutable, ProductionCppComponent mainComponent, CppBinary testedBinary) {
-							return testedBinary.getTargetMachine().getOperatingSystemFamily().getName().equals(testExecutable.getTargetMachine().getOperatingSystemFamily().getName())
-								&& testedBinary.getTargetMachine().getArchitecture().getName().equals(testExecutable.getTargetMachine().getArchitecture().getName())
-								&& testedBinary.isOptimized()
-								&& hasDevelopmentBinaryLinkage(mainComponent, testedBinary);
-						}
-					}))
+					// Turn the whole test executable to a release build type (tested component, test component dependency and test binary itself).
+				    ext.optimized = true;
+
+					def qualifyingName = (name - 'Executable').uncapitalize()
+
+					// Leave the current test binary as debug build type
+				    tasks.named("compile${qualifyingName.capitalize()}Cpp") { optimized = false }
+
+				    // Leave the test binary dependencies as debug build type
+				    configurations.named("cppCompile${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
+				    configurations.named("nativeLink${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
+				    configurations.named("nativeRuntime${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
 				}
 			}
 		""".stripIndent()));
