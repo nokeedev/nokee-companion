@@ -12,6 +12,8 @@ import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.cpp.tasks.CppCompile;
 
 import javax.inject.Inject;
+import java.util.HashMap;
+import java.util.Map;
 
 import static dev.nokee.commons.names.CppNames.compileTaskName;
 
@@ -52,10 +54,14 @@ public final class CppSourceFiles {
 		@Override
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
+				Map<String, ShadowProperty<FileCollection>> cppSourceByComponents = new HashMap<>();
 				project.getComponents().withType(CppComponent.class).configureEach(component -> {
-					component.getBinaries().whenElementKnown(binary -> {
-						cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOf(component)));
-					});
+					cppSourceByComponents.put(component.getName(), cppSourceOf(component));
+				});
+				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
+					String componentName = cppSourceByComponents.keySet().stream().filter(it -> binary.getName().startsWith(it)).findFirst().orElseThrow(RuntimeException::new);
+					ShadowProperty<FileCollection> cppSourceOfComponent = cppSourceByComponents.get(componentName);
+					cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOfComponent));
 				});
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					tasks.named(compileTaskName(binary), CppCompile.class).configure(task -> {
