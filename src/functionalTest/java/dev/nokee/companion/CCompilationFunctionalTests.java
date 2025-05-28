@@ -42,10 +42,11 @@ class CCompilationFunctionalTests {
 					compileTasks.addLater tasks.register("compile${binary.name - 'main'}C", CCompile) {
 						toolChain = binary.toolChain
 						targetPlatform = binary.targetPlatform.nativePlatform
-						objectFileDir = layout.buildDirectory.dir("objs/main/c/${binary.name - 'main'}")
+						objectFileDir = layout.buildDirectory.dir("obj/main/c/${binary.name - 'main'}")
 						source(fileTree('src/main/c'))
 						includes(component.privateHeaderDirs)
 					}
+					compileTask.get().objectFileDir = layout.buildDirectory.dir("obj/main/cpp/${binary.name - 'main' - 'Executable'}")
 				}
 			}
 		""".stripIndent()));
@@ -69,11 +70,12 @@ class CCompilationFunctionalTests {
 					compileTasks.addLater tasks.register("compile${(binary.name - 'Executable').capitalize()}C", CCompile) {
 						toolChain = binary.toolChain
 						targetPlatform = binary.targetPlatform.nativePlatform
-						objectFileDir = layout.buildDirectory.dir("objs/test/c/${binary.name}")
+						objectFileDir = layout.buildDirectory.dir("obj/test/c/${binary.name}")
 						source(fileTree('src/test/c'))
 						includes(component.privateHeaderDirs)
 						includes(component.testedComponent.flatMap { it.privateHeaderDirs.elements })
 					}
+					compileTask.get().objectFileDir = layout.buildDirectory.dir("obj/main/cpp/${binary.name - 'main' - 'Executable'}")
 				}
 			}
 		""".stripIndent()));
