@@ -1,8 +1,12 @@
 package dev.nokee.companion;
 
+import org.gradle.api.Transformer;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.ExtraPropertiesExtension;
+import org.gradle.api.provider.Provider;
 
+import javax.annotation.Nullable;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.function.Supplier;
 
@@ -11,7 +15,7 @@ import java.util.function.Supplier;
  *
  * @param <T> the property type
  */
-public final class ShadowProperty<T> implements Callable<T> {
+public final class ShadowProperty<T> implements Callable<Object> {
 	private final Object self;
 	private final String propertyName;
 	private final Supplier<T> getter;
@@ -38,11 +42,23 @@ public final class ShadowProperty<T> implements Callable<T> {
 	public T get() {
 		final ExtraPropertiesExtension ext = ((ExtensionAware) self).getExtensions().getExtraProperties();
 		if (ext.has(propertyName)) {
-			@SuppressWarnings("unchecked")
-			final T result = (T) ext.get(propertyName);
-			return result;
+			@Nullable final Object value = ext.get(propertyName);
+			if (value != null) {
+				@SuppressWarnings("unchecked")
+				final T result = (T) unpack(value);
+				return result;
+			}
+			// fall through to getter value
 		}
 		return getter.get();
+	}
+
+	private Object unpack(@Nullable Object obj) {
+		assert obj != null; // assumption from usage
+		if (obj instanceof Provider) {
+			return ((Provider<?>) obj).get();
+		}
+		return obj;
 	}
 
 	/**
@@ -57,7 +73,51 @@ public final class ShadowProperty<T> implements Callable<T> {
 	}
 
 	/**
-	 * Convenience to use in {@code project.files(shadowProperty)} or in {@code project.provider(shadowProperty)}.
+	 * Replace the property value.
+	 * <b>Note:</b> the new value will live in the shadow of the original value, make sure everyone knows.
+	 *
+	 * @param providedValue  the new deferred value, must be of the same type as the original value
+	 */
+	public void set(Provider<? extends T> providedValue) {
+		final ExtraPropertiesExtension ext = ((ExtensionAware) self).getExtensions().getExtraProperties();
+		ext.set(propertyName, providedValue);
+	}
+
+	/**
+	 * Mutate the current property value.
+	 * <b>Note:</b> the new value will live in the shadow of the original value, make sure everyone knows.
+	 *
+	 * @param newValueTransformer  the transformer of the current value into the new value
+	 * @return the current shadow property
+	 */
+	public ShadowProperty<T> mut(Transformer<T, T> newValueTransformer) {
+		Object value = rawValue();
+		if (value instanceof Provider) {
+			@SuppressWarnings("unchecked")
+			final Provider<T> provider = (Provider<T>) value;
+			set(provider.map(newValueTransformer));
+		} else {
+			@SuppressWarnings("unchecked")
+			final T previousValue = (T) value;
+			set(Objects.requireNonNull(newValueTransformer.transform(previousValue), "transformed value must not be null"));
+		}
+		return this;
+	}
+
+	private Object rawValue() {
+		final ExtraPropertiesExtension ext = ((ExtensionAware) self).getExtensions().getExtraProperties();
+		if (ext.has(propertyName)) {
+			@Nullable final Object value = ext.get(propertyName);
+			if (value != null) {
+				return value;
+			}
+			// fall through to getter value
+		}
+		return getter.get();
+	}
+
+	/**
+	 * Convenience to use in {@code project.files(shadowProperty)} (for provider, use {@code project.provider(shadowProperty::get)}).
 	 * In both cases, the value will be deferred.
 	 * <b>Note:</b> Must NOT be used during self-assign.
 	 *
@@ -65,8 +125,8 @@ public final class ShadowProperty<T> implements Callable<T> {
 	 * @throws Exception if {@link #get()} fails
 	 */
 	@Override
-	public T call() throws Exception {
-		return get();
+	public Object call() throws Exception {
+		return rawValue();
 	}
 
 	/**
