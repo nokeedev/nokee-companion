@@ -22,7 +22,7 @@ abstract class UnzipTask extends DefaultTask {
 	protected abstract FileSystemOperations getFileOperations()
 
 	@TaskAction
-	private void doAction() {
+	protected void doAction() {
 		fileOperations.sync { spec ->
 			spec.from(archiveOperations.zipTree(zipFile))
 			spec.into(destinationDirectory)
