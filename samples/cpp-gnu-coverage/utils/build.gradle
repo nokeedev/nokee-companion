@@ -1,0 +1,27 @@
+plugins {
+	id 'dev.nokee.native-companion'
+	id 'cpp-library'
+	id 'cpp-unit-test'
+	id 'nokee-samples.gnu-coverage-base'
+}
+
+library {
+	dependencies {
+		api project(':list')
+	}
+}
+
+unitTest {
+	binaries.configureEach {
+		linkTask.get().with {
+			linkerArgs.addAll(toolChain.map { it instanceof GccCompatibleToolChain ? ['--coverage'] : [] })
+		}
+	}
+	dependencies {
+		implementation(testedComponent(project).asObjects()) {
+			attributes {
+				attribute(Attribute.of("coverage", String), "yes")
+			}
+		}
+	}
+}

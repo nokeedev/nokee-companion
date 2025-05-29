@@ -60,24 +60,31 @@ class ReselectCppUnitTestCompilationFunctionalTests {
 		build.getBuildFile().plugins(it -> it.id("cpp-unit-test"));
 		build.getBuildFile().append(groovyDsl("""
 			unitTest { component ->
+				dependencies {
+					implementation(testedComponent(project).asObjects()) {
+						attributes {
+							attribute(CppBinary.OPTIMIZED_ATTRIBUTE, true)
+						}
+					}
+				}
 				binaries.configureEach { binary ->
-					// Turn the whole test executable to a release build type (tested component, test component dependency and test binary itself).
-				    ext.optimized = true;
-
-					def qualifyingName = (name - 'Executable').uncapitalize()
-
-					// Leave the current test binary as debug build type
-				    tasks.named("compile${qualifyingName.capitalize()}Cpp") { optimized = false }
-
-				    // Leave the test binary dependencies as debug build type
-				    configurations.named("cppCompile${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
-				    configurations.named("nativeLink${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
-				    configurations.named("nativeRuntime${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
+//					// Turn the whole test executable to a release build type (tested component, test component dependency and test binary itself).
+//				    ext.optimized = true;
+//
+//					def qualifyingName = (name - 'Executable').uncapitalize()
+//
+//					// Leave the current test binary as debug build type
+//				    tasks.named("compile${qualifyingName.capitalize()}Cpp") { optimized = false }
+//
+//				    // Leave the test binary dependencies as debug build type
+//				    configurations.named("cppCompile${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
+//				    configurations.named("nativeLink${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
+//				    configurations.named("nativeRuntime${qualifyingName.capitalize()}") { attributes.attribute(CppBinary.OPTIMIZED_ATTRIBUTE, false) }
 				}
 			}
 		""".stripIndent()));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":compileReleaseC", ":compileTestCpp", ":relocateMainForTest", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileReleaseCpp", ":compileReleaseC", ":compileTestCpp", ":linkTest", ":runTest"));
 	}
 }

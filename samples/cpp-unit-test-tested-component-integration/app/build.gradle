@@ -1,0 +1,20 @@
+plugins {
+	id 'dev.nokee.native-companion'
+	id 'cpp-application'
+	id 'cpp-unit-test'
+}
+
+application {
+	dependencies {
+		implementation project(':list')
+		implementation project(':message')
+		implementation project(':utils')
+	}
+}
+
+// Default behaviour approximate to the following:
+//unitTest {
+//	dependencies {
+//		implementation testedComponent(project).asObjects()
+//	}
+//}

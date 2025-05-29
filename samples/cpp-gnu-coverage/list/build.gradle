@@ -1,0 +1,5 @@
+plugins {
+	id 'dev.nokee.native-companion'
+	id 'cpp-library'
+	id 'cpp-unit-test'
+}

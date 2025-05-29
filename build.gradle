@@ -250,4 +250,12 @@ samples {
 	}
 	samples.register('cpp-with-c-sources')
 	samples.register('cpp-with-assembly-sources')
+	samples.register('cpp-gnu-coverage') {
+		elements {
+			def app = new CppApp()
+			app.withoutImplementation().writeToProject(location.resolve('app'))
+			app.libs.writeToProject(location.resolve('lib'))
+		}
+	}
+	samples.register('cpp-unit-test-tested-component-integration')
 }

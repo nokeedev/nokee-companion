@@ -81,6 +81,6 @@ class CCompilationFunctionalTests {
 		""".stripIndent()));
 
 		BuildResult result = runner.withTasks("runTest").build();
-		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":compileDebugC", ":compileTestCpp", ":compileTestC", ":relocateMainForTest", ":linkTest", ":runTest"));
+		assertThat(result.getExecutedTaskPaths(), hasItems(":compileDebugCpp", ":compileDebugC", ":compileTestCpp", ":compileTestC", ":linkTest", ":runTest"));
 	}
 }

@@ -1,0 +1,15 @@
+plugins {
+	id 'dev.nokee.native-companion'
+	id 'cpp-library'
+	id 'cpp-unit-test'
+}
+
+library {
+	linkage = [Linkage.SHARED, Linkage.STATIC]
+}
+
+unitTest {
+	dependencies {
+		implementation testedComponent(project).asSources()
+	}
+}

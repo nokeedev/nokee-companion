@@ -1,0 +1,51 @@
+import dev.nokee.commons.names.CppNames
+import static dev.nokee.commons.names.CppNames.*
+import dev.nokee.commons.names.NamingScheme
+import dev.nokee.language.cpp.tasks.CppCompile
+import dev.nokee.companion.ObjectFiles
+import dev.nokee.companion.TestIntegrationType
+import static dev.nokee.companion.CppBinaryObjects.*
+import static dev.nokee.companion.CppBinaryProperties.*
+import static dev.nokee.companion.TestIntegrationType.*
+
+import static dev.nokee.companion.util.CopyFromAction.copyFrom
+
+components.withType(ProductionCppComponent).configureEach { component ->
+	binaries.configureEach { binary ->
+		if (!optimized && toolChain instanceof GccCompatibleToolChain) {
+			def names = CppNames.of(binary)//.with('buildTypeName', 'coverage')
+			def coverageTask = tasks.register(names.taskName('compile', 'cpp').toString().replace('Debug', 'Coverage'), CppCompile.clazz())
+			coverageTask.configure(copyFrom(compileTask))
+			coverageTask.configure {
+				objectFileDir = layout.buildDirectory.dir("obj/" + names.toString(NamingScheme.dirNames()).replace('debug', 'coverage'))
+				compilerArgs.add('-coverage')
+			}
+			configurations.named(CppNames.of(binary).configurationName('testableLinkElements').toString()) {
+				outgoing {
+					variants.create('coverage-objects') {
+						attributes {
+							attribute(TEST_INTEGRATION_TYPE_ATTRIBUTE, project.objects.named(TestIntegrationType, LINK_LEVEL))
+							attribute(Attribute.of("coverage", String), "yes")
+							if (component instanceof CppApplication) {
+								attribute(Attribute.of("testable", String), "no")
+							}
+						}
+						def t = tasks.register(CppNames.of(binary).taskName { it.forObject('coverageObjects') }.toString(), Sync) {
+							from(coverageTask.map { ObjectFiles.of(it) })
+							into(layout.buildDirectory.dir("tmp/${name}"))
+						}
+						artifact(t) {
+							type = 'public.object-code-directory'
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+components.withType(CppTestExecutable).configureEach {
+	if (toolChain instanceof GccCompatibleToolChain) {
+		ext.optimized = linkTask.flatMap { it.linkerArgs }.map { !it.contains('--coverage') }
+	}
+}

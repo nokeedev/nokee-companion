@@ -1,0 +1,12 @@
+plugins {
+	id 'dev.nokee.native-companion'
+	id 'cpp-unit-test'
+}
+
+unitTest {
+	dependencies {
+		// tested component as normal project dependency
+		//   using testedComponent(...) serve as a way to mark the dependency
+		implementation testedComponent(project(':message'))
+	}
+}
