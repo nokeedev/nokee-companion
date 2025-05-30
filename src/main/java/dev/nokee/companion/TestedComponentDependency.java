@@ -5,7 +5,6 @@ import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.plugins.ExtensionAware;
-import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderConvertible;
 import org.gradle.language.ComponentDependencies;
 
@@ -16,17 +15,17 @@ public interface TestedComponentDependency extends ProviderConvertible<ModuleDep
 	/**
 	 * {@return a dependency that integrate with the testable objects and headers of the tested component}
 	 */
-	Provider<? extends ModuleDependency> asObjects();
+	ModuleDependency asObjects();
 
 	/**
 	 * {@return a dependency that integrate with the testable sources and headers of the tested component}
 	 */
-	Provider<? extends ModuleDependency> asSources();
+	ModuleDependency asSources();
 
 	/**
 	 * {@return a dependency that integrate with the product and testable headers of the tested component}
 	 */
-	Provider<? extends ModuleDependency> asProduct();
+	ModuleDependency asProduct();
 
 	/**
 	 * Represent the dependency modifier for the tested component.

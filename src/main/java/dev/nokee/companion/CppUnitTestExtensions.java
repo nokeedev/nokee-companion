@@ -540,7 +540,7 @@ public final class CppUnitTestExtensions {
 				this.objects = objects;
 			}
 
-			public Provider<? extends ModuleDependency> asSources() {
+			public ModuleDependency asSources() {
 				return dependencyProvider.map(objects.newInstance(DependencyModifier.class, (DependencyModifier.Action) dependency -> {
 					dependency.attributes(attributes -> {
 						attributes.attribute(TestIntegrationType.TEST_INTEGRATION_TYPE_ATTRIBUTE, objects.named(TestIntegrationType.class, TestIntegrationType.SOURCE_LEVEL));
@@ -548,10 +548,10 @@ public final class CppUnitTestExtensions {
 					dependency.capabilities(capabilities -> {
 						capabilities.requireCapability("test-elements:test-elements:1.0");
 					});
-				})::modify);
+				})::modify).get();
 			}
 
-			public Provider<? extends ModuleDependency> asObjects() {
+			public ModuleDependency asObjects() {
 				return dependencyProvider.map(objects.newInstance(DependencyModifier.class, (DependencyModifier.Action) dependency -> {
 					dependency.attributes(attributes -> {
 						attributes.attribute(TestIntegrationType.TEST_INTEGRATION_TYPE_ATTRIBUTE, objects.named(TestIntegrationType.class, TestIntegrationType.LINK_LEVEL));
@@ -559,10 +559,10 @@ public final class CppUnitTestExtensions {
 					dependency.capabilities(capabilities -> {
 						capabilities.requireCapability("test-elements:test-elements:1.0");
 					});
-				})::modify);
+				})::modify).get();
 			}
 
-			public Provider<? extends ModuleDependency> asProduct() {
+			public ModuleDependency asProduct() {
 				return dependencyProvider.map(objects.newInstance(DependencyModifier.class, (DependencyModifier.Action) dependency -> {
 					dependency.attributes(attributes -> {
 						attributes.attribute(TestIntegrationType.TEST_INTEGRATION_TYPE_ATTRIBUTE, objects.named(TestIntegrationType.class, TestIntegrationType.PRODUCT_LEVEL));
@@ -570,7 +570,7 @@ public final class CppUnitTestExtensions {
 					dependency.capabilities(capabilities -> {
 						capabilities.requireCapability("test-elements:test-elements:1.0");
 					});
-				})::modify);
+				})::modify).get();
 			}
 
 			@Override
