@@ -6,3 +6,9 @@ We have to know what kind of dependencies are returned and resolve them correctl
 // show some example
 
 Instead, with legacy support from Nokee, you get all of this out of the box.
+
+```shell {exemplar}
+$ ./gradlew :app:installTest
+
+BUILD SUCCESSFUL
+```

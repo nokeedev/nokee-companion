@@ -9,9 +9,9 @@ index cfc1128..a40a109 100644
 -		compileTask.get().compilerArgs.addAll([/*...*/])
 -		linkTask.get().linkerArgs.addAll([/*...*/])
 -		installTask.get().lib([/*...*/])
-+		compileTask.configure { compilerArgs.addAll([/*...*/]) }
-+		linkTask.configure { linkerArgs.addAll([/*...*/]) }
-+		installTask.configure { lib([/*...*/]) }
++		compileTask { compilerArgs.addAll([/*...*/]) }
++		linkTask { linkerArgs.addAll([/*...*/]) }
++		installTask { lib([/*...*/]) }
  	}
  	//endregion
  }
@@ -32,14 +32,14 @@ index c72cf24..86c72b0 100644
  	binaries.configureEach(CppSharedLibrary) {
 -		compileTask.get().compilerArgs.addAll([/*...*/])
 -		linkTask.get().linkerArgs.addAll([/*...*/])
-+		compileTask.configure { compilerArgs.addAll([/*...*/]) }
-+		linkTask.configure { linkerArgs.addAll([/*...*/]) }
++		compileTask { compilerArgs.addAll([/*...*/]) }
++		linkTask { linkerArgs.addAll([/*...*/]) }
  	}
  	binaries.configureEach(CppStaticLibrary) {
 -		compileTask.get().compilerArgs.addAll([/*...*/])
 -		createTask.get().staticLibArgs.addAll([/*...*/])
-+		compileTask.configure { compilerArgs.addAll([/*...*/]) }
-+		createTask.configure { staticLibArgs.addAll([/*...*/]) }
++		compileTask { compilerArgs.addAll([/*...*/]) }
++		createTask { staticLibArgs.addAll([/*...*/]) }
  	}
  	//endregion
  }
@@ -49,7 +49,7 @@ index d164157..2d6dac9 100644
 +++ b/settings.gradle
 @@ -1 +1,5 @@
 +plugins {
-+	id 'dev.nokee.native-companion' version '1.0-milestone-4'
++	id 'dev.nokee.native-companion'
 +}
 +
  include 'app', 'lib'

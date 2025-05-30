@@ -1,7 +1,7 @@
 plugins {
 	id 'cpp-application'
 	id 'cpp-unit-test'
-	id 'dev.nokee.native-companion' version '1.0-milestone-4'
+	id 'dev.nokee.native-companion'
 }
 
 application {

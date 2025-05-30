@@ -51,20 +51,20 @@ BUILD SUCCESSFUL
 $ awk '/region/,/endregion/' ./app/build.gradle
 	//region Just for demonstration purpose
 	binaries.configureEach {
-		compileTask.configure { compilerArgs.addAll([/*...*/]) }
-		linkTask.configure { linkerArgs.addAll([/*...*/]) }
-		installTask.configure { lib([/*...*/]) }
+		compileTask { compilerArgs.addAll([/*...*/]) }
+		linkTask { linkerArgs.addAll([/*...*/]) }
+		installTask { lib([/*...*/]) }
 	}
 	//endregion
 $ awk '/region/,/endregion/' ./lib/build.gradle
 	//region Just for demonstration purpose
 	binaries.configureEach(CppSharedLibrary) {
-		compileTask.configure { compilerArgs.addAll([/*...*/]) }
-		linkTask.configure { linkerArgs.addAll([/*...*/]) }
+		compileTask { compilerArgs.addAll([/*...*/]) }
+		linkTask { linkerArgs.addAll([/*...*/]) }
 	}
 	binaries.configureEach(CppStaticLibrary) {
-		compileTask.configure { compilerArgs.addAll([/*...*/]) }
-		createTask.configure { staticLibArgs.addAll([/*...*/]) }
+		compileTask { compilerArgs.addAll([/*...*/]) }
+		createTask { staticLibArgs.addAll([/*...*/]) }
 	}
 	//endregion
 ```
