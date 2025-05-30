@@ -49,7 +49,37 @@ You can use the provided init script to enable the plugin globally.
 This usage scenario should only be used for testing purpose.
 We **do not recommend** using the plugin by dropping the init script inside your `~/.gradle/init.d` or your custom distribution.
 
-## Feature
+## Tasks
+
+The companion plugin replace the following task:
+
+* `compile<Variant>Cpp` - CppCompile
+
+  Replace **only** `CppBinary#compileTask`.
+  The new task has several improvements, per-source options, incremental after failure, compiler argument providers, properties for optimized, debuggable, position independent code and macros.
+
+### Lifecycle Tasks
+
+* `<variant>Objects`
+
+  Depends on: `CppBinary#objects`
+
+  Requires: `objects-lifecycle-tasks` feature
+
+## Shadow Properties
+
+Note that all consumer of the shadowed properties are rewired to be aware of the concept.
+Visit [Shadow Property chapter](TODO) to learn more about the concept.
+When any core native plugin applied:
+
+- `CppBinary#optimized`: rewired into consumable and resolvable configuration and compile task
+- `CppBinary#debuggable`: rewired into consumable and resolvable configuration, compile and link task
+- `CppBinary#objects`: rewired into link task and reflect the true compile task object files (when feature `native-task-object-files-extension` enabled) and collect all compile tasks objects (when feature `compile-tasks-extension` enabled).
+- `CppBinary#compileIncludePath`: rewired into compile task
+- `CppComponent#cppSource`: rewired into `CppBinary#cppSource`
+- `CppBinary#cppSource`: rewired into compile task
+
+## Features
 
 The plugin use feature flags to enable/disable functionalities.
 We can enable/disable features via Gradle properties: all feature using `dev.nokee.native-companion.all-features.enabled` or individual features using `dev.nokee.native-companion.<feature-name>.enabled` (i.e. `dev.nokee.native-companion.fix-for-public-headers.enabled`).
@@ -131,7 +161,87 @@ Any native compile tasks added to the `CppBinary#compileTasks` view will be auto
 Uses Nokee's multiplatform publishing plugin instead of the core native Maven publish configuration.
 The multiplatform publishing plugin allow attributes mutation of the platform's publication as well as providing additional variants (i.e. tests or SWIG elements).
 
-## Extensions
+## Dependency Management
+
+```dot
+digraph nativeLibraryConfigurations {
+  graph [ dpi = 100, fontname="Sans"];
+  node [fontname = "Sans"];
+  edge [fontname = "Sans"];
+  node [shape=rectangle, fixedsize=true, width=2.5, height=0.5];
+
+  subgraph central {
+    node[style=filled, fillcolor=white]
+    api -> implementation -> variantImplementation [style=invis, weight=1000]
+    variantImplementation -> implementation -> api [headport=s, tailport=n]
+
+    variantImplementation[label=<<i>binaryName</i>Implementation>]
+  }
+
+  subgraph left {
+    node[style=filled, fillcolor="#cfe2f3"]
+    headerSearchPaths -> linkLibraries -> runtimeLibraries [style=invis, weight=1000]
+
+    headerSearchPaths[label=<cppCompile<i>Variant</i> (R)>]
+    linkLibraries[label=<nativeLink<i>Variant</i> (R)>]
+    runtimeLibraries[label=<nativeRuntime<i>Variant</i> (R)>]
+  }
+
+  subgraph right {
+    node[style=filled, fillcolor="#ea9999"]
+    compileElements -> linkElements -> runtimeElements [style=invis, weight=1000]
+
+    compileElements[label=<<i>variant</i>CppApiElements (C)>]
+    linkElements[label=<<i>variant</i>LinkElements (C)>]
+    runtimeElements[label=<<i>variant</i>RuntimeElements (C)>]
+  }
+
+  // Ensure the order is preserved
+  {rank=same headerSearchPaths implementation compileElements}
+  {rank=same linkElements variantImplementation linkLibraries}
+  linkLibraries -> variantImplementation -> linkElements [style=invis]
+
+  {headerSearchPaths, linkLibraries, runtimeLibraries} -> variantImplementation [headport=w, tailport=e]
+  {compileElements, linkElements, runtimeElements} -> variantImplementation [headport=e, tailport=w]
+}
+```
+
+### C++ Unit Test Component
+
+In the presence of the `cpp-unit-test` plugin, the companion detached the test suite's `implementation` dependency scope from the tested component's `implementation` dependency scope to favor a normal dependency.
+
+```dot
+digraph nativeLibraryConfigurations {
+  graph [ dpi = 100, fontname="Sans"];
+  node [fontname = "Sans"];
+  edge [fontname = "Sans"];
+  node [shape=rectangle, fixedsize=true, width=2.5, height=0.5];
+
+
+    node[style=filled, fillcolor=white]
+    implementation -> testImplementation -> variantImplementation [style=invis, weight=1000]
+    testImplementation -> implementation [headport=s, tailport=n, color=red, style=dashed, label=removed]
+    variantImplementation -> testImplementation [headport=s, tailport=n]
+
+    variantImplementation[label=<test<i>Variant</i>ExecutableImplementation>]
+
+    node[style=filled, fillcolor="#cfe2f3"]
+    headerSearchPaths -> linkLibraries -> runtimeLibraries [style=invis, weight=1000]
+
+    headerSearchPaths[label=<cppCompileTest<i>Variant</i> (R)>]
+    linkLibraries[label=<nativeLinkTest<i>Variant</i> (R)>]
+    runtimeLibraries[label=<nativeRuntimeTest<i>Variant</i> (R)>]
+
+  // Ensure the order is preserved
+  {rank=same headerSearchPaths testImplementation}
+  {rank=same variantImplementation linkLibraries}
+  linkLibraries -> variantImplementation [style=invis]
+
+  {headerSearchPaths, linkLibraries, runtimeLibraries} -> variantImplementation [headport=w, tailport=e]
+}
+```
+
+## Contributed Extensions
 
 The plugin provide a Project extension named `nativeCompanion` of type [`NativeCompanionExtension`](https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/NativeCompanionExtension.java).
 
@@ -143,3 +253,43 @@ Each `CppBinary` has their respective `TaskProvider` as extensions to avoid real
 - `ComponentWithStaticLibrary`: extension named `createTask` of type `TaskProvider<CreateStaticLibrary>`
 - `ComponentWithInstallation`: extension named `installTask` of type `TaskProvider<InstallExecutable>`
 - `CppTestExecutable`: extension named `runTask` of type `TaskProvider<RunTestExecutable>`
+
+Each `CppBinary` has their respective `Configuration` provider as extensions to avoid realizing the configurations in order to configure them:
+
+- `CppBinary`: extension named `cppCompile`, `nativeLink`, `nativeRuntime`
+- `CppLibrary`: extension named `cppApi`
+- `CppSharedLibrary`/`CppStaticLibrary`: extension named `linkElements`, `runtimeElements`
+- `CppExecutable`: extension named `runtimeElements`
+
+When `cpp-unit-test` plugin applied:
+
+- `Project#dependencies`/`CppTestExecutable#dependencies`: extension method `testedComponent(moduleNotation)` which return `TestedComponentDependency`
+
+## DSL Support
+
+### Groovy DSL
+
+Each `CppBinary` has their respective `TaskProvider`'s configure method to avoid realizing the tasks in order to configure them:
+
+- `CppBinary`: configure method `compileTask {}` which delegate to `CppCompile`
+- `ComponentWithExecutable`: configure method `linkTask {}` which delegate to `LinkExecutable`
+- `ComponentWithSharedLibrary`: configure method `linkTask(Closure)` which delegate to `LinkSharedLibrary`
+- `ComponentWithStaticLibrary`: configure method `createTask(Closure)` which delegate to `CreateStaticLibrary`
+- `ComponentWithInstallation`: configure method `installTask(Closure)` which delegate to `InstallExecutable`
+- `CppTestExecutable`: configure method `runTask(Closure)` which delegate to `RunTestExecutable`
+
+- `CppBinary#dependencies`: `implementation(notation)` and `implementation(moduleNotation, Closure)` bucket
+- `CppComponent#dependencies`: `implementation(notation)` and `implementation(moduleNotation, Closure)`
+- `CppLibrary#dependencies`: `api(notation)` and `api(moduleNotation, Closure)`
+
+## Publishing
+
+- `components.cpp`
+
+  Requires: `multiplatform-publishing` feature
+
+  A [`SoftwareComponent`]({ref-javadoc-SoftwareComponent}) for publishing the production C++ component (e.g. `application` or `library`) and its C++ binaries.
+  Visit the [`multiplatform-publishing` plugin reference chapter](TODO) to learn more.
+
+
+[ref-javadoc-SoftwareComponent]: https://docs.gradle.org/current/javadoc/org/gradle/api/component/SoftwareComponent.html
