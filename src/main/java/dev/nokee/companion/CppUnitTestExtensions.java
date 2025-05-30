@@ -2,6 +2,7 @@ package dev.nokee.companion;
 
 import dev.nokee.commons.backports.ConfigurationRegistry;
 import dev.nokee.commons.backports.DependencyFactory;
+import dev.nokee.commons.backports.DependencyModifier;
 import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.gradle.attributes.Attributes;
 import dev.nokee.commons.names.CppNames;
@@ -16,12 +17,10 @@ import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
 import org.gradle.api.attributes.*;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
-import org.gradle.api.file.FileTree;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.provider.Provider;
-import org.gradle.api.provider.ProviderConvertible;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.os.OperatingSystem;
@@ -55,7 +54,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static dev.nokee.commons.gradle.SpecUtils.named;
-import static dev.nokee.commons.gradle.TransformerUtils.peek;
 import static dev.nokee.commons.names.CppNames.*;
 import static dev.nokee.companion.CppBinaryObjects.objectsOf;
 import static dev.nokee.companion.CppBinaryProperties.*;
@@ -399,7 +397,6 @@ public final class CppUnitTestExtensions {
 							return Collections.emptyList();
 						}
 					})::plus);
-//					cppSourceOf(testExecutable).mut(cppSources.get().getAsFileTree()::plus);
 
 					configurations.named(nativeLinkConfigurationName(testExecutable)).configure(configurations -> {
 						configurations.attributes(attributes -> {
@@ -504,7 +501,7 @@ public final class CppUnitTestExtensions {
 			});
 		}
 
-		/*private*/ static abstract class Closure {
+		/*private*/ static abstract class Closure implements TestedComponentDependency.Modifier {
 			private final DependencyFactory dependencyFactory;
 			private final ObjectFactory objects;
 			private final ProviderFactory providers;
@@ -516,53 +513,68 @@ public final class CppUnitTestExtensions {
 				this.providers = providers;
 			}
 
+			@Override
+			public TestedComponentDependency modify(ProjectDependency dependency) {
+				return modify(providers.provider(() -> dependency));
+			}
+
+			private <DependencyType extends ModuleDependency> TestedComponentDependency modify(Provider<? extends DependencyType> dependencyProvider) {
+				return objects.newInstance(DefaultTestedComponentDependency.class, dependencyProvider);
+			}
+
+			@Override
+			public TestedComponentDependency modify(Project project) {
+				return modify(dependencyFactory.create(project));
+			}
+
+			// manual Groovy DSL decoration
 			public TestedComponentDependency call(Project project) {
-				return objects.newInstance(TestedComponentDependency.class, providers.provider(() -> dependencyFactory.create(project)));
+				return modify(project);
 			}
 		}
 
 		@NonExtensible
-		/*private*/ static abstract class TestedComponentDependency implements ProviderConvertible<ModuleDependency> {
+		/*private*/ static abstract class DefaultTestedComponentDependency implements TestedComponentDependency {
 			private final Provider<ModuleDependency> dependencyProvider;
 			private final ObjectFactory objects;
 
 			@Inject
-			public TestedComponentDependency(Provider<ModuleDependency> dependencyProvider, ObjectFactory objects) {
+			public DefaultTestedComponentDependency(Provider<ModuleDependency> dependencyProvider, ObjectFactory objects) {
 				this.dependencyProvider = dependencyProvider;
 				this.objects = objects;
 			}
 
-			public ModuleDependency asSources() {
-				return dependencyProvider.map(peek(dependency -> {
+			public Provider<? extends ModuleDependency> asSources() {
+				return dependencyProvider.map(objects.newInstance(DependencyModifier.class, (DependencyModifier.Action) dependency -> {
 					dependency.attributes(attributes -> {
 						attributes.attribute(TestIntegrationType.TEST_INTEGRATION_TYPE_ATTRIBUTE, objects.named(TestIntegrationType.class, TestIntegrationType.SOURCE_LEVEL));
 					});
 					dependency.capabilities(capabilities -> {
 						capabilities.requireCapability("test-elements:test-elements:1.0");
 					});
-				})).get();
+				})::modify);
 			}
 
-			public ModuleDependency asObjects() {
-				return dependencyProvider.map(peek(dependency -> {
+			public Provider<? extends ModuleDependency> asObjects() {
+				return dependencyProvider.map(objects.newInstance(DependencyModifier.class, (DependencyModifier.Action) dependency -> {
 					dependency.attributes(attributes -> {
 						attributes.attribute(TestIntegrationType.TEST_INTEGRATION_TYPE_ATTRIBUTE, objects.named(TestIntegrationType.class, TestIntegrationType.LINK_LEVEL));
 					});
 					dependency.capabilities(capabilities -> {
 						capabilities.requireCapability("test-elements:test-elements:1.0");
 					});
-				})).get();
+				})::modify);
 			}
 
-			public ModuleDependency asProduct() {
-				return dependencyProvider.map(peek(dependency -> {
+			public Provider<? extends ModuleDependency> asProduct() {
+				return dependencyProvider.map(objects.newInstance(DependencyModifier.class, (DependencyModifier.Action) dependency -> {
 					dependency.attributes(attributes -> {
 						attributes.attribute(TestIntegrationType.TEST_INTEGRATION_TYPE_ATTRIBUTE, objects.named(TestIntegrationType.class, TestIntegrationType.PRODUCT_LEVEL));
 					});
 					dependency.capabilities(capabilities -> {
 						capabilities.requireCapability("test-elements:test-elements:1.0");
 					});
-				})).get();
+				})::modify);
 			}
 
 			@Override
