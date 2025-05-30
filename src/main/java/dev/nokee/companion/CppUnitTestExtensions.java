@@ -6,7 +6,6 @@ import dev.nokee.commons.backports.DependencyModifier;
 import dev.nokee.commons.gradle.Plugins;
 import dev.nokee.commons.gradle.attributes.Attributes;
 import dev.nokee.commons.names.CppNames;
-import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.*;
 import org.gradle.api.artifacts.*;
 import org.gradle.api.artifacts.transform.InputArtifact;
@@ -420,9 +419,6 @@ public final class CppUnitTestExtensions {
 					});
 					final ShadowProperty<FileCollection> compileIncludePath = compileIncludePathOf(testExecutable);
 					compileIncludePath.set(testSuite.getPrivateHeaderDirs().plus(includeDirs));
-					tasks.named(compileTaskName(testExecutable), CppCompile.class).configure(task -> {
-						task.getIncludes().setFrom(compileIncludePath);
-					});
 				});
 
 				// Detach implementation configuration from testedComponent
