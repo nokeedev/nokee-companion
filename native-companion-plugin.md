@@ -1,6 +1,6 @@
 # Nokee Native Companion Plugin
 
-The native companion plugin provides improvements to the core native plugins (i.e. `cpp-application` and `cpp-library`).
+The native companion plugin provides improvements to the core native plugins (i.e. `cpp-application`, `cpp-library`, and `cpp-unit-test`).
 Head over to the [feature](#feature) section to learn more about what this plugin provides.
 
 ## Usage
@@ -45,7 +45,7 @@ gradle.beforeSettings { settings ->
 }
 ```
 
-You can use the provided init script to enable the plugin globally.
+Use the provided init script to enable the plugin globally.
 This usage scenario should only be used for testing purpose.
 We **do not recommend** using the plugin by dropping the init script inside your `~/.gradle/init.d` or your custom distribution.
 
@@ -56,13 +56,13 @@ The companion plugin replace the following task:
 * `compile<Variant>Cpp` - CppCompile
 
   Replace **only** `CppBinary#compileTask`.
-  The new task has several improvements, per-source options, incremental after failure, compiler argument providers, properties for optimized, debuggable, position independent code and macros.
+  The new task has several improvements, [per-source options]({ref-javadoc-CppCompileTask-source}), incremental after failure, compiler argument providers, properties for optimized, debuggable, position independent code and macros.
 
 ### Lifecycle Tasks
 
 * `<variant>Objects`
 
-  Depends on: `CppBinary#objects`
+  Depends on: respective `CppBinary#objects`
 
   Requires: `objects-lifecycle-tasks` feature
 
@@ -263,7 +263,7 @@ Each `CppBinary` has their respective `Configuration` provider as extensions to 
 
 When `cpp-unit-test` plugin applied:
 
-- `Project#dependencies`/`CppTestExecutable#dependencies`: extension method `testedComponent(moduleNotation)` which return `TestedComponentDependency`
+- `Project#dependencies`/`CppTestExecutable#dependencies`: extension method `testedComponent(moduleNotation)` which return [`TestedComponentDependency`]({ref-javadoc-TestedComponentDependency})
 
 ## DSL Support
 
@@ -293,3 +293,5 @@ Each `CppBinary` has their respective `TaskProvider`'s configure method to avoid
 
 
 [ref-javadoc-SoftwareComponent]: https://docs.gradle.org/current/javadoc/org/gradle/api/component/SoftwareComponent.html
+[ref-javadoc-CppCompileTask-source]: TODO
+[ref-javadoc-TestedComponentDependency]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/TestedComponentDependency.java
