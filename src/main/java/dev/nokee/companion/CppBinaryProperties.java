@@ -79,6 +79,7 @@ public final class CppBinaryProperties {
 					tasks.named(compileTaskName(binary), CppCompile.class).configure(task -> {
 						task.getOptions().getOptimized().set(providers.provider(optimizationOf(binary)::get));
 						task.getOptions().getDebuggable().set(providers.provider(debuggabilityOf(binary)::get));
+						task.getIncludes().setFrom(compileIncludePathOf(binary));
 					});
 					if (binary instanceof ComponentWithExecutable || binary instanceof ComponentWithSharedLibrary) {
 						tasks.named(linkTaskName(binary), AbstractLinkTask.class).configure(task -> {
