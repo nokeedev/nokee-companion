@@ -1,0 +1,23 @@
+name: CI
+
+on: push
+
+jobs:
+    check:
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ['ubuntu-latest', 'windows-latest', 'macos-latest']
+        steps:
+            -   uses: actions/checkout@v3
+                with:
+                    submodules: true
+            -   name: Run all tests
+                uses: ./.github/actions/gradle
+                with:
+                    arguments: check
+                    build-cache-username: ${{ secrets.GRADLE_CACHE_USERNAME }}
+                    build-cache-password: ${{ secrets.GRADLE_CACHE_PASSWORD }}
+                    build-scan-access-key: ${{ secrets.BUILD_SCAN_ACCESS_KEY }}
+                    github-token: ${{ secrets.GITHUB_TOKEN }}
