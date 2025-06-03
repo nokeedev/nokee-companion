@@ -13,9 +13,9 @@ jobs:
             -   uses: actions/checkout@v4
             -   shell: bash
                 run: |
-                    git submodule init
                     git config submodule.nokeebuild-plugins.url https://github.com/nokeedev/nokeebuild-plugins.git
                     git config submodule.sampledev-plugins.url https://$GITLAB_CI_JOB_TOKEN@gitlab.com/nokeedev-samples/sampledev-plugins.git
+                    git submodule init
                     git submodule update
             -   name: Run all tests
                 uses: ./.github/actions/gradle
