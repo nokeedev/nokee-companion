@@ -1,0 +1,31 @@
+name: CI
+
+on: push
+
+env:
+    DEVELOCITY_ACCESS_KEY: ${{ secrets.BUILD_SCAN_ACCESS_KEY }}
+
+jobs:
+    check:
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ['ubuntu-latest', 'windows-latest', 'macos-latest']
+        steps:
+            -   uses: actions/checkout@v7
+            -   uses: gradle/actions/setup-gradle@v6
+            -   shell: bash
+                run: |
+                    git config submodule.nokeebuild-plugins.url https://github.com/nokeedev/nokeebuild-plugins.git
+                    git config submodule.sampledev-plugins.url https://${{ secrets.GITLAB_CI_JOB_TOKEN }}@gitlab.com/nokeedev-samples/sampledev-plugins.git
+                    git config submodule.gradle/templates.url https://github.com/nokeedev/nokee-code-templates.git
+                    git submodule init
+                    git submodule update
+            -   name: Install C++ toolchain
+                if: matrix.os == 'ubuntu-latest'
+                run: |
+                    sudo apt-get update
+                    sudo apt-get install -y build-essential clang libc++-dev libc++abi-dev
+            -   shell: bash
+                run: ./gradlew functionalTest --no-daemon --continue "-Dgradle.enterprise.url=https://community.develocity.cloud/" "-Ddevelocity.deprecation.captureOrigin=true"
