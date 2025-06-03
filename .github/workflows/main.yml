@@ -12,7 +12,7 @@ jobs:
         steps:
             -   uses: actions/checkout@v3
             -   shell: bash
-                run:
+                run: |
                     git submodule init
                     git config submodule.sampledev-plugins.url https://gitlab-ci-token:$GITLAB_CI_JOB_TOKEN@gitlab.com/nokeedev-samples/sampledev-plugins.git
                     git submodule update
