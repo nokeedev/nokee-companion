@@ -258,4 +258,6 @@ samples {
 		}
 	}
 	samples.register('cpp-unit-test-tested-component-integration')
+
+	samples.register('cpp-overlinking-avoidance')
 }

@@ -48,6 +48,7 @@ import javax.inject.Inject;
 		feature.apply("fix-for-public-headers");
 		feature.apply("fix-for-version-catalog");
 		feature.apply("incremental-compilation-after-failure");
+		feature.apply("overlinking-avoidance");
 
 		feature.apply("multiplatform-publication");
 		// TODO: Source include (cxx)
