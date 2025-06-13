@@ -1,0 +1,16 @@
+plugins {
+	id 'dev.nokee.native-companion'
+}
+
+include 'app', 'foo', 'bar', 'foobar', 'far'
+
+// Demonstrate using Clang instead of GCC
+if (System.getProperties().containsKey('useClang')) {
+	gradle.allprojects {
+		model {
+			toolChains {
+				clang(Clang)
+			}
+		}
+	}
+}

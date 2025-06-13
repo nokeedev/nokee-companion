@@ -1,0 +1,11 @@
+plugins {
+	id 'cpp-library'
+}
+
+library {
+	source.from('bar.cpp')
+	dependencies {
+		implementation project(':foo')
+		implementation project(':foobar')
+	}
+}
