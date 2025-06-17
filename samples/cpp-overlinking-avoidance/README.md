@@ -26,6 +26,12 @@ $ docker run --platform linux/amd64 -it --rm -v "$(pwd):/workspace" -w /workspac
 $ ./gradlew :app:installRelease
 
 BUILD SUCCESSFUL
+```
+
+<details>
+<summary>Linux</summary>
+
+```shell
 $ readelf -d app/build/exe/main/release/app | grep NEEDED
  0x0000000000000001 (NEEDED)             Shared library: [libbar.so]
  0x0000000000000001 (NEEDED)             Shared library: [libfoo.so]
@@ -36,6 +42,24 @@ $ cat app/build/tmp/linkRelease/options.txt | grep -E '\.so|\.a'
 ./foobar/build/lib/main/release/libfoobar.a
 ./far/build/lib/main/release/stripped/libfar.so
 ```
+</details>
+
+<details>
+<summary>macOS</summary>
+
+```shell
+$ otool -L app/build/exe/main/release/app
+app/build/exe/main/release/app:
+        ./bar/build/lib/main/release/libbar.dylib (compatibility version 0.0.0, current version 0.0.0)
+        ./foo/build/lib/main/release/libfoo.dylib (compatibility version 0.0.0, current version 0.0.0)
+        ./far/build/lib/main/release/libfar.dylib (compatibility version 0.0.0, current version 0.0.0)
+$ cat app/build/tmp/linkRelease/options.txt | grep -E '\.dylib|\.a'
+./bar/build/lib/main/release/stripped/libbar.dylib
+./foo/build/lib/main/release/stripped/libfoo.dylib
+./foobar/build/lib/main/release/libfoobar.a
+./far/build/lib/main/release/stripped/libfar.dylib
+```
+</details>
 
 ## Avoidance
 
@@ -43,10 +67,16 @@ $ cat app/build/tmp/linkRelease/options.txt | grep -E '\.so|\.a'
 $ ./gradlew :app:installRelease -Pdev.nokee.native-companion.overlinking-avoidance.enabled=true
 
 BUILD SUCCESSFUL
+```
+
+<details>
+<summary>Linux</summary>
+
+```shell
 $ readelf -d app/build/exe/main/release/app | grep NEEDED
  0x0000000000000001 (NEEDED)             Shared library: [libbar.so]
 $ cat app/build/tmp/linkRelease/options.txt | grep -E '\.so|\.a'
-/workspace/samples/cpp-shared-library-boundary/bar/build/lib/main/release/stripped/libbar.so
+./bar/build/lib/main/release/stripped/libbar.so
 ```
 
 Notice no NEEDED entry for `libfoo.so` or `libfar.so` and we don't link against libfoobar.a
@@ -61,3 +91,17 @@ Notice we only care about shared library during rpath-link.
 
 > Under Linux, Clang will have the same result.
 > Try it out using `-DuseClang` flag to the Gradle command line.
+
+</details>
+
+<details>
+<summary>macOS</summary>
+
+```shell
+$ otool -L app/build/exe/main/release/app
+app/build/exe/main/release/app:
+        ./bar/build/lib/main/release/libbar.dylib (compatibility version 0.0.0, current version 0.0.0)
+$ cat app/build/tmp/linkRelease/options.txt | grep -E '\.dylib|\.a'
+./bar/build/lib/main/release/stripped/libbar.dylib
+```
+</details>
