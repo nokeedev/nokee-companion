@@ -20,7 +20,7 @@ plugins {
 }
 
 group = 'dev.nokee'
-version = '1.0-milestone-25'
+version = '1.0-milestone-26'
 description = 'Quality-of-life enhancements for Gradle core native plugins.'
 
 repositories {
