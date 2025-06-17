@@ -18,6 +18,7 @@ unitTest {
 		}
 	}
 	dependencies {
+		implementation(project(':list')) { because 'second-level dependencies are not communicated' }
 		implementation(testedComponent(project).asObjects()) {
 			attributes {
 				attribute(Attribute.of("coverage", String), "yes")
