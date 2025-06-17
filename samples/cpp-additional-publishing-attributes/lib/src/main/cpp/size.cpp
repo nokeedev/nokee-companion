@@ -1,4 +1,3 @@
-
 #define LIST_MODULE_EXPORT
 #include "linked_list.h"
 #include "node.h"
@@ -10,5 +9,3 @@ std::size_t linked_list::size() const {
 
 	return size;
 }
-
-  

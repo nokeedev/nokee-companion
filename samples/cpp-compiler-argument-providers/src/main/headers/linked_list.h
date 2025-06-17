@@ -1,4 +1,3 @@
-
 /*
  * A linked list implementation.
  */
@@ -38,5 +37,3 @@ class LIST_API linked_list {
 	private:
 	node * head_;
 };
-
-  

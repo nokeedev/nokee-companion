@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <string>
@@ -16,5 +15,3 @@ class node {
 	std::string data_;
 	node * next_;
 };
-
-  

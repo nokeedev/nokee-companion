@@ -1,4 +1,3 @@
-
 #define UTILITIES_MODULE_EXPORT
 #include "string_utils.h"
 
@@ -15,5 +14,3 @@ UTILITIES_API std::string join(const linked_list & source) {
 
 	return result;
 }
-
-  

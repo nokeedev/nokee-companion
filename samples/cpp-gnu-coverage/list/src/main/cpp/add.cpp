@@ -1,4 +1,3 @@
-
 #define LIST_MODULE_EXPORT
 #include "linked_list.h"
 
@@ -22,5 +21,3 @@ void linked_list::add(const std::string & element) {
 		it->set_next(new_node);
 	}
 }
-
-  

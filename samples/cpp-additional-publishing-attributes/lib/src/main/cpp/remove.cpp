@@ -1,4 +1,3 @@
-
 #define LIST_MODULE_EXPORT
 #include "linked_list.h"
 
@@ -31,5 +30,3 @@ bool linked_list::remove(const std::string & element) {
 
 	return result;
 }
-
-  

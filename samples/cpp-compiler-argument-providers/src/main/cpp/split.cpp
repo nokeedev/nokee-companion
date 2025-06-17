@@ -1,4 +1,3 @@
-
 #define UTILITIES_MODULE_EXPORT
 #include "string_utils.h"
 
@@ -34,5 +33,3 @@ UTILITIES_API linked_list split(const std::string & source) {
 
 	return result;
 }
-
-  

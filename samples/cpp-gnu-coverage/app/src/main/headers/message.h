@@ -1,4 +1,3 @@
-
 /*
  * A library for the message.
  */
@@ -13,5 +12,3 @@
  * Return the message.
  */
 MESSAGE_API std::string get_message();
-
-  

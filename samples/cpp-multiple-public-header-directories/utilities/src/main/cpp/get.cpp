@@ -1,4 +1,3 @@
-
 #define LIST_MODULE_EXPORT
 #include <stdexcept>
 
@@ -23,5 +22,3 @@ const std::string & linked_list::get(std::size_t index) const {
 
 	return it->data();
 }
-
-  
