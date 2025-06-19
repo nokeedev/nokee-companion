@@ -11,6 +11,7 @@ import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.language.cpp.CppBinary;
+import org.gradle.language.cpp.CppLibrary;
 import org.gradle.language.cpp.CppSharedLibrary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.ComponentWithExecutable;
@@ -38,9 +39,12 @@ import static dev.nokee.commons.names.CppNames.*;
 	@Override
 	public void apply(Project project) {
 		Plugins.forProject(project).whenPluginApplied("cpp-library", () -> {
-			project.getComponents().withType(CppSharedLibrary.class).configureEach(binary -> {
-				configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
-					configuration.setExtendsFrom(configuration.getExtendsFrom().stream().filter(it -> !it.getName().endsWith(implementationConfigurationName(binary))).collect(Collectors.toList()));
+			project.getComponents().withType(CppLibrary.class).configureEach(library -> {
+				library.getBinaries().configureEach(CppSharedLibrary.class, binary -> {
+					configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
+						configuration.setExtendsFrom(configuration.getExtendsFrom().stream().filter(it -> !it.getName().endsWith(implementationConfigurationName(binary))).collect(Collectors.toList()));
+						configuration.extendsFrom(configurations.getByName(apiConfigurationName(library)));
+					});
 				});
 			});
 		});
