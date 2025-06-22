@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2024 the original author or authors.
  *
@@ -24,5 +23,3 @@ public class Main {
 		System.out.println(new Greeter().sayHello("World"));
 	}
 }
-
-  

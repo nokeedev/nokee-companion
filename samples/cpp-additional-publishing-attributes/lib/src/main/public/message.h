@@ -6,7 +6,15 @@
 
 #include <string>
 
-#define MESSAGE_API
+#ifdef _WIN32
+#  ifdef MESSAGE_MODULE_EXPORT
+#    define MESSAGE_API __declspec(dllexport)
+#  else
+#    define MESSAGE_API __declspec(dllimport)
+#  endif
+#else
+#  define MESSAGE_API
+#endif
 
 /*
  * Return the message.

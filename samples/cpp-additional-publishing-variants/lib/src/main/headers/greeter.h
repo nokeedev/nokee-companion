@@ -1,4 +1,3 @@
-
 #pragma once
 
 #ifdef _WIN32
@@ -10,5 +9,3 @@
 #include <string>
 
 std::string EXPORT_FUNC say_hello(std::string name);
-
-  
