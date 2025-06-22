@@ -29,10 +29,10 @@ Task ':app:compileDebugCpp' is not up-to-date because:
   Input property 'source' file ./app/src/main/cpp/main.cpp has been removed.
   Input property 'source' file ./app/src/main/cpp/dir/main.cpp has been added.
 See file://./app/build/tmp/compileDebugCpp/output.txt for all output for compileDebugCpp.
-Starting process 'command '/usr/bin/clang++''. Working directory: ./app/build/obj/main/debug Command: /usr/bin/clang++ @./app/build/tmp/compileDebugCpp/options.txt ./app/src/main/cpp/dir/main.cpp -o ./app/build/obj/main/debug/6y4imsjgu9vu46be8jnkb6kqy/main.o
+Starting process 'command '/usr/bin/clang++''. Working directory: ./app/build/obj/main/debug Command: /usr/bin/clang++ @./app/build/tmp/compileDebugCpp/options.txt ./app/src/main/cpp/dir/main.cpp -o ./app/build/obj/main/debug/buismfjhii726atfvl2k8agi2/main.o
 ./app/src/main/cpp/dir/main.cpp:8:10: fatal error: 'message.h' file not found
     8 | #include "message.h"
-      |          ^~~~~~~
+      |          ^~~~~~~~~~~
 1 error generated.
 
 BUILD FAILED
