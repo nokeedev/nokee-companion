@@ -2,7 +2,7 @@ plugins {
 	id 'java-gradle-plugin'
 	id 'jvm-test-suite'
 	id 'dev.nokee.samples.generators'
-	id 'dev.nokee.samples.copy-source'
+	id 'dev.nokee.samples.copy-source-ex'
 	id 'nokeebuild.publishing'
 	id 'nokeebuild.signing'
 	id 'nokeebuild.test-kit-directory-in-test-suites'
@@ -76,6 +76,7 @@ testing {
 				implementation gradleTestKit()
 				implementation 'commons-io:commons-io:latest.release'
 				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
+				implementation 'dev.gradleplugins:elements:latest.release'
 				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
 				implementation 'dev.gradleplugins:gradle-runner-kit:latest.release'
 				implementation 'org.jetbrains:annotations:26.0.2'
@@ -111,86 +112,76 @@ gradlePlugin.testSourceSets.add(sourceSets.functionalTest)
 gradlePlugin.testSourceSets.add(sourceSets.samplesTest)
 
 
-import dev.nokee.elements.core.GradleLayoutElement
 import dev.nokee.platform.jni.fixtures.GreeterAppWithJniLibrary
 import dev.nokee.templates.CppApp
 import dev.nokee.templates.CppList
 import dev.nokee.templates.CppMessage
 import dev.nokee.templates.CppUtilities
 
-import java.nio.file.FileSystems
 import java.nio.file.FileSystem
-
-import static dev.nokee.elements.core.ProjectElement.ofMain
-import static dev.nokee.elements.nativebase.NativeSourceElement.ofElements
+import java.nio.file.FileSystems
+import java.nio.file.Files
 
 samples {
 	samples.configureEach { sampleDir = file("samples/${it.name}") }
+
 	samples.register('cpp-binary-task-extensions') {
-//		source {
-//			project('.').buildRoot()
-//			project('app').fromTemplate(new CppApp())
-//			project('app').fromTemplate(new CppMessage().asImplementation())
-//			project('lib').fromTemplate(new CppUtilities().withDllExport())
-//			project('lib').fromTemplate(new CppList().withDllExport())
-//		}
-		elements {
-			new GradleLayoutElement(ofMain(ofElements(new CppApp(), new CppMessage().asImplementation()))).writeToDirectory(location.resolve('app'))
-			new GradleLayoutElement(ofMain(ofElements(new CppUtilities(), new CppList()))).writeToDirectory(location.resolve('lib'))
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			project('app').fromTemplate(new CppMessage().asImplementation())
+			project('lib').fromTemplate(new CppUtilities().withDllExport())
+			project('lib').fromTemplate(new CppList().withDllExport())
 		}
 	}
 	samples.register('cpp-compile-detects-source-file-relocation') {
-//		source {
-//			project('.').buildRoot()
-//			project('app').fromTemplate(new CppApp())
-//			project('app').fromTemplate(new CppMessage().asImplementation())
-//			project('utilities').fromTemplate(new CppUtilities().withDllExport())
-//			project('list').fromTemplate(new CppList().withDllExport())
-//		}
-//		elements {
-//			new GradleLayoutElement(ofMain(ofElements(new CppApp(), new CppMessage().asImplementation()))).writeToDirectory(location.resolve('app'))
-//			new GradleLayoutElement(ofMain(new CppUtilities())).writeToDirectory(location.resolve('utilities'))
-//			new GradleLayoutElement(ofMain(new CppList())).writeToDirectory(location.resolve('list'))
-//
-////			// TODO: Maybe:
-////			project('app').fromTemplate(new CppApp(), new CppMessage().asImplementation())
-////			project('utilities').fromTemplate(new CppUtilities())
-////			project('list').fromTemplate(new CppList())
-//		}
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			new CppMessage().asImplementation().with { message ->
+				project('app').fromTemplate(message.withoutHeaders())
+				project('app').fromTemplate { location ->
+					message.headers.writeToDirectory(location.resolve('src/main/cpp'))
+				}
+			}
+			project('app').fromTemplate(new CppUtilities().asImplementation())
+			project('app').fromTemplate(new CppList().asImplementation())
+			project('app').fromTemplate { location ->
+				Files.createFile(Files.createDirectories(location.resolve('src/main/cpp/dir')).resolve('.placeholder'))
+			}
+		}
 	}
 	samples.register('cpp-compile-incremental-after-failure') {
 
 	}
 	samples.register('cpp-compile-object-files-extension') {
-//		source {
-//			project('app').fromTemplate(new CppApp(), [new CppMessage(), new CppUtilities(), new CppList()]*.asImplementation())
-//		}
-		elements {
-			new GradleLayoutElement(ofMain(ofElements(new CppApp(), new CppMessage().asImplementation(), new CppUtilities().asImplementation(), new CppList().asImplementation()))).writeToDirectory(location.resolve('app'))
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			project('app').fromTemplate([new CppMessage(), new CppUtilities(), new CppList()]*.asImplementation())
 		}
 	}
 	samples.register('cpp-compile-options-per-source-files') {
-//		source {
-//			project('app').fromTemplate(new CppApp())
-//			project('app').fromTemplate(new CppMessage().asImplementation())
-//			project('lib').fromTemplate(new CppUtilities(), new CppList())
-//		}
-		elements {
-			new GradleLayoutElement(ofMain(ofElements(new CppApp(), new CppMessage().asImplementation()))).writeToDirectory(location.resolve('app'))
-			new GradleLayoutElement(ofMain(ofElements(new CppUtilities(), new CppList()))).writeToDirectory(location.resolve('lib'))
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			project('app').fromTemplate(new CppMessage().asImplementation())
+			project('lib').fromTemplate(new CppUtilities().withDllExport(), new CppList().withDllExport())
 		}
 	}
 	samples.register('cpp-dependencies-version-catalog-support') {
 
 	}
 	samples.register('cpp-dependency-on-generated-public-headers') {
-		elements {
-			new GradleLayoutElement(ofMain(new CppApp())).writeToDirectory(location.resolve('app'))
-			ofElements(new CppMessage(), new CppList(), new CppUtilities()).with {
-				new GradleLayoutElement(ofMain(it.withoutPublicHeaders())).writeToDirectory(location.resolve('lib'))
-				URI uri = URI.create("jar:file:" + location.resolve('lib/cpp-api-headers.zip'))
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			def libs = [new CppMessage(), new CppList(), new CppUtilities()]
+			project('lib').fromTemplate(libs*.withoutPublicHeaders())
+			project('lib').fromTemplate {
+				URI uri = URI.create("jar:file:" + it.resolve('cpp-api-headers.zip'))
 				try (FileSystem zipfs = FileSystems.newFileSystem(uri, [create: 'true'])) {
-					it.publicHeaders.writeToDirectory(zipfs.getPath("/"))
+					libs*.publicHeaders*.writeToDirectory(zipfs.getPath("/"))
 				}
 			}
 		}
@@ -199,19 +190,15 @@ samples {
 
 	}
 	samples.register('cpp-multiple-public-header-directories') {
-		elements {
-			new GradleLayoutElement(ofMain(new CppApp())).writeToDirectory(location.resolve('app'))
-			new CppMessage().with {
-				it.publicHeaders.writeToDirectory(location.resolve("includes/message"))
-				new GradleLayoutElement(ofMain(it.withoutPublicHeaders())).writeToDirectory(location.resolve('message'))
-			}
-			new CppUtilities().with {
-				it.publicHeaders.writeToDirectory(location.resolve("includes/utilities"))
-				new GradleLayoutElement(ofMain(it.withoutPublicHeaders())).writeToDirectory(location.resolve('utilities'))
-			}
-			new CppList().with {
-				it.publicHeaders.writeToDirectory(location.resolve('includes/list'))
-				new GradleLayoutElement(ofMain(it.withoutPublicHeaders())).writeToDirectory(location.resolve('utilities'))
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			project('message').fromTemplate(new CppMessage().withDllExport().withoutPublicHeaders())
+			project('utilities').fromTemplate([new CppUtilities(), new CppList()]*.withDllExport()*.withoutPublicHeaders())
+			project('.').fromTemplate {
+				new CppMessage().publicHeaders.writeToDirectory(it.resolve('includes/message'))
+				new CppUtilities().publicHeaders.writeToDirectory(it.resolve('includes/utilities'))
+				new CppList().publicHeaders.writeToDirectory(it.resolve('includes/list'))
 			}
 		}
 	}
@@ -219,42 +206,38 @@ samples {
 
 	}
 	samples.register('cpp-additional-publishing-attributes') {
-//		source {
-//			project('app').fromTemplate(new CppApp())
-//			project('lib').fromTemplate(new CppMessage(), new CppUtilities(), new CppList())
-//		}
-		elements {
-			new GradleLayoutElement(ofMain(new CppApp())).writeToDirectory(location.resolve('app'))
-			new GradleLayoutElement(ofMain(ofElements(new CppMessage(), new CppUtilities(), new CppList()))).writeToDirectory(location.resolve('lib'))
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			project('lib').fromTemplate(new CppMessage().withDllExport())
+			project('lib').fromTemplate(new CppUtilities().withDllExport())
+			project('lib').fromTemplate(new CppList().withDllExport())
 		}
 	}
 	samples.register('cpp-additional-publishing-variants') {
-		elements {
+		source {
+			project('.').buildRoot()
 			def app = new GreeterAppWithJniLibrary('greeter')
-			app.application.writeToProject(location.resolve('app'))
-			app.library.writeToProject(location.resolve('lib'))
+			project('app').fromTemplate(app.application)
+			project('lib').fromTemplate(app.library)
 		}
 	}
 	samples.register('cpp-compiler-argument-providers') {
-//		source {
-//			project('.').fromTemplate(new CppApp(), [new CppMessage(), new CppUtilities(), new CppList()]*.asImplementation())
-//		}
-		elements {
-			new GradleLayoutElement(ofMain(ofElements())).writeToDirectory(location)
+		source {
+			project('.').buildRoot()
+			project('.').fromTemplate(new CppApp().withoutImplementation())
+			project('.').fromTemplate([new CppMessage(), new CppUtilities(), new CppList()]*.asImplementation())
 		}
 	}
 	samples.register('cpp-with-c-sources')
 	samples.register('cpp-with-assembly-sources')
 	samples.register('cpp-gnu-coverage') {
-//		source {
-//			project('app').fromTemplate(new CppApp(), new CppMessage().asImplementation())
-//			project('utils').fromTemplate(new CppUtilities())
-//			project('list').fromTemplate(new CppList())
-//		}
-		elements {
-			new GradleLayoutElement(ofMain(ofElements(new CppApp(), new CppMessage().asImplementation()))).writeToDirectory(location.resolve('app'))
-			new GradleLayoutElement(ofMain(new CppUtilities())).writeToDirectory(location.resolve('utils'))
-			new GradleLayoutElement(ofMain(new CppList())).writeToDirectory(location.resolve('list'))
+		source {
+			project('.').buildRoot()
+			project('app').fromTemplate(new CppApp().withoutImplementation())
+			project('app').fromTemplate(new CppMessage().asImplementation())
+			project('utils').fromTemplate(new CppUtilities().withDllExport())
+			project('list').fromTemplate(new CppList().withDllExport())
 		}
 	}
 	samples.register('cpp-unit-test-tested-component-integration')
