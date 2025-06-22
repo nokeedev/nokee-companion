@@ -17,8 +17,8 @@
 package com.example.greeter;
 
 public class Greeter {
-	static final String resourcePath = "${resourcePath}";
-	static final String sharedLibraryBaseName = "${sharedLibraryBaseName}"
+	static final String resourcePath = "";
+	static final String sharedLibraryBaseName = "greeter";
 	static {
 		NativeLoader.loadLibrary(Greeter.class.getClassLoader(), resourcePath + sharedLibraryBaseName);
 	}
