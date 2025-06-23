@@ -25,6 +25,7 @@ public final class CppBinaryConfigurationExtensions {
 	 * {@return a configurable provider to the link elements configuration of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#linkElementOf"*/)
 	@SuppressWarnings({"unchecked", "UnstableApiUsage"})
 	public static NamedDomainObjectProvider<Configuration> linkElementsOf(ComponentWithLinkUsage binary) {
 		return (NamedDomainObjectProvider<Configuration>) ((ExtensionAware) binary).getExtensions().getByName("linkElements");
@@ -34,6 +35,7 @@ public final class CppBinaryConfigurationExtensions {
 	 * {@return a configurable provider to the runtime elements configuration of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#runtimeElementsOf"*/)
 	@SuppressWarnings({"unchecked", "UnstableApiUsage"})
 	public static NamedDomainObjectProvider<Configuration> runtimeElementsOf(ComponentWithRuntimeUsage binary) {
 		return (NamedDomainObjectProvider<Configuration>) ((ExtensionAware) binary).getExtensions().getByName("runtimeElements");
@@ -43,6 +45,7 @@ public final class CppBinaryConfigurationExtensions {
 	 * {@return a configurable provider to the cpp compile configuration of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#cppCompileOf"*/)
 	@SuppressWarnings({"unchecked"})
 	public static NamedDomainObjectProvider<Configuration> cppCompileOf(CppBinary binary) {
 		return (NamedDomainObjectProvider<Configuration>) ((ExtensionAware) binary).getExtensions().getByName("cppCompile");
@@ -52,6 +55,7 @@ public final class CppBinaryConfigurationExtensions {
 	 * {@return a configurable provider to the native link configuration of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#nativeLinkOf"*/)
 	@SuppressWarnings({"unchecked"})
 	public static NamedDomainObjectProvider<Configuration> nativeLinkOf(CppBinary binary) {
 		return (NamedDomainObjectProvider<Configuration>) ((ExtensionAware) binary).getExtensions().getByName("nativeLink");
@@ -61,6 +65,7 @@ public final class CppBinaryConfigurationExtensions {
 	 * {@return a configurable provider to the native runtime configuration of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#nativeRuntimeOf"*/)
 	@SuppressWarnings({"unchecked"})
 	public static NamedDomainObjectProvider<Configuration> nativeRuntimeOf(CppBinary binary) {
 		return (NamedDomainObjectProvider<Configuration>) ((ExtensionAware) binary).getExtensions().getByName("nativeRuntime");

@@ -34,6 +34,7 @@ public final class CppBinaryTaskExtensions {
 	 * {@return a configurable provider to the compile task of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#compileTaskOf"*/)
 	@SuppressWarnings("unchecked")
 	public static TaskProvider<CppCompile> compileTask(CppBinary binary) {
 		return (TaskProvider<CppCompile>) ((ExtensionAware) binary).getExtensions().getByName("compileTask");
@@ -43,6 +44,7 @@ public final class CppBinaryTaskExtensions {
 	 * {@return a configurable provider to the link task of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#linTaskOf"*/)
 	@SuppressWarnings({"unchecked", "UnstableApiUsage"})
 	public static TaskProvider<LinkExecutable> linkTask(ComponentWithExecutable binary) {
 		return (TaskProvider<LinkExecutable>) ((ExtensionAware) binary).getExtensions().getByName("linkTask");
@@ -52,6 +54,7 @@ public final class CppBinaryTaskExtensions {
 	 * {@return a configurable provider to the install task of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#installTaskOf"*/)
 	@SuppressWarnings({"unchecked", "UnstableApiUsage"})
 	public static TaskProvider<InstallExecutable> installTask(ComponentWithInstallation binary) {
 		return (TaskProvider<InstallExecutable>) ((ExtensionAware) binary).getExtensions().getByName("installTask");
@@ -61,6 +64,7 @@ public final class CppBinaryTaskExtensions {
 	 * {@return a configurable provider to the link task of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#linkTaskOf"*/)
 	@SuppressWarnings({"unchecked", "UnstableApiUsage"})
 	public static TaskProvider<LinkSharedLibrary> linkTask(ComponentWithSharedLibrary binary) {
 		return (TaskProvider<LinkSharedLibrary>) ((ExtensionAware) binary).getExtensions().getByName("linkTask");
@@ -70,6 +74,7 @@ public final class CppBinaryTaskExtensions {
 	 * {@return a configurable provider to the create task of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#createTaskOf"*/)
 	@SuppressWarnings({"unchecked", "UnstableApiUsage"})
 	public static TaskProvider<CreateStaticLibrary> createTask(ComponentWithStaticLibrary binary) {
 		return (TaskProvider<CreateStaticLibrary>) ((ExtensionAware) binary).getExtensions().getByName("createTask");
@@ -79,6 +84,7 @@ public final class CppBinaryTaskExtensions {
 	 * {@return a configurable provider to the run task of the specified binary}
 	 * @param binary  the target binary
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#runTaskOf"*/)
 	@SuppressWarnings("unchecked")
 	public static TaskProvider<RunTestExecutable> runTask(CppTestExecutable binary) {
 		return (TaskProvider<RunTestExecutable>) ((ExtensionAware) binary).getExtensions().getByName("runTask");
