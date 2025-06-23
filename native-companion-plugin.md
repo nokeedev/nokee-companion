@@ -53,7 +53,7 @@ We **do not recommend** using the plugin by dropping the init script inside your
 
 The companion plugin replace the following task:
 
-* `compile<Variant>Cpp` - CppCompile
+* `compile<Variant>Cpp` - [CppCompile]({ref-javadoc-CppCompile})
 
   Replace **only** `CppBinary#compileTask`.
   The new task has several improvements, [per-source options]({ref-javadoc-CppCompileTask-source}), incremental after failure, compiler argument providers, properties for optimized, debuggable, position independent code and macros.
@@ -97,6 +97,7 @@ Here's summary of all features available:
 - _(disabled)_ [**incremental-compilation-after-failure**](#feature-incremental-compilation-after-failure): Conserves incremental compilation after compile task failure.
 - _(disabled)_ [**objects-lifecycle-tasks**](#feature-objects-lifecycle-tasks): Adds lifecycle task to assemble a component's objects.
 - _(disabled)_ [**multiplatform-publishing**](#feature-multiplatform-publishing): Replace core publishing with Nokee's multiplatform publishing.
+- _(disabled)_ [**overlinking-avoidance**](#feature-overlinking-avoidance): Avoid overlinking by disabling "second-level" dependencies during linking.
 
 ### Feature: native-task-object-files-extension
 
@@ -160,6 +161,10 @@ Any native compile tasks added to the `CppBinary#compileTasks` view will be auto
 
 Uses Nokee's multiplatform publishing plugin instead of the core native Maven publish configuration.
 The multiplatform publishing plugin allow attributes mutation of the platform's publication as well as providing additional variants (i.e. tests or SWIG elements).
+
+### Feature: overlinking-avoidance
+
+
 
 ## Dependency Management
 
@@ -245,25 +250,18 @@ digraph nativeLibraryConfigurations {
 
 The plugin provide a Project extension named `nativeCompanion` of type [`NativeCompanionExtension`](https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/NativeCompanionExtension.java).
 
-Each `CppBinary` has their respective `TaskProvider` as extensions to avoid realizing the tasks in order to configure them:
+### Compile Tasks
 
-- `CppBinary`: extension named `compileTask` of type `TaskProvider<CppCompile>`
-- `ComponentWithExecutable`: extension named `linkTask` of type `TaskProvider<LinkExecutable>`
-- `ComponentWithSharedLibrary`: extension named `linkTask` of type `TaskProvider<LinkSharedLibrary>`
-- `ComponentWithStaticLibrary`: extension named `createTask` of type `TaskProvider<CreateStaticLibrary>`
-- `ComponentWithInstallation`: extension named `installTask` of type `TaskProvider<InstallExecutable>`
-- `CppTestExecutable`: extension named `runTask` of type `TaskProvider<RunTestExecutable>`
+Requires: `compile-tasks-extension` feature
 
-Each `CppBinary` has their respective `Configuration` provider as extensions to avoid realizing the configurations in order to configure them:
+The companion plugin adds [`compileTasks` extension]({ref-javadoc-CompileTasks}) to each C++ binary (i.e. `CppBinary`).
+This allows more tasks to participate in the compilation of the binary, see mixing [C language]({ref-sample-cpp-with-c-sources}) or [Assembly language]({ref-sample-cpp-with-assembly-sources}) with a C++ binary samples.
 
-- `CppBinary`: extension named `cppCompile`, `nativeLink`, `nativeRuntime`
-- `CppLibrary`: extension named `cppApi`
-- `CppSharedLibrary`/`CppStaticLibrary`: extension named `linkElements`, `runtimeElements`
-- `CppExecutable`: extension named `runtimeElements`
+### Tested Component Dependency Modifier
 
-When `cpp-unit-test` plugin applied:
-
-- `Project#dependencies`/`CppTestExecutable#dependencies`: extension method `testedComponent(moduleNotation)` which return [`TestedComponentDependency`]({ref-javadoc-TestedComponentDependency})
+When a project applies `cpp-unit-test` plugin, the companion plugin adds [`testedComponent` dependency modifier]({ref-javadoc-TestedComponentDependency.Modifier}) to `Project#dependencies` and `CppTestExecutable#dependencies`.
+The modifier allows selection of the _test elements_ for the unit test integration with the production component.
+See it in action in [this sample]({ref-sample-cpp-unit-test-tested-component-integration}).
 
 ## DSL Support
 
@@ -273,14 +271,14 @@ Each `CppBinary` has their respective `TaskProvider`'s configure method to avoid
 
 - `CppBinary`: configure method `compileTask {}` which delegate to `CppCompile`
 - `ComponentWithExecutable`: configure method `linkTask {}` which delegate to `LinkExecutable`
-- `ComponentWithSharedLibrary`: configure method `linkTask(Closure)` which delegate to `LinkSharedLibrary`
-- `ComponentWithStaticLibrary`: configure method `createTask(Closure)` which delegate to `CreateStaticLibrary`
-- `ComponentWithInstallation`: configure method `installTask(Closure)` which delegate to `InstallExecutable`
-- `CppTestExecutable`: configure method `runTask(Closure)` which delegate to `RunTestExecutable`
+- `ComponentWithSharedLibrary`: configure method `linkTask {}` which delegate to `LinkSharedLibrary`
+- `ComponentWithStaticLibrary`: configure method `createTask {}` which delegate to `CreateStaticLibrary`
+- `ComponentWithInstallation`: configure method `installTask {}` which delegate to `InstallExecutable`
+- `CppTestExecutable`: configure method `runTask {}` which delegate to `RunTestExecutable`
 
-- `CppBinary#dependencies`: `implementation(notation)` and `implementation(moduleNotation, Closure)` bucket
-- `CppComponent#dependencies`: `implementation(notation)` and `implementation(moduleNotation, Closure)`
-- `CppLibrary#dependencies`: `api(notation)` and `api(moduleNotation, Closure)`
+- `CppBinary#dependencies`: `implementation(notation)` and `implementation(moduleNotation) {}` bucket
+- `CppComponent#dependencies`: `implementation(notation)` and `implementation(moduleNotation) {}` bucket
+- `CppLibrary#dependencies`: `api(notation)` and `api(moduleNotation) {}` bucket
 
 ## Publishing
 
@@ -295,3 +293,9 @@ Each `CppBinary` has their respective `TaskProvider`'s configure method to avoid
 [ref-javadoc-SoftwareComponent]: https://docs.gradle.org/current/javadoc/org/gradle/api/component/SoftwareComponent.html
 [ref-javadoc-CppCompileTask-source]: TODO
 [ref-javadoc-TestedComponentDependency]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/TestedComponentDependency.java
+[ref-javadoc-CppCompile]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/language/cpp/tasks/CppCompile.java
+[ref-javadoc-CompileTasks]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/CompileTasks.java
+[ref-sample-cpp-with-c-sources]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-with-c-sources
+[ref-sample-cpp-with-assembly-sources]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-with-assembly-sources
+[ref-javadoc-TestedComponentDependency.Modifier]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/TestedComponentDependency.java
+[ref-sample-cpp-unit-test-tested-component-integration]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-unit-test-tested-component-integration
