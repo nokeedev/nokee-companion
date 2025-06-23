@@ -5,6 +5,7 @@ import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.companion.fixtures.CoverageObjectMockPluginFixture;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterLib;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import java.nio.file.Path;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.elements.core.ProjectElement.ofMain;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
@@ -55,9 +57,8 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 
 
 //		new CppGreeterLib().withImplementationAsSubproject("impl").writeToProject(testDirectory);
-		new CppGreeterLib().getElementUsingGreeter().writeToProject(testDirectory);
-		new CppGreeterLib().getGreeter().writeToProject(testDirectory.resolve("impl"));
-		new CppGreeterTest().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppGreeterLib().getElementUsingGreeter()).withTest(new CppGreeterTest())).writeToDirectory(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppGreeterLib().getGreeter())).writeToDirectory(testDirectory.resolve("impl"));
 	}
 
 	@Test

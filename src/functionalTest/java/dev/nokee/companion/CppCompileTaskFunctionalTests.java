@@ -4,6 +4,7 @@ import dev.nokee.commons.fixtures.GradleProject;
 import dev.nokee.commons.fixtures.GradleTaskUnderTest;
 import dev.nokee.commons.fixtures.SourceOptionsAwareFunctionalTester;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.templates.CppApp;
 import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform;
 import org.gradle.nativeplatform.plugins.NativeComponentPlugin;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.Notation.plugin;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
 import static dev.gradleplugins.buildscript.syntax.Syntax.*;
+import static dev.nokee.elements.core.ProjectElement.ofMain;
 
 @GradleTaskUnderTest(":compile")
 class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilationFunctionalTester, AbstractNativeLanguageIncrementalCompilationFunctionalTester, AbstractNativeLanguageCachingCompilationFunctionalTester, SourceOptionsAwareFunctionalTester, AbstractNativeLanguageHeaderDiscoveryFunctionalTester, AbstractNativeLanguageIncrementalCompilationAfterFailureFunctionalTester {
@@ -61,7 +63,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 				compileTask.includes.from('src/main/headers', 'src/main/public')
 			""".stripIndent()));
 
-		new CppApp().writeToProject(result.getLocation());
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(result.getLocation());
 
 		return result;
 	}
@@ -74,7 +76,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 				compileTask.includes.from('src/main/headers', 'src/main/public')
 			""".stripIndent()));
 
-		new CppApp().writeToProject(result.getLocation());
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(result.getLocation());
 
 		Files.writeString(result.file("src/main/cpp/file-to-remove.cpp"), """
 			int foobar() { return 42; }

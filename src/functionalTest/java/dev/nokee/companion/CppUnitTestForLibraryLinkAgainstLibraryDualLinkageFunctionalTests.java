@@ -4,8 +4,8 @@ import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.companion.fixtures.CoverageObjectMockPluginFixture;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterLib;
-import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -15,7 +15,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
-import static dev.gradleplugins.buildscript.syntax.Syntax.staticImportClass;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
@@ -45,8 +44,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryDualLinkageFunctionalTests {
 			}
 		"""));
 
-		new CppGreeterLib().writeToProject(testDirectory);
-		new CppGreeterTest().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(new CppGreeterLib().withGenericTestSuite()).writeToDirectory(testDirectory);
 	}
 
 	@Test

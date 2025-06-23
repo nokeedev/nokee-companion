@@ -2,6 +2,7 @@ package dev.nokee.companion.features;
 
 import dev.nokee.commons.fixtures.SourceOptionsAwareIntegrationTester;
 import dev.nokee.commons.fixtures.Subject;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import dev.nokee.templates.CppApp;
 import org.gradle.api.Project;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.nio.file.Path;
+
+import static dev.nokee.elements.core.ProjectElement.ofMain;
 
 class CppCompileSourceOptionsIntegrationTests extends SourceOptionsAwareIntegrationTester<NativeCompileOptions> {
 	@Subject Project project;
@@ -31,8 +34,7 @@ class CppCompileSourceOptionsIntegrationTests extends SourceOptionsAwareIntegrat
 		compileTask.getTargetPlatform().set(DefaultNativePlatform.host());
 		compileTask.getToolChain().set(project.getExtensions().getByType(NativeToolChainRegistry.class).getByName("gcc"));
 
-		CppApp app = new CppApp();
-		app.writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(testDirectory);
 	}
 
 	@Override

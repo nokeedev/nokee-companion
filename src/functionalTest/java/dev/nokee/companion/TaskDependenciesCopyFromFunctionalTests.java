@@ -3,6 +3,7 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.templates.CppApp;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.*;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.elements.core.ProjectElement.ofMain;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 
@@ -37,7 +39,7 @@ class TaskDependenciesCopyFromFunctionalTests {
 
 	@Test
 	void doesNotDependOnCopiedTaskForNokeeCompile() {
-		new CppApp().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(testDirectory);
 		build.getBuildFile().plugins(it -> it.id("cpp-application"));
 		build.getBuildFile().append(groovyDsl("""
 			application {
@@ -57,7 +59,7 @@ class TaskDependenciesCopyFromFunctionalTests {
 
 	@Test
 	void doesNotDependOnCopiedTaskForCoreCompile() {
-		new CppApp().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(testDirectory);
 		build.getBuildFile().plugins(it -> it.id("cpp-application"));
 		build.getBuildFile().append(importClass("dev.nokee.language.cpp.tasks.CppCompile"));
 		build.getBuildFile().append(groovyDsl("""
@@ -77,7 +79,7 @@ class TaskDependenciesCopyFromFunctionalTests {
 
 	@Test
 	void doesNotDependOnCopiedTaskForCoreLinkExecutable() {
-		new CppApp().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(testDirectory);
 		build.getBuildFile().plugins(it -> it.id("cpp-application"));
 		build.getBuildFile().append(groovyDsl("""
 			application {
@@ -96,7 +98,7 @@ class TaskDependenciesCopyFromFunctionalTests {
 
 	@Test
 	void doesNotDependOnCopiedTaskForCoreLinkSharedLibrary() {
-		new CppApp().getLibs().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppApp().getLibs())).writeToDirectory(testDirectory);
 		build.getBuildFile().plugins(it -> it.id("cpp-library"));
 		build.getBuildFile().append(groovyDsl("""
 			library {

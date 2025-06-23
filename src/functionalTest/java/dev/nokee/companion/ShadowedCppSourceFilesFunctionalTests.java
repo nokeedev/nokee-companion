@@ -3,6 +3,7 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.templates.CppApp;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
 import static dev.gradleplugins.buildscript.syntax.Syntax.staticImportClass;
 import static dev.gradleplugins.fixtures.runnerkit.BuildResultMatchers.hasFailureCause;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.elements.core.ProjectElement.ofMain;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 
@@ -38,7 +40,7 @@ class ShadowedCppSourceFilesFunctionalTests {
 		});
 		build.getBuildFile().append(staticImportClass("dev.nokee.companion.CppSourceFiles"));
 
-		new CppApp().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(testDirectory);
 	}
 
 	@Test

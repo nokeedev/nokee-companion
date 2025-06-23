@@ -4,6 +4,7 @@ import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.companion.fixtures.CoverageObjectMockPluginFixture;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterLib;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,8 +40,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryFunctionalTests {
 		});
 		build.getBuildFile().plugins(it -> it.id("cpp-unit-test"));
 
-		new CppGreeterLib().writeToProject(testDirectory);
-		new CppGreeterTest().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(new CppGreeterLib().withGenericTestSuite()).writeToDirectory(testDirectory);
 	}
 
 	@Test

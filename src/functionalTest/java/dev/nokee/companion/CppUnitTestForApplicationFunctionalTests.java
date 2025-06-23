@@ -3,6 +3,7 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterApp;
 import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,8 +38,7 @@ class CppUnitTestForApplicationFunctionalTests {
 		});
 		build.getBuildFile().plugins(it -> it.id("cpp-unit-test"));
 
-		new CppGreeterApp().writeToProject(testDirectory);
-		new CppGreeterTest().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(new CppGreeterApp().withTest(new CppGreeterTest())).writeToDirectory(testDirectory);
 	}
 
 	@Test

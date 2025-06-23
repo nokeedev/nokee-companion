@@ -3,6 +3,7 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.platform.nativebase.fixtures.CGreeterApp;
 import dev.nokee.platform.nativebase.fixtures.CGreeterTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.elements.core.ProjectElement.ofTest;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItems;
 
@@ -51,7 +53,7 @@ class CCompilationFunctionalTests {
 			}
 		""".stripIndent()));
 
-		new CGreeterApp().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(new CGreeterApp()).writeToDirectory(testDirectory);
 	}
 
 	@Test
@@ -62,7 +64,7 @@ class CCompilationFunctionalTests {
 
 	@Test
 	void canAssembleUnitTestWithCCompilation() {
-		new CGreeterTest().writeToProject(testDirectory);
+		new GradleLayoutElement().applyTo(ofTest(new CGreeterTest())).writeToDirectory(testDirectory);
 		build.getBuildFile().plugins(it -> it.id("cpp-unit-test"));
 		build.getBuildFile().append(groovyDsl("""
 			unitTest { component ->

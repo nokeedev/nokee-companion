@@ -6,6 +6,7 @@ import dev.nokee.commons.gradle.file.SourceFileVisitor;
 import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.companion.NativeCompanionExtension;
 import dev.nokee.companion.ObjectFiles;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import dev.nokee.templates.CppApp;
 import org.apache.commons.io.FileUtils;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
+import static dev.nokee.elements.core.ProjectElement.ofMain;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
@@ -48,12 +50,12 @@ class ObjectFilesIntegrationTests {
 	void dfd() throws IOException {
 		GradleBuildElement build = GradleBuildElement.inDirectory(Files.createTempDirectory("gradle"));
 		build.getBuildFile().plugins(it -> it.id("cpp-application"));
-		new CppApp().writeToDirectory(build.getLocation());
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(build.getLocation());
 		GradleRunner.create(GradleExecutor.gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().withTasks("compileReleaseCpp").build();
 
 		FileUtils.copyDirectory(build.dir("build/obj/main/release").toFile(), project.getLayout().getBuildDirectory().dir("obj").get().getAsFile());
 
-		new CppApp().writeToDirectory(project.getProjectDir().toPath());
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(project.getProjectDir().toPath());
 		Task compileTask = project.getTasks().create("test", CppCompile.clazz(), task -> {
 			task.getTargetPlatform().set(DefaultNativePlatform.host());
 			task.getToolChain().set(project.getExtensions().getByType(NativeToolChainRegistry.class).getByName("clang"));
@@ -83,7 +85,7 @@ class ObjectFilesIntegrationTests {
 		GradleBuildElement build = GradleBuildElement.inDirectory(Files.createTempDirectory("gradle"));
 		build.getBuildFile().plugins(it -> it.id("cpp-application"));
 		build.getBuildFile().append(groovyDsl("tasks.withType(CppCompile).configureEach { source(fileTree('src/main/asm')) }"));
-		new CppApp().writeToDirectory(build.getLocation());
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(build.getLocation());
 		Files.list(build.getLocation().resolve("src/main/cpp")).forEach(it -> {
 			try {
 				Files.move(it, Files.createDirectories(new File(it.getParent().toString().replace("/src/main/cpp", "/src/main/asm")).toPath()).resolve(it.getFileName().toString().replace(".cpp", ".s")));
@@ -95,7 +97,7 @@ class ObjectFilesIntegrationTests {
 
 		FileUtils.copyDirectory(build.dir("build/obj/main/release").toFile(), project.getLayout().getBuildDirectory().dir("obj").get().getAsFile());
 
-		new CppApp().writeToDirectory(project.getProjectDir().toPath());
+		new GradleLayoutElement().applyTo(ofMain(new CppApp())).writeToDirectory(project.getProjectDir().toPath());
 		Files.list(project.getProjectDir().toPath().resolve("src/main/cpp")).forEach(it -> {
 			try {
 				Files.move(it, Files.createDirectories(new File(it.getParent().toString().replace("/src/main/cpp", "/src/main/asm")).toPath()).resolve(it.getFileName().toString().replace(".cpp", ".s")));

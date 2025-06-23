@@ -3,8 +3,11 @@ package dev.nokee.companion;
 import dev.gradleplugins.runnerkit.BuildResult;
 import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.platform.jni.fixtures.elements.CppGreeter;
-import dev.nokee.platform.nativebase.fixtures.*;
+import dev.nokee.platform.nativebase.fixtures.CppGreeterApp;
+import dev.nokee.platform.nativebase.fixtures.CppGreeterLib;
+import dev.nokee.platform.nativebase.fixtures.CppGreeterTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -18,8 +21,11 @@ import java.nio.file.Path;
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
 import static dev.gradleplugins.buildscript.syntax.Syntax.staticImportClass;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.elements.core.ProjectElement.ofTest;
+import static dev.nokee.elements.nativebase.NativeSourceElement.ofElements;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.matchesRegex;
 
 class CppBinaryObjectsFunctionalTests {
 	GradleBuildElement build;
@@ -56,7 +62,7 @@ class CppBinaryObjectsFunctionalTests {
 
 		@Test
 		void cppApplication() {
-			new CppGreeterApp().writeToProject(testDirectory);
+			new GradleLayoutElement().applyTo(new CppGreeterApp()).writeToDirectory(testDirectory);
 			build.getBuildFile().plugins(it -> {
 				it.id("cpp-application");
 			});
@@ -66,7 +72,7 @@ class CppBinaryObjectsFunctionalTests {
 
 		@Test
 		void cppLibrary() {
-			new CppGreeterLib().writeToProject(testDirectory);
+			new GradleLayoutElement().applyTo(new CppGreeterLib()).writeToDirectory(testDirectory);
 			build.getBuildFile().plugins(it -> {
 				it.id("cpp-library");
 			});
@@ -76,8 +82,7 @@ class CppBinaryObjectsFunctionalTests {
 
 		@Test
 		void cppUnitTest() {
-			new CppGreeter().withSourceSetName("test").writeToProject(testDirectory);
-			new CppGreeterTest().writeToProject(testDirectory);
+			new GradleLayoutElement().applyTo(ofTest(ofElements(new CppGreeter().asImplementation(), new CppGreeterTest()))).writeToDirectory(testDirectory);
 			build.getBuildFile().plugins(it -> {
 				it.id("cpp-unit-test");
 			});
@@ -87,8 +92,7 @@ class CppBinaryObjectsFunctionalTests {
 
 		@Test
 		void cppLibraryWithUnitTest() {
-			new CppGreeterLib().writeToProject(testDirectory);
-			new CppGreeterTest().writeToProject(testDirectory);
+			new GradleLayoutElement().applyTo(new CppGreeterLib().withTest(new CppGreeterTest())).writeToDirectory(testDirectory);
 			build.getBuildFile().plugins(it -> {
 				it.id("cpp-unit-test");
 				it.id("cpp-library");
@@ -99,8 +103,7 @@ class CppBinaryObjectsFunctionalTests {
 
 		@Test
 		void cppApplicationWithUnitTest() {
-			new CppGreeterApp().writeToProject(testDirectory);
-			new CppGreeterTest().writeToProject(testDirectory);
+			new GradleLayoutElement().applyTo(new CppGreeterApp().withTest(new CppGreeterTest())).writeToDirectory(testDirectory);
 			build.getBuildFile().plugins(it -> {
 				it.id("cpp-unit-test");
 				it.id("cpp-application");

@@ -176,7 +176,7 @@ samples {
 		source {
 			project('.').buildRoot()
 			project('app').fromTemplate(new CppApp().withoutImplementation())
-			def libs = [new CppMessage(), new CppList(), new CppUtilities()]
+			def libs = [new CppMessage(), new CppList(), new CppUtilities()]*.withDllExport()
 			project('lib').fromTemplate(libs*.withoutPublicHeaders())
 			project('lib').fromTemplate {
 				URI uri = URI.create("jar:file:" + it.resolve('cpp-api-headers.zip'))
