@@ -3,6 +3,7 @@ package dev.nokee.companion.features;
 import dev.nokee.commons.fixtures.SkipWhenNoSubject;
 import dev.nokee.commons.fixtures.Subject;
 import dev.nokee.commons.fixtures.SubjectExtension;
+import dev.nokee.companion.CppEcosystemUtilities;
 import org.gradle.api.Project;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.language.cpp.*;
@@ -19,8 +20,6 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static dev.nokee.commons.hamcrest.gradle.provider.ProviderOfMatcher.providerOf;
-import static dev.nokee.companion.CppBinaryProperties.debuggabilityOf;
-import static dev.nokee.companion.CppBinaryProperties.optimizationOf;
 import static org.gradle.language.cpp.CppBinary.DEBUGGABLE_ATTRIBUTE;
 import static org.gradle.language.cpp.CppBinary.OPTIMIZED_ATTRIBUTE;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -30,20 +29,20 @@ import static org.hamcrest.Matchers.is;
 class CppBinaryPropertiesIntegrationTests {
 	@Subject Project project;
 	@TempDir Path testDirectory;
-	@Subject CppBinaryAccessors access;
+	@Subject CppEcosystemUtilities access;
 
 	@BeforeEach
 	void setup() {
 		project = ProjectBuilder.builder().withProjectDir(testDirectory.toFile()).build();
 		project.getPlugins().apply("dev.nokee.native-companion");
-		access = project.getObjects().newInstance(CppBinaryAccessors.class);
+		access = CppEcosystemUtilities.forProject(project);
 	}
 
 	interface OptimizationTester {
 		@Test
-		default void honorsOptimizedShadowPropertyOnCppBinaries(@Subject CppBinary binary, @Subject CppBinaryAccessors access) {
+		default void honorsOptimizedShadowPropertyOnCppBinaries(@Subject CppBinary binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isOptimized();
-			optimizationOf(binary).mut(it -> !it);
+			access.optimizationOf(binary).mut(it -> !it);
 
 			assertThat(access.cppCompileOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
 			assertThat(access.nativeLinkOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
@@ -53,9 +52,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 		@Test
 		@SkipWhenNoSubject
-		default void honorsOptimizedShadowPropertyOnOutgoingElementsOfStaticLibrary(@Subject CppStaticLibrary binary, @Subject CppBinaryAccessors access) {
+		default void honorsOptimizedShadowPropertyOnOutgoingElementsOfStaticLibrary(@Subject CppStaticLibrary binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isOptimized();
-			optimizationOf(binary).mut(it -> !it);
+			access.optimizationOf(binary).mut(it -> !it);
 
 			assertThat(access.linkElementsOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
 			assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
@@ -63,9 +62,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 		@Test
 		@SkipWhenNoSubject
-		default void honorsOptimizedShadowPropertyOnOutgoingElementsOfSharedLibrary(@Subject CppSharedLibrary binary, @Subject CppBinaryAccessors access) {
+		default void honorsOptimizedShadowPropertyOnOutgoingElementsOfSharedLibrary(@Subject CppSharedLibrary binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isOptimized();
-			optimizationOf(binary).mut(it -> !it);
+			access.optimizationOf(binary).mut(it -> !it);
 
 			assertThat(access.linkElementsOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
 			assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
@@ -73,9 +72,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 		@Test
 		@SkipWhenNoSubject
-		default void honorsOptimizedShadowPropertyOnOutgoingElementsOfExecutable(@Subject CppExecutable binary, @Subject CppBinaryAccessors access) {
+		default void honorsOptimizedShadowPropertyOnOutgoingElementsOfExecutable(@Subject CppExecutable binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isOptimized();
-			optimizationOf(binary).mut(it -> !it);
+			access.optimizationOf(binary).mut(it -> !it);
 
 			assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
 		}
@@ -83,9 +82,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 	interface DebuggabilityTester {
 		@Test
-		default void honorsDebuggableShadowPropertyOnCppBinaries(@Subject CppBinary binary, @Subject CppBinaryAccessors access) {
+		default void honorsDebuggableShadowPropertyOnCppBinaries(@Subject CppBinary binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isDebuggable();
-			debuggabilityOf(binary).mut(it -> !it);
+			access.debuggabilityOf(binary).mut(it -> !it);
 
 			assertThat(access.cppCompileOf(binary).get().getAttributes().getAttribute(DEBUGGABLE_ATTRIBUTE), is(expectedValue));
 			assertThat(access.nativeLinkOf(binary).get().getAttributes().getAttribute(DEBUGGABLE_ATTRIBUTE), is(expectedValue));
@@ -95,9 +94,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 		@Test
 		@SkipWhenNoSubject
-		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfStaticLibrary(@Subject CppStaticLibrary binary, @Subject CppBinaryAccessors access) {
+		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfStaticLibrary(@Subject CppStaticLibrary binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isDebuggable();
-			debuggabilityOf(binary).mut(it -> !it);
+			access.debuggabilityOf(binary).mut(it -> !it);
 
 			assertThat(access.linkElementsOf(binary).get().getAttributes().getAttribute(DEBUGGABLE_ATTRIBUTE), is(expectedValue));
 			assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(DEBUGGABLE_ATTRIBUTE), is(expectedValue));
@@ -105,9 +104,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 		@Test
 		@SkipWhenNoSubject
-		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfSharedLibrary(@Subject CppSharedLibrary binary, @Subject CppBinaryAccessors access) {
+		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfSharedLibrary(@Subject CppSharedLibrary binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isDebuggable();
-			debuggabilityOf(binary).mut(it -> !it);
+			access.debuggabilityOf(binary).mut(it -> !it);
 
 			assertThat(access.linkElementsOf(binary).get().getAttributes().getAttribute(DEBUGGABLE_ATTRIBUTE), is(expectedValue));
 			assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(DEBUGGABLE_ATTRIBUTE), is(expectedValue));
@@ -116,9 +115,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 		@Test
 		@SkipWhenNoSubject
-		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfExecutable(@Subject CppExecutable binary, @Subject CppBinaryAccessors access) {
+		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfExecutable(@Subject CppExecutable binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isDebuggable();
-			debuggabilityOf(binary).mut(it -> !it);
+			access.debuggabilityOf(binary).mut(it -> !it);
 
 			assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
 			assertThat(access.linkTaskOf(binary).get().getDebuggable(), providerOf(expectedValue));
@@ -126,9 +125,9 @@ class CppBinaryPropertiesIntegrationTests {
 
 		@Test
 		@SkipWhenNoSubject
-		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfTestExecutable(@Subject CppTestExecutable binary, @Subject CppBinaryAccessors access) {
+		default void honorsDebuggableShadowPropertyOnOutgoingElementsOfTestExecutable(@Subject CppTestExecutable binary, @Subject CppEcosystemUtilities access) {
 			boolean expectedValue = !binary.isDebuggable();
-			debuggabilityOf(binary).mut(it -> !it);
+			access.debuggabilityOf(binary).mut(it -> !it);
 
 			assertThat(access.linkTaskOf(binary).get().getDebuggable(), providerOf(expectedValue));
 		}

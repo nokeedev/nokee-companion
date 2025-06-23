@@ -2,13 +2,15 @@ package dev.nokee.companion;
 
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.NamedDomainObjectProvider;
+import org.gradle.api.NonExtensible;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
-import org.gradle.api.plugins.ExtensionAware;
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.cpp.CppBinary;
+import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.nativeplatform.*;
 import org.gradle.nativeplatform.tasks.*;
 import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
@@ -18,6 +20,7 @@ import javax.inject.Inject;
 
 import static dev.nokee.commons.names.CppNames.*;
 
+@NonExtensible
 public abstract class CppEcosystemUtilities {
 	private final TaskContainer tasks;
 	private final ConfigurationContainer configurations;
@@ -44,14 +47,6 @@ public abstract class CppEcosystemUtilities {
 	public TaskProvider<LinkExecutable> linkTaskOf(ComponentWithExecutable binary) {
 		assert binary instanceof CppBinary;
 		return tasks.named(linkTaskName((CppBinary) binary), LinkExecutable.class);
-	}
-
-	/**
-	 * {@return a configurable provider to the link task of the specified binary}
-	 * @param binary  the target binary
-	 */
-	public TaskProvider<AbstractLinkTask> linkTaskOf(CppBinary binary) {
-		return tasks.named(linkTaskName(binary), AbstractLinkTask.class);
 	}
 
 	/**
@@ -134,6 +129,72 @@ public abstract class CppEcosystemUtilities {
 	 */
 	public NamedDomainObjectProvider<Configuration> nativeRuntimeOf(CppBinary binary) {
 		return configurations.named(nativeRuntimeConfigurationName(binary));
+	}
+
+	/**
+	 * Returns a property to configure optimization of a C++ binary.
+	 * Due to the strict nature of C++ binary, we are using shadow properties to perform the mutation.
+	 * All code relying on this value should be made aware of a potential shadow value.
+	 *
+	 * @param binary  the C++ binary
+	 * @return the optimized property
+	 */
+	public ShadowProperty<Boolean> optimizationOf(CppBinary binary) {
+		return ShadowProperty.of(binary, "optimized", binary::isOptimized);
+	}
+
+	/**
+	 * Returns a property to configure debuggability of a C++ binary.
+	 * Due to the strict nature of C++ binary, we are using shadow properties to perform the mutation.
+	 * All code relying on this value should be made aware of a potential shadow value.
+	 *
+	 * @param binary  the C++ binary
+	 * @return the debuggable property
+	 */
+	public ShadowProperty<Boolean> debuggabilityOf(CppBinary binary) {
+		return ShadowProperty.of(binary, "debuggable", binary::isDebuggable);
+	}
+
+	/**
+	 * Returns a property to configure compile include path of a C++ binary.
+	 * Due to the strict nature of C++ binary, we are using shadow properties to perform the mutation.
+	 * All code relying on this value should be made aware of a potential shadow value.
+	 *
+	 * @param binary  the C++ binary
+	 * @return the compile include path property
+	 */
+	public ShadowProperty<FileCollection> compileIncludePathOf(CppBinary binary) {
+		return ShadowProperty.of(binary, "compileIncludePath", binary::getCompileIncludePath);
+	}
+
+	/**
+	 * Returns the shadow property of {@link CppBinary#getObjects()}.
+	 *
+	 * @param binary  the binary with the objects
+	 * @return the property
+	 */
+	public ShadowProperty<FileCollection> objectsOf(ComponentWithObjectFiles binary) {
+		return ShadowProperty.of(binary, "objects", binary::getObjects);
+	}
+
+	/**
+	 * Returns the shadow property of {@link CppBinary#getCppSource()}.
+	 *
+	 * @param binary  the binary with C++ source.
+	 * @return the property
+	 */
+	public ShadowProperty<FileCollection> cppSourceOf(CppBinary binary) {
+		return ShadowProperty.of(binary, "cppSource", binary::getCppSource);
+	}
+
+	/**
+	 * Returns the shadow property of {@link CppComponent#getCppSource()}.
+	 *
+	 * @param component  the component with C++ source.
+	 * @return the property
+	 */
+	public ShadowProperty<FileCollection> cppSourceOf(CppComponent component) {
+		return ShadowProperty.of(component, "cppSource", component::getCppSource);
 	}
 
 	public static CppEcosystemUtilities forProject(Project project) {

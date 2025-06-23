@@ -27,6 +27,7 @@ public final class CppSourceFiles {
 	 * @param binary  the binary with C++ source.
 	 * @return the property
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#cppSourceOf"*/)
 	public static ShadowProperty<FileCollection> cppSourceOf(CppBinary binary) {
 		return ShadowProperty.of(binary, "cppSource", binary::getCppSource);
 	}
@@ -37,6 +38,7 @@ public final class CppSourceFiles {
 	 * @param component  the component with C++ source.
 	 * @return the property
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#cppSourceOf"*/)
 	public static ShadowProperty<FileCollection> cppSourceOf(CppComponent component) {
 		return ShadowProperty.of(component, "cppSource", component::getCppSource);
 	}
@@ -44,11 +46,13 @@ public final class CppSourceFiles {
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
 		private final TaskContainer tasks;
 		private final ObjectFactory objects;
+		private final CppEcosystemUtilities access;
 
 		@Inject
-		public Rule(TaskContainer tasks, ObjectFactory objects) {
+		public Rule(TaskContainer tasks, ObjectFactory objects, Project project) {
 			this.tasks = tasks;
 			this.objects = objects;
+			this.access = CppEcosystemUtilities.forProject(project);
 		}
 
 		@Override
@@ -56,19 +60,19 @@ public final class CppSourceFiles {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				Map<String, ShadowProperty<FileCollection>> cppSourceByComponents = new HashMap<>();
 				project.getComponents().withType(CppComponent.class).configureEach(component -> {
-					cppSourceByComponents.put(component.getName(), cppSourceOf(component));
+					cppSourceByComponents.put(component.getName(), access.cppSourceOf(component));
 				});
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					String componentName = cppSourceByComponents.keySet().stream().filter(it -> binary.getName().startsWith(it)).findFirst().orElseThrow(RuntimeException::new);
 					ShadowProperty<FileCollection> cppSourceOfComponent = cppSourceByComponents.get(componentName);
-					cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOfComponent));
+					access.cppSourceOf(binary).set(objects.fileCollection().from(cppSourceOfComponent));
 				});
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
-					tasks.named(compileTaskName(binary), CppCompile.class).configure(task -> {
+					access.compileTaskOf(binary).configure(task -> {
 						try {
 							// Note: We are **not** using `setFrom` as some projects configures generated source files through Project:
 							//   project.tasks.withType(CppCompile).configureEach { source(...) }
-							task.getSource().from(cppSourceOf(binary));
+							task.getSource().from(access.cppSourceOf(binary));
 						} catch (IllegalStateException e) {
 							// We only log the failure as the `cppSource` may be wired through a different process
 							//   See per-source file compiler args sample.

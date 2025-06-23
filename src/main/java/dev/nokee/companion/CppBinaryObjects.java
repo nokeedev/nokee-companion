@@ -7,23 +7,17 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.ExtensionAware;
-import org.gradle.api.tasks.TaskContainer;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
-import org.gradle.language.cpp.tasks.CppCompile;
 import org.gradle.language.nativeplatform.ComponentWithExecutable;
 import org.gradle.language.nativeplatform.ComponentWithObjectFiles;
 import org.gradle.language.nativeplatform.ComponentWithSharedLibrary;
 import org.gradle.language.nativeplatform.ComponentWithStaticLibrary;
-import org.gradle.nativeplatform.tasks.CreateStaticLibrary;
-import org.gradle.nativeplatform.tasks.LinkExecutable;
-import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
 
 import javax.inject.Inject;
 import java.util.concurrent.Callable;
 
 import static dev.nokee.commons.gradle.TransformerUtils.traverse;
-import static dev.nokee.commons.names.CppNames.*;
 
 /**
  * Represents the shadow property for {@link CppBinary#getObjects()}.
@@ -36,45 +30,46 @@ public final class CppBinaryObjects {
 	 * @param binary  the binary with the objects
 	 * @return the property
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#objectsOf"*/)
 	public static ShadowProperty<FileCollection> objectsOf(ComponentWithObjectFiles binary) {
 		return ShadowProperty.of(binary, "objects", binary::getObjects);
 	}
 
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
 		private final ObjectFactory objects;
-		private final TaskContainer tasks;
+		private final CppEcosystemUtilities access;
 
 		@Inject
-		public Rule(ObjectFactory objects, TaskContainer tasks) {
+		public Rule(ObjectFactory objects, Project project) {
 			this.objects = objects;
-			this.tasks = tasks;
+			this.access = CppEcosystemUtilities.forProject(project);
 		}
 
 		@Override
 		public void apply(Project project) {
 			Plugins.forProject(project).whenPluginApplied(CppBasePlugin.class, () -> {
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
-					final ShadowProperty<FileCollection> allObjects = objectsOf(binary);
+					final ShadowProperty<FileCollection> allObjects = access.objectsOf(binary);
 					final FileCollection objs = objects.fileCollection().from((Callable<?>) () -> {
 						final CompileTasks compileTasks = (CompileTasks) ((ExtensionAware) binary).getExtensions().findByName("compileTasks");
 						if (compileTasks != null) {
 							return compileTasks.getElements().map(traverse(ObjectFiles::of));
 						}
-						return tasks.named(compileTaskName(binary), CppCompile.class).map(ObjectFiles::of);
+						return access.compileTaskOf(binary).map(ObjectFiles::of);
 					});
 					allObjects.set(objs);
 
 					// Rewire the objects to account for the shadow property
 					if (binary instanceof ComponentWithExecutable) {
-						tasks.named(linkTaskName(binary), LinkExecutable.class, task -> {
+						access.linkTaskOf((ComponentWithExecutable) binary).configure(task -> {
 							task.getSource().setFrom(allObjects);
 						});
 					} else if (binary instanceof ComponentWithSharedLibrary) {
-						tasks.named(linkTaskName(binary), LinkSharedLibrary.class, task -> {
+						access.linkTaskOf((ComponentWithSharedLibrary) binary).configure(task -> {
 							task.getSource().setFrom(allObjects);
 						});
 					} else if (binary instanceof ComponentWithStaticLibrary) {
-						tasks.named(createTaskName(binary), CreateStaticLibrary.class, task -> {
+						access.createTaskOf((ComponentWithStaticLibrary) binary).configure(task -> {
 							((ConfigurableFileCollection) task.getSource()).setFrom(allObjects);
 						});
 					}

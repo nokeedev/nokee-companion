@@ -54,9 +54,6 @@ import java.util.stream.Stream;
 
 import static dev.nokee.commons.gradle.SpecUtils.named;
 import static dev.nokee.commons.names.CppNames.*;
-import static dev.nokee.companion.CppBinaryObjects.objectsOf;
-import static dev.nokee.companion.CppBinaryProperties.*;
-import static dev.nokee.companion.CppSourceFiles.cppSourceOf;
 
 /**
  * Represents missing properties that matches the tested component/binary for C++ test suites.
@@ -74,9 +71,10 @@ public final class CppUnitTestExtensions {
 		private final DependencyFactory dependencyFactory;
 		private final ConfigurationRegistry configurationRegistry;
 		private final ProjectLayout layout;
+		private final CppEcosystemUtilities access;
 
 		@Inject
-		public Rule(ObjectFactory objects, ProviderFactory providers, TaskContainer tasks, ConfigurationContainer configurations, ProjectLayout layout) {
+		public Rule(ObjectFactory objects, ProviderFactory providers, TaskContainer tasks, ConfigurationContainer configurations, ProjectLayout layout, Project project) {
 			this.objects = objects;
 			this.providers = providers;
 			this.tasks = tasks;
@@ -84,6 +82,7 @@ public final class CppUnitTestExtensions {
 			this.dependencyFactory = objects.newInstance(DependencyFactory.class);
 			this.configurationRegistry = objects.newInstance(ConfigurationRegistry.class);
 			this.layout = layout;
+			this.access = CppEcosystemUtilities.forProject(project);
 		}
 
 		/*private*/ static abstract /*final*/ class UnexportSymbolsTransform implements TransformAction<TransformParameters.None> {
@@ -256,7 +255,7 @@ public final class CppUnitTestExtensions {
 							outgoing.capability("test-elements:test-elements:1.0");
 							outgoing.getVariants().create(TestIntegrationType.SOURCE_LEVEL, variant -> {
 								variant.artifact(tasks.register(CppNames.of(component).taskName("sync", "sourcesTestableElements").toString(), Sync.class, task -> {
-									task.from(cppSourceOf(component));
+									task.from(access.cppSourceOf(component));
 									task.into(layout.getBuildDirectory().dir("tmp/" + task.getName()));
 								}), spec -> spec.setType(directoryType(C_PLUS_PLUS_SOURCE_TYPE)));
 								variant.attributes(attributes -> {
@@ -287,8 +286,8 @@ public final class CppUnitTestExtensions {
 								attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, Usage.NATIVE_LINK));
 								attributes.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE, binary.getTargetMachine().getOperatingSystemFamily());
 								attributes.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE, binary.getTargetMachine().getArchitecture());
-								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(binary)::get));
-								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(binary)::get));
+								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(access.debuggabilityOf(binary)::get));
+								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(access.optimizationOf(binary)::get));
 								if (component instanceof CppLibrary) {
 									attributes.attribute(CppBinary.LINKAGE_ATTRIBUTE, binary instanceof CppSharedLibrary ? Linkage.SHARED : Linkage.STATIC);
 								}
@@ -302,7 +301,7 @@ public final class CppUnitTestExtensions {
 								});
 								outgoing.getVariants().create(TestIntegrationType.LINK_LEVEL, variant -> {
 									variant.artifact(tasks.register(CppNames.of(binary).taskName("sync", "objectsTestableElements").toString(), Sync.class, task -> {
-										task.from(objectsOf(binary));
+										task.from(access.objectsOf(binary));
 										task.into(layout.getBuildDirectory().dir("tmp/" + task.getName()));
 									}), spec -> spec.setType(directoryType(OBJECT_CODE_TYPE)));
 									variant.attributes(attributes -> {
@@ -331,8 +330,8 @@ public final class CppUnitTestExtensions {
 								attributes.attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.class, Usage.NATIVE_RUNTIME));
 								attributes.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE, binary.getTargetMachine().getOperatingSystemFamily());
 								attributes.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE, binary.getTargetMachine().getArchitecture());
-								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(binary)::get));
-								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(binary)::get));
+								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(access.debuggabilityOf(binary)::get));
+								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(access.optimizationOf(binary)::get));
 								if (component instanceof CppLibrary) {
 									attributes.attribute(CppBinary.LINKAGE_ATTRIBUTE, binary instanceof CppSharedLibrary ? Linkage.SHARED : Linkage.STATIC);
 								}
@@ -371,15 +370,15 @@ public final class CppUnitTestExtensions {
 					});
 					cppSources.configure(attributes(objects, details -> {
 						details.attribute(Usage.USAGE_ATTRIBUTE).of("native-compile");
-						details.attribute(CppBinary.OPTIMIZED_ATTRIBUTE).of(providers.provider(optimizationOf(testExecutable)::get));
-						details.attribute(CppBinary.DEBUGGABLE_ATTRIBUTE).of(providers.provider(debuggabilityOf(testExecutable)::get));
+						details.attribute(CppBinary.OPTIMIZED_ATTRIBUTE).of(providers.provider(access.optimizationOf(testExecutable)::get));
+						details.attribute(CppBinary.DEBUGGABLE_ATTRIBUTE).of(providers.provider(access.debuggabilityOf(testExecutable)::get));
 						details.attribute(MachineArchitecture.ARCHITECTURE_ATTRIBUTE).of(testExecutable.getTargetMachine().getArchitecture());
 						details.attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE).of(testExecutable.getTargetMachine().getOperatingSystemFamily());
 
 						details.attribute(Attribute.of("testable", String.class), "yes");
 						details.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, directoryType(C_PLUS_PLUS_SOURCE_TYPE));
 					}));
-					cppSourceOf(testExecutable).mut(objects.fileCollection().from((Callable<?>) () -> {
+					access.cppSourceOf(testExecutable).mut(objects.fileCollection().from((Callable<?>) () -> {
 						boolean hasSource = cppSources.get().getAllDependencies().stream().anyMatch(it -> {
 							if (it instanceof ModuleDependency) {
 								TestIntegrationType type = ((ModuleDependency) it).getAttributes().getAttribute(TestIntegrationType.TEST_INTEGRATION_TYPE_ATTRIBUTE);
@@ -417,7 +416,7 @@ public final class CppUnitTestExtensions {
 						}));
 						return view.getFiles();
 					});
-					final ShadowProperty<FileCollection> compileIncludePath = compileIncludePathOf(testExecutable);
+					final ShadowProperty<FileCollection> compileIncludePath = access.compileIncludePathOf(testExecutable);
 					compileIncludePath.set(testSuite.getPrivateHeaderDirs().plus(includeDirs));
 				});
 

@@ -1,24 +1,18 @@
 package dev.nokee.companion;
 
 import dev.nokee.commons.gradle.Plugins;
-import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.ProviderFactory;
-import org.gradle.api.tasks.TaskContainer;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.ComponentWithExecutable;
 import org.gradle.language.nativeplatform.ComponentWithLinkUsage;
 import org.gradle.language.nativeplatform.ComponentWithRuntimeUsage;
 import org.gradle.language.nativeplatform.ComponentWithSharedLibrary;
-import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 
 import javax.inject.Inject;
-
-import static dev.nokee.commons.names.CppNames.*;
 
 public final class CppBinaryProperties {
 	/**
@@ -29,6 +23,7 @@ public final class CppBinaryProperties {
 	 * @param binary  the C++ binary
 	 * @return the optimized property
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#optimizationOf"*/)
 	public static ShadowProperty<Boolean> optimizationOf(CppBinary binary) {
 		return ShadowProperty.of(binary, "optimized", binary::isOptimized);
 	}
@@ -41,6 +36,7 @@ public final class CppBinaryProperties {
 	 * @param binary  the C++ binary
 	 * @return the debuggable property
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#debuggabilityOf"*/)
 	public static ShadowProperty<Boolean> debuggabilityOf(CppBinary binary) {
 		return ShadowProperty.of(binary, "debuggable", binary::isDebuggable);
 	}
@@ -53,20 +49,19 @@ public final class CppBinaryProperties {
 	 * @param binary  the C++ binary
 	 * @return the compile include path property
 	 */
+	@Deprecated(/*since = "1.0-milestone-28", forRemoval = true, replacedBy = "CppEcosystemUtilities#compileIncludePathOf"*/)
 	public static ShadowProperty<FileCollection> compileIncludePathOf(CppBinary binary) {
 		return ShadowProperty.of(binary, "compileIncludePath", binary::getCompileIncludePath);
 	}
 
 	/*private*/ abstract static /*final*/ class Rule implements Plugin<Project> {
-		private final ConfigurationContainer configurations;
-		private final TaskContainer tasks;
 		private final ProviderFactory providers;
+		private final CppEcosystemUtilities access;
 
 		@Inject
-		public Rule(ConfigurationContainer configurations, TaskContainer tasks, ProviderFactory providers) {
-			this.configurations = configurations;
-			this.tasks = tasks;
+		public Rule(ProviderFactory providers, Project project) {
 			this.providers = providers;
+			this.access = CppEcosystemUtilities.forProject(project);
 		}
 
 		@Override
@@ -76,51 +71,55 @@ public final class CppBinaryProperties {
 				// Rewire optimized/debuggable to be shadow property aware
 				project.getComponents().withType(CppBinary.class).configureEach(binary -> {
 					// Rewire the tasks
-					tasks.named(compileTaskName(binary), CppCompile.class).configure(task -> {
-						task.getOptions().getOptimized().set(providers.provider(optimizationOf(binary)::get));
-						task.getOptions().getDebuggable().set(providers.provider(debuggabilityOf(binary)::get));
-						task.getIncludes().setFrom(compileIncludePathOf(binary));
+					access.compileTaskOf(binary).configure(task -> {
+						task.getOptions().getOptimized().set(providers.provider(access.optimizationOf(binary)::get));
+						task.getOptions().getDebuggable().set(providers.provider(access.debuggabilityOf(binary)::get));
+						task.getIncludes().setFrom(access.compileIncludePathOf(binary));
 					});
-					if (binary instanceof ComponentWithExecutable || binary instanceof ComponentWithSharedLibrary) {
-						tasks.named(linkTaskName(binary), AbstractLinkTask.class).configure(task -> {
-							task.getDebuggable().set(providers.provider(debuggabilityOf(binary)::get));
+					if (binary instanceof ComponentWithExecutable) {
+						access.linkTaskOf((ComponentWithExecutable) binary).configure(task -> {
+							task.getDebuggable().set(providers.provider(access.debuggabilityOf(binary)::get));
+						});
+					} else if (binary instanceof ComponentWithSharedLibrary) {
+						access.linkTaskOf((ComponentWithSharedLibrary) binary).configure(task -> {
+							task.getDebuggable().set(providers.provider(access.debuggabilityOf(binary)::get));
 						});
 					}
 
 					// Rewire the configurations
-					configurations.named(cppCompileConfigurationName(binary)).configure(configuration -> {
+					access.cppCompileOf(binary).configure(configuration -> {
 						configuration.attributes(attributes -> {
-							attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(binary)::get));
-							attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(binary)::get));
+							attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(access.optimizationOf(binary)::get));
+							attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(access.debuggabilityOf(binary)::get));
 						});
 					});
 
-					configurations.named(nativeLinkConfigurationName(binary)).configure(configuration -> {
+					access.nativeLinkOf(binary).configure(configuration -> {
 						configuration.attributes(attributes -> {
-							attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(binary)::get));
-							attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(binary)::get));
+							attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(access.optimizationOf(binary)::get));
+							attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(access.debuggabilityOf(binary)::get));
 						});
 					});
-					configurations.named(nativeRuntimeConfigurationName(binary)).configure(configuration -> {
+					access.nativeRuntimeOf(binary).configure(configuration -> {
 						configuration.attributes(attributes -> {
-							attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(binary)::get));
-							attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(binary)::get));
+							attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(access.optimizationOf(binary)::get));
+							attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(access.debuggabilityOf(binary)::get));
 						});
 					});
 
 					if (binary instanceof ComponentWithLinkUsage) {
-						configurations.named(linkElementsConfigurationName(binary)).configure(configuration -> {
+						access.linkElementsOf((ComponentWithLinkUsage) binary).configure(configuration -> {
 							configuration.attributes(attributes -> {
-								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(binary)::get));
-								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(binary)::get));
+								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(access.optimizationOf(binary)::get));
+								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(access.debuggabilityOf(binary)::get));
 							});
 						});
 					}
 					if (binary instanceof ComponentWithRuntimeUsage) {
-						configurations.named(runtimeElementsConfigurationName(binary)).configure(configuration -> {
+						access.runtimeElementsOf((ComponentWithRuntimeUsage) binary).configure(configuration -> {
 							configuration.attributes(attributes -> {
-								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(optimizationOf(binary)::get));
-								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(debuggabilityOf(binary)::get));
+								attributes.attributeProvider(CppBinary.OPTIMIZED_ATTRIBUTE, providers.provider(access.optimizationOf(binary)::get));
+								attributes.attributeProvider(CppBinary.DEBUGGABLE_ATTRIBUTE, providers.provider(access.debuggabilityOf(binary)::get));
 							});
 						});
 					}
