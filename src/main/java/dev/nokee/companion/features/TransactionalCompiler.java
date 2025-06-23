@@ -1,6 +1,7 @@
 package dev.nokee.companion.features;
 
 import org.apache.commons.io.FileUtils;
+import org.gradle.api.file.FileSystemOperations;
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.language.base.internal.compile.Compiler;
@@ -10,6 +11,7 @@ import org.gradle.nativeplatform.toolchain.internal.OutputCleaningCompiler;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -19,10 +21,12 @@ import java.util.stream.Collectors;
 final class TransactionalCompiler<T extends NativeCompileSpec> implements Compiler<T> {
 	private final Compiler<T> delegateCompiler;
 	private final OutputFileDirResolver outputFileDirResolver;
+	private final FileSystemOperations fileOperations;
 
-	public TransactionalCompiler(Compiler<T> delegateCompiler, OutputFileDirResolver outputFileDirResolver) {
+	public TransactionalCompiler(Compiler<T> delegateCompiler, OutputFileDirResolver outputFileDirResolver, FileSystemOperations fileOperations) {
 		this.delegateCompiler = delegateCompiler;
 		this.outputFileDirResolver = outputFileDirResolver;
+		this.fileOperations = fileOperations;
 	}
 
 	@Override
@@ -42,7 +46,7 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 		return delegateCompiler.execute(spec);
 	}
 
-	private static final class RollbackAwareBuildOperationLogger implements BuildOperationLogger, BuildOperationLoggerRef {
+	private final class RollbackAwareBuildOperationLogger implements BuildOperationLogger, BuildOperationLoggerRef {
 		private final BuildOperationLogger delegate;
 		private final List<StashedFile> stashedFiles;
 		private final List<StashedFile> backupFiles;
@@ -78,11 +82,7 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 				stashedFiles.forEach(StashedFile::unstash);
 				backupFiles.forEach(StashedFile::unstash);
 			} else {
-				try {
-					FileUtils.deleteDirectory(temporaryDirectory);
-				} catch (IOException e) {
-					throw new RuntimeException(e);
-				}
+				fileOperations.delete(spec -> spec.delete(temporaryDirectory));
 			}
 			delegate.done();
 		}
@@ -114,10 +114,10 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 					@Override
 					public void unstash() {
 						try {
-							FileUtils.deleteDirectory(origFile);
+							fileOperations.delete(spec -> spec.delete(origFile));
 							FileUtils.copyDirectory(stashedFile, origFile, true);
 						} catch (IOException e) {
-							throw new RuntimeException(e);
+							throw new UncheckedIOException(e);
 						}
 					}
 				};
@@ -125,11 +125,7 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 				return new StashedFile() {
 					@Override
 					public void unstash() {
-						try {
-							FileUtils.deleteDirectory(origFile);
-						} catch (IOException e) {
-							throw new RuntimeException(e);
-						}
+						fileOperations.delete(spec -> spec.delete(origFile));
 					}
 				};
 			}
