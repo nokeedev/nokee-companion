@@ -112,14 +112,13 @@ gradlePlugin.testSourceSets.add(sourceSets.functionalTest)
 gradlePlugin.testSourceSets.add(sourceSets.samplesTest)
 
 
+import dev.nokee.elements.nativebase.NativeSourceElement
 import dev.nokee.platform.jni.fixtures.GreeterAppWithJniLibrary
 import dev.nokee.templates.CppApp
 import dev.nokee.templates.CppList
 import dev.nokee.templates.CppMessage
 import dev.nokee.templates.CppUtilities
 
-import java.nio.file.FileSystem
-import java.nio.file.FileSystems
 import java.nio.file.Files
 
 samples {
@@ -176,14 +175,10 @@ samples {
 		source {
 			project('.').buildRoot()
 			project('app').fromTemplate(new CppApp().withoutImplementation())
-			def libs = [new CppMessage(), new CppList(), new CppUtilities()]*.withDllExport()
-			project('lib').fromTemplate(libs*.withoutPublicHeaders())
-			project('lib').fromTemplate {
-				URI uri = URI.create("jar:file:" + it.resolve('cpp-api-headers.zip'))
-				try (FileSystem zipfs = FileSystems.newFileSystem(uri, [create: 'true'])) {
-					libs*.publicHeaders*.writeToDirectory(zipfs.getPath("/"))
-				}
-			}
+
+			def libs = NativeSourceElement.ofElements([new CppMessage(), new CppList(), new CppUtilities()]*.withDllExport())
+			project('lib').fromTemplate(libs.withoutPublicHeaders())
+			project('lib').fromTemplate(libs.publicHeaders.asZip('cpp-api-headers.zip'))
 		}
 	}
 	samples.register('cpp-multiple-compile-tasks') {
