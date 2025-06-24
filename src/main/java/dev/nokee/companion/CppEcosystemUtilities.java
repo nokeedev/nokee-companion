@@ -12,11 +12,16 @@ import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.nativeplatform.*;
-import org.gradle.nativeplatform.tasks.*;
+import org.gradle.nativeplatform.tasks.CreateStaticLibrary;
+import org.gradle.nativeplatform.tasks.InstallExecutable;
+import org.gradle.nativeplatform.tasks.LinkExecutable;
+import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
 import org.gradle.nativeplatform.test.cpp.CppTestExecutable;
 import org.gradle.nativeplatform.test.tasks.RunTestExecutable;
 
 import javax.inject.Inject;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import static dev.nokee.commons.names.CppNames.*;
 
@@ -24,11 +29,13 @@ import static dev.nokee.commons.names.CppNames.*;
 public abstract class CppEcosystemUtilities {
 	private final TaskContainer tasks;
 	private final ConfigurationContainer configurations;
+	private final ShadowProperties properties;
 
 	@Inject
-	public CppEcosystemUtilities(TaskContainer tasks, ConfigurationContainer configurations) {
+	public CppEcosystemUtilities(TaskContainer tasks, ConfigurationContainer configurations, Project project) {
 		this.tasks = tasks;
 		this.configurations = configurations;
+		this.properties = Optional.ofNullable((ShadowProperties) project.getExtensions().findByName("$shadow-properties")).orElseGet(() -> project.getExtensions().create("$shadow-properties", ShadowProperties.class));
 	}
 
 	/**
@@ -139,8 +146,9 @@ public abstract class CppEcosystemUtilities {
 	 * @param binary  the C++ binary
 	 * @return the optimized property
 	 */
+	@SuppressWarnings("UnstableApiUsage")
 	public ShadowProperty<Boolean> optimizationOf(CppBinary binary) {
-		return ShadowProperty.of(binary, "optimized", binary::isOptimized);
+		return properties.forObject(binary).get("optimized", binary::isOptimized);
 	}
 
 	/**
@@ -151,8 +159,9 @@ public abstract class CppEcosystemUtilities {
 	 * @param binary  the C++ binary
 	 * @return the debuggable property
 	 */
+	@SuppressWarnings("UnstableApiUsage")
 	public ShadowProperty<Boolean> debuggabilityOf(CppBinary binary) {
-		return ShadowProperty.of(binary, "debuggable", binary::isDebuggable);
+		return properties.forObject(binary).get("debuggable", binary::isDebuggable);
 	}
 
 	/**
@@ -164,7 +173,7 @@ public abstract class CppEcosystemUtilities {
 	 * @return the compile include path property
 	 */
 	public ShadowProperty<FileCollection> compileIncludePathOf(CppBinary binary) {
-		return ShadowProperty.of(binary, "compileIncludePath", binary::getCompileIncludePath);
+		return properties.forObject(binary).get("compileIncludePath", binary::getCompileIncludePath);
 	}
 
 	/**
@@ -173,8 +182,9 @@ public abstract class CppEcosystemUtilities {
 	 * @param binary  the binary with the objects
 	 * @return the property
 	 */
+	@SuppressWarnings("UnstableApiUsage")
 	public ShadowProperty<FileCollection> objectsOf(ComponentWithObjectFiles binary) {
-		return ShadowProperty.of(binary, "objects", binary::getObjects);
+		return properties.forObject(binary).get("objects", binary::getObjects);
 	}
 
 	/**
@@ -184,7 +194,7 @@ public abstract class CppEcosystemUtilities {
 	 * @return the property
 	 */
 	public ShadowProperty<FileCollection> cppSourceOf(CppBinary binary) {
-		return ShadowProperty.of(binary, "cppSource", binary::getCppSource);
+		return properties.forObject(binary).get("cppSource", binary::getCppSource);
 	}
 
 	/**
@@ -194,10 +204,31 @@ public abstract class CppEcosystemUtilities {
 	 * @return the property
 	 */
 	public ShadowProperty<FileCollection> cppSourceOf(CppComponent component) {
-		return ShadowProperty.of(component, "cppSource", component::getCppSource);
+		return properties.forObject(component).get("cppSource", component::getCppSource);
 	}
 
 	public static CppEcosystemUtilities forProject(Project project) {
 		return project.getObjects().newInstance(CppEcosystemUtilities.class);
+	}
+
+	/*private*/ static abstract class ShadowProperties {
+		@Inject
+		public ShadowProperties() {}
+
+		public Registry forObject(Object self) {
+			return new Registry(self);
+		}
+
+		public static class Registry {
+			private final Object target;
+
+			public Registry(Object target) {
+				this.target = target;
+			}
+
+			public <T> ShadowProperty<T> get(String propertyName, Supplier<T> getter) {
+				return ShadowProperty.of(target, propertyName, getter);
+			}
+		}
 	}
 }

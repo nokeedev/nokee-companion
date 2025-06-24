@@ -5,17 +5,13 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.tasks.TaskContainer;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
-import org.gradle.language.cpp.tasks.CppCompile;
 
 import javax.inject.Inject;
 import java.util.HashMap;
 import java.util.Map;
-
-import static dev.nokee.commons.names.CppNames.compileTaskName;
 
 /**
  * Represents the shadow property for {@link CppBinary#getCppSource()} and {@link CppComponent#getCppSource()}.
@@ -44,13 +40,11 @@ public final class CppSourceFiles {
 	}
 
 	/*private*/ static abstract /*final*/ class Rule implements Plugin<Project> {
-		private final TaskContainer tasks;
 		private final ObjectFactory objects;
 		private final CppEcosystemUtilities access;
 
 		@Inject
-		public Rule(TaskContainer tasks, ObjectFactory objects, Project project) {
-			this.tasks = tasks;
+		public Rule(ObjectFactory objects, Project project) {
 			this.objects = objects;
 			this.access = CppEcosystemUtilities.forProject(project);
 		}
