@@ -4,3 +4,6 @@
 [submodule "nokeebuild-plugins"]
 	path = gradle/plugins/nokeebuild-plugins
 	url = git@github.com:nokeedev/nokeebuild-plugins.git
+[submodule "gradle/templates"]
+	path = gradle/templates
+	url = git@github.com:nokeedev/nokee-code-templates.git

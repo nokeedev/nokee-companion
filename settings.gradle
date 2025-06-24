@@ -1,6 +1,7 @@
 pluginManagement {
 	includeBuild 'gradle/plugins/sampledev-plugins'
 	includeBuild 'gradle/plugins/nokeebuild-plugins'
+	includeBuild 'gradle/templates'
 }
 
 plugins {
@@ -8,3 +9,4 @@ plugins {
 }
 
 rootProject.name = 'nokee-companion'
+includeBuild 'gradle/templates'
