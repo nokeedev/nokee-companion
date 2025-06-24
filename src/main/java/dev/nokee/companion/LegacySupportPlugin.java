@@ -31,10 +31,10 @@ import javax.inject.Inject;
 		final FeaturePreviews feature = project.getObjects().newInstance(FeaturePreviews.class, extension);
 		final Plugins<Project> plugins = Plugins.forProject(project);
 
+		plugins.apply("native-companion.replace-cpp-compile-task");
 		feature.apply("native-task-object-files-extension");
 		feature.apply("compile-tasks-extension");
 		plugins.apply(CppSourceFiles.Rule.class);
-		plugins.apply("native-companion.replace-cpp-compile-task");
 		plugins.apply(CppBinaryObjects.Rule.class);
 		plugins.apply(CppBinaryProperties.Rule.class);
 		plugins.apply(CppUnitTestExtensions.Rule.class);
