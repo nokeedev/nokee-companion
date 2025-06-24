@@ -3,6 +3,7 @@ plugins {
 	id 'cpp-unit-test'
 }
 
+//region Link against another project's product
 unitTest {
 	dependencies {
 		// tested component as normal project dependency
@@ -10,3 +11,4 @@ unitTest {
 		implementation testedComponent(project(':message'))
 	}
 }
+//endregion

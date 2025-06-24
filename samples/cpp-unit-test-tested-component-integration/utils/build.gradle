@@ -11,8 +11,10 @@ library {
 	}
 }
 
+//region Link against the product element
 unitTest {
 	dependencies {
 		implementation testedComponent(project).asProduct()
 	}
 }
+//endregion

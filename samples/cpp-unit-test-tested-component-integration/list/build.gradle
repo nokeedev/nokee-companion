@@ -8,8 +8,10 @@ library {
 	linkage = [Linkage.SHARED, Linkage.STATIC]
 }
 
+//region Compile against the sources element
 unitTest {
 	dependencies {
 		implementation testedComponent(project).asSources()
 	}
 }
+//endregion
