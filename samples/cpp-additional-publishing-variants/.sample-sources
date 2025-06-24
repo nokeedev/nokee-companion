@@ -1,0 +1,6 @@
+app/src/main/java/com/example/app/Main.java
+lib/src/main/java/com/example/greeter/NativeLoader.java
+lib/src/main/java/com/example/greeter/Greeter.java
+lib/src/main/headers/greeter.h
+lib/src/main/cpp/greeter_impl.cpp
+lib/src/main/cpp/greeter.cpp

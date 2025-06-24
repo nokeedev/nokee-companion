@@ -1,0 +1,14 @@
+app/src/main/cpp/main.cpp
+lib/src/main/public/string_utils.h
+lib/src/main/public/linked_list.h
+lib/src/main/public/message.h
+lib/src/main/headers/node.h
+lib/src/main/cpp/message.cpp
+lib/src/main/cpp/split.cpp
+lib/src/main/cpp/destructor.cpp
+lib/src/main/cpp/remove.cpp
+lib/src/main/cpp/join.cpp
+lib/src/main/cpp/add.cpp
+lib/src/main/cpp/get.cpp
+lib/src/main/cpp/copy_ctor_assign.cpp
+lib/src/main/cpp/size.cpp

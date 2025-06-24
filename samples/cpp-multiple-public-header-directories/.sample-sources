@@ -1,0 +1,14 @@
+app/src/main/cpp/main.cpp
+includes/message/message.h
+includes/utilities/string_utils.h
+includes/list/linked_list.h
+message/src/main/cpp/message.cpp
+utilities/src/main/headers/node.h
+utilities/src/main/cpp/split.cpp
+utilities/src/main/cpp/destructor.cpp
+utilities/src/main/cpp/remove.cpp
+utilities/src/main/cpp/join.cpp
+utilities/src/main/cpp/add.cpp
+utilities/src/main/cpp/get.cpp
+utilities/src/main/cpp/copy_ctor_assign.cpp
+utilities/src/main/cpp/size.cpp
