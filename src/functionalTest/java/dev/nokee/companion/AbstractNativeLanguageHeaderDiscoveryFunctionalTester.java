@@ -20,6 +20,7 @@ import java.util.Arrays;
 
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
 @ExtendWith({GradleProjectExtension.class, GradleTaskUnderTestExtension.class})
@@ -27,7 +28,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 	@Test
 	default void canDiscoverHeaderFromDefinedMacros(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-with-include-macros") GradleBuildElement project) throws IOException {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
-		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput();
+		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withArgument("-i");
 		BuildResult result = null;
 
 		result = runner.withTasks(taskUnderTest.toString()).build();
@@ -40,5 +41,6 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
 
 		// TODO: Assert incremental, not full rebuild
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("Found all include files for ':compile'"));
 	}
 }

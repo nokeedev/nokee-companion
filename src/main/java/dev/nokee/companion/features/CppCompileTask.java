@@ -54,6 +54,7 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
@@ -569,6 +570,8 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		this.executor = executor;
 		this.source = super.getSource();
 
+		replaceMacrosField(getMacros());
+
 		getBundles().set(providers.provider(() -> {
 			if (this.allOptions == null) {
 				return Collections.emptyList(); // bailout quickly
@@ -623,6 +626,11 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 				return allOptions.forAllSources(getSource().getAsFileTree()).map(OptionsIter::unrolled);
 			}
 		};
+	}
+
+	private void replaceMacrosField(Map<String, String> lazyMacros) {
+		Field AbstractNativeCompileTask__macros = getField(AbstractNativeCompileTask.class, "macros");
+		updateFieldValue(AbstractNativeCompileTask__macros, this, lazyMacros);
 	}
 
 	@Override
