@@ -124,16 +124,16 @@ class IncrementalCompileFilesFactory {
 				// Source file has changed
 				return false;
 			}
-			if (previousState.getEdges().isEmpty()) {
+			if (edgesOf(previousState).isEmpty()) {
 				// Source file has not changed and no include files
 				return true;
 			}
 
 			// Check each unique edge in the include file graph
-			Map<HashCode, File> includes = new HashMap<HashCode, File>(previousState.getEdges().size());
+			Map<HashCode, File> includes = new HashMap<HashCode, File>(edgesOf(previousState).size());
 			Set<File> headers = new HashSet<File>();
 			includes.put(fileHash, sourceFile);
-			for (IncludeFileEdge includeFileEdge : previousState.getEdges()) {
+			for (IncludeFileEdge includeFileEdge : edgesOf(previousState)) {
 				File includedFrom = includeFileEdge.getIncludedBy() != null ? includes.get(includeFileEdge.getIncludedBy()) : null;
 				SourceIncludesResolver.IncludeFile includeFile = sourceIncludesResolver.resolveInclude(includedFrom, includeFileEdge.getIncludePath());
 				if (includeFile == null) {
@@ -309,6 +309,18 @@ class IncrementalCompileFilesFactory {
 
 			return SourceFileState__new.newInstance(hash, hasUnresolved, resolvedIncludes_asImmutableSet);
 		} catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException | InstantiationException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private static Set<IncludeFileEdge> edgesOf(SourceFileState self) {
+		try {
+			Method SourceFileState__getEdges = SourceFileState.class.getMethod("getEdges");
+
+			@SuppressWarnings("unchecked")
+			Set<IncludeFileEdge> result = (Set<IncludeFileEdge>) SourceFileState__getEdges.invoke(self);
+			return result;
+		} catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
 			throw new RuntimeException(e);
 		}
 	}

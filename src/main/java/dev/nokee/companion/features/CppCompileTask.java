@@ -15,21 +15,27 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileSystemOperations;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.internal.file.TaskFileVarFactory;
+import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
 import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
 import org.gradle.internal.UncheckedException;
+import org.gradle.internal.file.Deleter;
 import org.gradle.internal.io.StreamByteBuffer;
 import org.gradle.internal.operations.*;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.internal.os.OperatingSystem;
+import org.gradle.internal.vfs.FileSystemAccess;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.language.base.internal.compile.VersionAwareCompiler;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
+import org.gradle.language.nativeplatform.internal.incremental.CompilationStateCacheFactory;
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilerBuilder;
+import org.gradle.language.nativeplatform.internal.incremental.sourceparser.CSourceParser;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.gradle.nativeplatform.internal.BuildOperationLoggingCompilerDecorator;
 import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
@@ -519,6 +525,21 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			return stdOutput.readAsString(Charset.defaultCharset()) + errOutput.readAsString(Charset.defaultCharset());
 		}
 	}
+
+	//region Incremental rewrite for gradle/gradle#34152
+	@Inject protected abstract BuildOperationRunner getBuildOperationRunner();
+	@Inject protected abstract CompilationStateCacheFactory getCompilationStateCacheFactory();
+	@Inject protected abstract CSourceParser getSourceParser();
+	@Inject protected abstract Deleter getDeleter();
+	@Inject protected abstract DirectoryFileTreeFactory getDirectoryFileTreeFactory();
+	@Inject protected abstract FileSystemAccess getFileSystemAccess();
+	@Inject protected abstract TaskFileVarFactory getFileVarFactory();
+
+	@Override
+	protected IncrementalCompilerBuilder getIncrementalCompilerBuilder() {
+		return new DefaultIncrementalCompilerBuilder(getBuildOperationRunner(), getCompilationStateCacheFactory(), getSourceParser(), getDeleter(), getDirectoryFileTreeFactory(), getFileSystemAccess(), getFileVarFactory());
+	}
+	//endregion
 
 	// We have to reach to AbstractNativeSourceCompileTask#incrementalCompiler
 	private static IncrementalCompilerBuilder.IncrementalCompiler incrementalCompilerOf(AbstractNativeCompileTask self) {

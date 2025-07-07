@@ -36,6 +36,8 @@ import org.gradle.language.nativeplatform.internal.incremental.sourceparser.Rege
 import org.gradle.nativeplatform.toolchain.internal.NativeCompileSpec;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -153,7 +155,18 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 
 			incrementalCompilation = incrementalCompileProcessor.processSourceFiles(new TreeSet<>(sourceFiles.getFiles()));
 			DefaultHeaderDependenciesCollector headerDependenciesCollector = new DefaultHeaderDependenciesCollector(directoryFileTreeFactory);
-			return headerDependenciesCollector.collectExistingHeaderDependencies(taskPath, includeRoots, incrementalCompilation);
+			return collectExistingHeaderDependencies(headerDependenciesCollector, taskPath, includeRoots, incrementalCompilation);
+		}
+
+		private static Set<File> collectExistingHeaderDependencies(HeaderDependenciesCollector self, String taskPath, List<File> includeRoots, IncrementalCompilation incrementalCompilation) {
+			try {
+				Method HeaderDependenciesCollector__collectExistingHeaderDependencies = HeaderDependenciesCollector.class.getMethod("collectExistingHeaderDependencies", String.class, List.class, IncrementalCompilation.class);
+				@SuppressWarnings("unchecked")
+				Set<File> result = (Set<File>) HeaderDependenciesCollector__collectExistingHeaderDependencies.invoke(self, taskPath, includeRoots, incrementalCompilation);
+				return result;
+			} catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
 		}
 
 		private IncludeDirectives directivesForMacros(Map<String, String> macros) {
