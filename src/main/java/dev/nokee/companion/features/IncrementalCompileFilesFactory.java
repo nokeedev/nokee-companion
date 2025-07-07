@@ -165,7 +165,7 @@ class IncrementalCompileFilesFactory {
 
 			if (!visited.add(newHash)) {
 				// A cycle, treat as resolved here
-				return new FileVisitResult(file);
+				return new FileVisitResult(file, fileDetails.hasMacroIncludes ? IncludeFileResolutionResult.HasMacroIncludes : IncludeFileResolutionResult.NoMacroIncludes);
 			}
 
 			if (fileDetails == null) {
@@ -184,6 +184,7 @@ class IncrementalCompileFilesFactory {
 			for (Include include : allIncludes) {
 				if (include.getType() == IncludeType.MACRO && result == IncludeFileResolutionResult.NoMacroIncludes) {
 					result = IncludeFileResolutionResult.HasMacroIncludes;
+					fileDetails.hasMacroIncludes = true;
 				}
 				SourceIncludesResolver.IncludeResolutionResult resolutionResult = sourceIncludesResolver.resolveInclude(file, include, visibleMacros);
 				if (!resolutionResult.isComplete()) {
@@ -237,6 +238,7 @@ class IncrementalCompileFilesFactory {
 		// Non-null when the result of visiting this file can be reused
 		@Nullable
 		FileVisitResult results;
+		boolean hasMacroIncludes = false;
 
 		FileDetails(IncludeDirectives directives) {
 			this.directives = directives;
@@ -263,9 +265,9 @@ class IncrementalCompileFilesFactory {
 			this.includeFileDirectives = dependentIncludeDirectives;
 		}
 
-		FileVisitResult(File file) {
+		FileVisitResult(File file, IncludeFileResolutionResult result) {
 			this.file = file;
-			result = IncludeFileResolutionResult.NoMacroIncludes;
+			this.result = result;
 			includeDirectives = null;
 			included = Collections.emptyList();
 			edges = Collections.emptyList();

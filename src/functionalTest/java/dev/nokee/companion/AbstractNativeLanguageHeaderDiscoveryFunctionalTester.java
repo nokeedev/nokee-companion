@@ -20,8 +20,7 @@ import java.util.Arrays;
 
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 
 @ExtendWith({GradleProjectExtension.class, GradleTaskUnderTestExtension.class})
 public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
@@ -42,5 +41,26 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 
 		// TODO: Assert incremental, not full rebuild
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("Found all include files for ':compile'"));
+	}
+
+	@Test
+	default void discoverConsistentHeaderGraphOnMacroInclude(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-for-gradle-34152") GradleBuildElement project) throws IOException {
+		GradleBuildElement build = project.writeToDirectory(testDirectory);
+		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withArgument("-i");
+		BuildResult result = null;
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+
+		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
+
+		// TODO: Assert incremental, not full rebuild
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/a.cpp"));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("/src/main/cpp/c.cpp")));
 	}
 }

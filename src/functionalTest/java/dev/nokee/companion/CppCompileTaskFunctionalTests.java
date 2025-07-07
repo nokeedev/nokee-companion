@@ -12,6 +12,7 @@ import org.gradle.nativeplatform.plugins.NativeComponentPlugin;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.Notation.plugin;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
@@ -254,6 +255,58 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 			compileTask.source('%s') { compilerArgs.add('-DMY_MACRO=%d') }
 		""".stripIndent().formatted(file.toString().substring(1), i)));
 		}
+
+		return build;
+	}
+
+	@GradleProject("project-for-gradle-34152")
+	public static GradleBuildElement makeProjectForGradle34152() throws IOException {
+		GradleBuildElement build = makeEmptyProject();
+		Files.write(build.file("src/main/cpp/a.cpp"), Arrays.asList(
+			"#include \"a.h\"",
+			"#include \"b.h\""
+		));
+		Files.write(build.file("src/main/cpp/b.cpp"), Arrays.asList(
+			"#include \"b.h\""
+		));
+		Files.write(build.file("src/main/cpp/c.cpp"), Arrays.asList(
+			"int main() { return 0; }"
+		));
+
+		Files.write(build.file("src/main/headers/a.h"), Arrays.asList(
+			"#pragma once",
+			"#include \"c.h\"",
+			"int a() { return 1; }"
+		));
+		Files.write(build.file("src/main/headers/b.h"), Arrays.asList(
+			"#pragma once",
+			"#include \"c.h\"",
+			"int b() { return 2; }"
+		));
+		Files.write(build.file("src/main/headers/c.h"), Arrays.asList(
+			"#pragma once",
+			"#include \"d.h\"",
+			"#include MY_MACRO_INCLUDE",
+			"int c() { return 3; }"
+		));
+		Files.write(build.file("src/main/headers/d.h"), Arrays.asList(
+			"#pragma once",
+			"// modifying will only recompile `a.cpp`, not `b.cpp`",
+			"int d() { return 4; }"
+		));
+		Files.write(build.file("src/main/headers/e.h"), Arrays.asList(
+			"#pragma once",
+			"// macro include file, will also be hidden from `b.cpp`",
+			"int e() { return 5; }"
+		));
+
+		build.getBuildFile().append(groovyDsl("""
+			subject.configure {
+				source(files('src/main/cpp').asFileTree)
+				includes.from('src/main/headers')
+				options.preprocessorOptions.define('MY_MACRO_INCLUDE', '"e.h"')
+			}
+		"""));
 
 		return build;
 	}
