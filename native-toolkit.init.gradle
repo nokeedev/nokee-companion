@@ -1,0 +1,390 @@
+/**
+ * This init script serve as a way to debug the compilation state used by the Gradle native core tasks.
+ * The goal is to emulate how Gradle discover the headers (using internal types or a copy of them) (visit mode).
+ * The script also allow access to the compilation state of any compile task (graph mode).
+ */
+import org.gradle.language.nativeplatform.internal.MacroFunction
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.gradle.language.nativeplatform.internal.Expression;
+import org.gradle.language.nativeplatform.internal.IncludeDirectives;
+import org.gradle.language.nativeplatform.internal.Macro;
+import org.gradle.internal.hash.HashCode
+import org.gradle.internal.vfs.FileSystemAccess
+import org.gradle.language.nativeplatform.internal.Include
+import org.gradle.language.nativeplatform.internal.IncludeDirectives
+import org.gradle.language.nativeplatform.internal.IncludeType
+import org.gradle.language.nativeplatform.internal.incremental.BuildableCompilationState
+import org.gradle.language.nativeplatform.internal.incremental.CompilationState
+import org.gradle.language.nativeplatform.internal.incremental.DefaultIncrementalCompilation
+import org.gradle.language.nativeplatform.internal.incremental.DefaultSourceIncludesParser
+import org.gradle.language.nativeplatform.internal.incremental.DefaultSourceIncludesResolver
+import org.gradle.language.nativeplatform.internal.incremental.CompilationStateCacheFactory
+import org.gradle.language.nativeplatform.internal.incremental.IncludeFileEdge
+import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilation
+import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompileSourceProcessor
+import org.gradle.language.nativeplatform.internal.incremental.SourceFileState
+import org.gradle.language.nativeplatform.internal.incremental.SourceIncludesParser
+import org.gradle.language.nativeplatform.internal.incremental.SourceIncludesResolver
+import org.gradle.language.nativeplatform.internal.incremental.sourceparser.CSourceParser
+import org.gradle.language.nativeplatform.internal.incremental.CollectingMacroLookup
+import org.gradle.language.nativeplatform.internal.incremental.sourceparser.DefaultIncludeDirectives;
+import org.gradle.language.nativeplatform.internal.incremental.sourceparser.MacroWithSimpleExpression;
+import org.gradle.language.nativeplatform.internal.incremental.sourceparser.RegexBackedCSourceParser;
+
+enum VerificationMode {
+	graph, parse, visit
+}
+
+public class IncrementalCompileFilesFactory {
+	private static final Logger LOGGER = LoggerFactory.getLogger(IncrementalCompileFilesFactory.class);
+	private static final String IGNORE_UNRESOLVED_HEADERS_IN_DEPENDENCIES_PROPERTY_NAME = "org.gradle.internal.native.headers.unresolved.dependencies.ignore";
+	private final IncludeDirectives initialIncludeDirectives;
+	private final SourceIncludesParser sourceIncludesParser;
+	private final SourceIncludesResolver sourceIncludesResolver;
+	private final FileSystemAccess fileSystemAccess;
+	private final boolean ignoreUnresolvedHeadersInDependencies;
+
+	public IncrementalCompileFilesFactory(IncludeDirectives initialIncludeDirectives, SourceIncludesParser sourceIncludesParser, SourceIncludesResolver sourceIncludesResolver, FileSystemAccess fileSystemAccess) {
+		this.initialIncludeDirectives = initialIncludeDirectives;
+		this.sourceIncludesParser = sourceIncludesParser;
+		this.sourceIncludesResolver = sourceIncludesResolver;
+		this.fileSystemAccess = fileSystemAccess;
+		this.ignoreUnresolvedHeadersInDependencies = Boolean.getBoolean(IGNORE_UNRESOLVED_HEADERS_IN_DEPENDENCIES_PROPERTY_NAME);
+	}
+
+		private final Set<File> existingHeaders = new HashSet();
+		private final Map<File, FileDetails> visitedFiles = new HashMap();
+		private boolean hasUnresolvedHeaders;
+
+		FileVisitResult visitSourceFile(File sourceFile) {
+			return (FileVisitResult) fileSystemAccess.readRegularFileContentHash(sourceFile.getAbsolutePath()).map((fileContent) -> {
+					CollectingMacroLookup visibleMacros = new CollectingMacroLookup(initialIncludeDirectives);
+					FileVisitResult result = this.visitFile(sourceFile, fileContent, visibleMacros, new HashSet(), this.existingHeaders);
+					Set<IncludeFileEdge> includedFiles = new LinkedHashSet();
+					result.collectFilesInto(includedFiles, new HashSet());
+					if (/*newState.isHasUnresolved()*/result.result == IncludeFileResolutionResult.UnresolvedMacroIncludes) {
+						this.hasUnresolvedHeaders = true;
+					}
+
+					return result;
+			}).orElse(null);
+		}
+
+		private FileVisitResult visitFile(File file, HashCode newHash, CollectingMacroLookup visibleMacros, Set<HashCode> visited, Set<File> existingHeaders) {
+			FileDetails fileDetails = (FileDetails)this.visitedFiles.get(file);
+			if (fileDetails != null && fileDetails.results != null) {
+				fileDetails.results.collectInto(visibleMacros)
+				return fileDetails.results;
+			} else if (!visited.add(newHash)) {
+				return new FileVisitResult(file);
+			} else {
+				if (fileDetails == null) {
+					IncludeDirectives includeDirectives = sourceIncludesParser.parseIncludes(file);
+					fileDetails = new FileDetails(includeDirectives);
+					this.visitedFiles.put(file, fileDetails);
+				}
+
+				CollectingMacroLookup includedFileDirectives = new CollectingMacroLookup();
+				visibleMacros.append(file, fileDetails.directives);
+				List<Include> allIncludes = fileDetails.directives.getAll();
+				List<FileVisitResult> included = (List<FileVisitResult>)(allIncludes.isEmpty() ? Collections.emptyList() : new ArrayList(allIncludes.size()));
+				List<IncludeFileEdge> edges = (List<IncludeFileEdge>)(allIncludes.isEmpty() ? Collections.emptyList() : new ArrayList(allIncludes.size()));
+				IncludeFileResolutionResult result = IncludeFileResolutionResult.NoMacroIncludes;
+
+				for(Include include : allIncludes) {
+					if (include.getType() == IncludeType.MACRO && result == IncludeFileResolutionResult.NoMacroIncludes) {
+						result = IncludeFileResolutionResult.HasMacroIncludes;
+					}
+
+					SourceIncludesResolver.IncludeResolutionResult resolutionResult = sourceIncludesResolver.resolveInclude(file, include, visibleMacros);
+					if (!resolutionResult.isComplete()) {
+						LOGGER.info("Cannot locate header file for '{}' in source file '{}'. Assuming changed.", include.getAsSourceText(), file.getName());
+						if (!ignoreUnresolvedHeadersInDependencies) {
+							result = IncludeFileResolutionResult.UnresolvedMacroIncludes;
+						}
+					}
+
+					for(SourceIncludesResolver.IncludeFile includeFile : resolutionResult.getFiles()) {
+						existingHeaders.add(includeFile.getFile());
+						FileVisitResult includeVisitResult = this.visitFile(includeFile.getFile(), includeFile.getContentHash(), visibleMacros, visited, existingHeaders);
+						if (includeVisitResult.result.ordinal() > result.ordinal()) {
+							result = includeVisitResult.result;
+						}
+
+						includeVisitResult.collectDependencies(includedFileDirectives);
+						included.add(includeVisitResult);
+						edges.add(new IncludeFileEdge(includeFile.getPath(), includeFile.isQuotedInclude() ? newHash : null, includeFile.getContentHash()));
+					}
+				}
+
+				FileVisitResult visitResult = new FileVisitResult(file, result, fileDetails.directives, included, edges, includedFileDirectives);
+				if (result == IncludeFileResolutionResult.NoMacroIncludes) {
+					fileDetails.results = visitResult;
+				}
+
+				return visitResult;
+			}
+		}
+
+	private static enum IncludeFileResolutionResult {
+		NoMacroIncludes,
+		HasMacroIncludes,
+		UnresolvedMacroIncludes;
+	}
+
+	private static class FileDetails {
+		final IncludeDirectives directives;
+//		@Nullable
+		FileVisitResult results;
+
+		FileDetails(IncludeDirectives directives) {
+			this.directives = directives;
+		}
+	}
+
+	private static class FileVisitResult {
+		private final File file;
+		private final IncludeFileResolutionResult result;
+		private final IncludeDirectives includeDirectives;
+		private final List<FileVisitResult> included;
+		private final List<IncludeFileEdge> edges;
+		private final CollectingMacroLookup includeFileDirectives;
+
+		FileVisitResult(File file, IncludeFileResolutionResult result, IncludeDirectives includeDirectives, List<FileVisitResult> included, List<IncludeFileEdge> edges, CollectingMacroLookup dependentIncludeDirectives) {
+			this.file = file;
+			this.result = result;
+			this.includeDirectives = includeDirectives;
+			this.included = included;
+			this.edges = edges;
+			this.includeFileDirectives = dependentIncludeDirectives;
+		}
+
+		FileVisitResult(File file) {
+			this.file = file;
+			this.result = IncludeFileResolutionResult.NoMacroIncludes;
+			this.includeDirectives = null;
+			this.included = Collections.emptyList();
+			this.edges = Collections.emptyList();
+			this.includeFileDirectives = null;
+		}
+
+		void collectDependencies(CollectingMacroLookup directives) {
+			if (this.includeDirectives != null) {
+				this.collectInto(directives)
+			}
+
+		}
+
+		void collectFilesInto(Collection<IncludeFileEdge> files, Set<File> seen) {
+			if (this.includeDirectives != null && seen.add(this.file)) {
+				files.addAll(this.edges);
+
+				for(FileVisitResult include : this.included) {
+					include.collectFilesInto(files, seen);
+				}
+			}
+
+		}
+
+		public void collectInto(CollectingMacroLookup lookup) {
+			if (this.includeDirectives != null) {
+				lookup.append(this.file, this.includeDirectives);
+				this.includeFileDirectives.appendTo(lookup);
+			}
+
+		}
+	}
+}
+
+abstract class VerificationTask extends DefaultTask {
+	private static final CollectingMacroLookup EMPTY = new CollectingMacroLookup()
+	@Inject protected abstract CompilationStateCacheFactory getCompilationStateCacheFactory()
+	@Inject protected abstract CSourceParser getCSourceParser()
+	@Inject protected abstract FileSystemAccess getFileSystemAccess()
+	@Inject protected abstract ProviderFactory getProviders()
+	private final Provider<AbstractNativeCompileTask> compileTask = taskPath.map { toCompileTask(it) }
+	private final Provider<File> singleFile = singleFilePath.map(File::new)
+
+	VerificationTask() {
+		taskPath.convention(providers.systemProperty("task-path"))
+		verificationMode.convention(providers.systemProperty("mode").map(VerificationMode::valueOf))
+		ignores.convention(providers.systemProperty("ignores"))
+		singleFilePath.convention(providers.systemProperty("single-file"))
+	}
+
+	@Internal
+	@Option(option = "task-path", description = "task path to use")
+	abstract Property<String> getTaskPath();
+
+	protected AbstractNativeCompileTask toCompileTask(String taskPath) {
+		def result = (AbstractNativeCompileTask) project.tasks.findByPath(taskPath)
+		if (result == null) {
+			result = (AbstractNativeCompileTask) project.tasks.findByPath(":${taskPath.split(':').drop(2).join(':')}")
+		}
+		return result
+	}
+
+	@Internal
+	@Option(option = "mode", description = "mode of verification")
+	abstract Property<VerificationMode> getVerificationMode();
+
+	@Internal
+	@Option(option = 'single-file', description = 'result for this single file')
+	abstract Property<String> getSingleFilePath()
+
+	@Internal
+	@Option(option = 'ignores', description = 'things to ignore')
+	abstract Property<String> getIgnores()
+
+	@TaskAction
+	void doVerification() {
+		switch (verificationMode.get()) {
+			case VerificationMode.graph: doPrintGraph(); break;
+			case VerificationMode.parse: doParseFile(); break;
+			case VerificationMode.visit: doVisitFile(); break;
+		}
+	}
+
+	private void doParseFile() {
+		def parser = new DefaultSourceIncludesParser(getCSourceParser(), false)
+		def directives = parser.parseIncludes(singleFile.get())
+		def allIncludePaths = compileTask.map { new ArrayList<>(it.includes.files) }.orNull
+		if (!ignores.getOrElse('').contains('do-not-resolve') && allIncludePaths == null) return
+
+		for (def include : directives.includesOnly) {
+			println(include.asSourceText)
+			if (!ignores.getOrElse('').contains('do-not-resolve')) {
+				def depParser = new DefaultSourceIncludesResolver(allIncludePaths, fileSystemAccess)
+				def result = depParser.resolveInclude(singleFile.get(), include, new CollectingMacroLookup())
+				if (result.complete) {
+					result.files.each { details ->
+						println(" -> ${details.file}")
+					}
+				}
+			}
+		}
+	}
+
+	private void doVisitFile() {
+		def task = compileTask.orNull
+		if (task == null) return
+
+		def macros = task.macros
+		def allIncludePaths = new ArrayList<>(task.includes.plus(task.systemIncludes).files)
+		def source = new TreeSet<>(task.source.files)
+
+		IncludeDirectives includeDirectives = this.directivesForMacros(macros);
+		def incrementalCompileSourceProcessor = new IncrementalCompileFilesFactory(includeDirectives, new DefaultSourceIncludesParser(getCSourceParser(), false), new DefaultSourceIncludesResolver(allIncludePaths, fileSystemAccess), fileSystemAccess)
+		for (def sourceFile in source) {
+			println("=> $sourceFile")
+			def result = incrementalCompileSourceProcessor.visitSourceFile(sourceFile)
+			Set<IncludeFileEdge> edges = new LinkedHashSet();
+			result.collectFilesInto(edges, new HashSet());
+			edges.each { edge ->
+				if (ignores.getOrElse('').contains('system-includes') && edge.includedBy == null) return
+				println(" -> ${edge.includePath} [${edge.includedBy} => ${edge.resolvedTo}]")
+			}
+		}
+	}
+
+	private IncludeDirectives directivesForMacros(Map<String, String> macros) {
+		List<Macro> builder = new ArrayList<>();
+
+		for(Map.Entry<String, String> entry : macros.entrySet()) {
+			Expression expression = RegexBackedCSourceParser.parseExpression((String)entry.getValue());
+			builder.add(new MacroWithSimpleExpression((String)entry.getKey(), expression.getType(), expression.getValue()));
+		}
+
+		return new IncludeDirectives() {
+			private final List<Macro> values = builder;
+
+			@Override
+			List<Include> getQuotedIncludes() {
+				return []
+			}
+
+			@Override
+			List<Include> getSystemIncludes() {
+				return []
+			}
+
+			@Override
+			List<Include> getMacroIncludes() {
+				return []
+			}
+
+			@Override
+			List<Include> getAll() {
+				return []
+			}
+
+			@Override
+			List<Include> getIncludesOnly() {
+				return []
+			}
+
+			@Override
+			Iterable<Macro> getMacros(String name) {
+				return values.findAll { it.name == name }
+			}
+
+			@Override
+			Iterable<MacroFunction> getMacroFunctions(String name) {
+				return []
+			}
+
+			@Override
+			Collection<Macro> getAllMacros() {
+				return values
+			}
+
+			@Override
+			Collection<MacroFunction> getAllMacroFunctions() {
+				return []
+			}
+
+			@Override
+			boolean hasMacros() {
+				return true
+			}
+
+			@Override
+			boolean hasMacroFunctions() {
+				return false
+			}
+
+			@Override
+			IncludeDirectives discardImports() {
+				return this
+			}
+		}
+	}
+
+	private void doPrintGraph() {
+		def taskPath = compileTask.map { it.path }.orNull
+		if (taskPath == null) return
+
+		def state = compilationStateCacheFactory.create(taskPath).get()
+		def singleFile = singleFile.orNull
+		state.sourceInputs.each { sourceInput ->
+			if (singleFile == null || sourceInput == singleFile) {
+				def sourceState = state.getState(sourceInput)
+				println("==> ${sourceInput.absolutePath} [${sourceState.hash}] ${sourceState.isHasUnresolved() ? '(U)' : ''}")
+				sourceState.edges.each { edge ->
+					if (ignores.getOrElse('').contains('system-includes') && edge.includedBy == null) return
+					println(" -> ${edge.includePath} [${edge.includedBy} => ${edge.resolvedTo}]")
+				}
+			}
+		}
+	}
+}
+
+// Inject in all builds
+beforeSettings {
+	rootProject {
+		tasks.register('verify', VerificationTask) {
+			dependsOn(gradle.includedBuilds.collect { it.task(path) })
+		}
+	}
+}
