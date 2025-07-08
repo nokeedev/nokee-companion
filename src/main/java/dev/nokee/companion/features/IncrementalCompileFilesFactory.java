@@ -31,6 +31,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.function.Function;
 
 class IncrementalCompileFilesFactory {
 
@@ -53,6 +54,28 @@ class IncrementalCompileFilesFactory {
 
 	public IncrementalCompileSourceProcessor files(CompilationState previousCompileState) {
 		return new DefaultIncrementalCompileSourceProcessor(previousCompileState);
+	}
+
+	private static Optional<HashCode> FileSystemAccess__readRegularFileContentHash(FileSystemAccess self, String path) {
+		try {
+			Method method = self.getClass().getMethod("readRegularFileContentHash", String.class);
+			try {
+				@SuppressWarnings("unchecked")
+				Optional<HashCode> result = (Optional<HashCode>) method.invoke(self, path);
+				return result;
+			} catch (InvocationTargetException | IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
+		} catch (NoSuchMethodException e) {
+			try {
+				Method method = self.getClass().getMethod("readRegularFileContentHash", String.class, Function.class);
+				@SuppressWarnings("unchecked")
+				Optional<HashCode> result = (Optional<HashCode>) method.invoke(self, path, Function.identity());
+				return result;
+			} catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException ex) {
+				throw new RuntimeException(ex);
+			}
+		}
 	}
 
 	private class DefaultIncrementalCompileSourceProcessor implements IncrementalCompileSourceProcessor {
@@ -83,7 +106,7 @@ class IncrementalCompileFilesFactory {
 		 * @return true if this source file requires recompilation, false otherwise.
 		 */
 		private boolean visitSourceFile(File sourceFile) {
-			return fileSystemAccess.readRegularFileContentHash(sourceFile.getAbsolutePath())
+			return FileSystemAccess__readRegularFileContentHash(fileSystemAccess, sourceFile.getAbsolutePath())
 				.map(fileContent -> {
 					SourceFileState previousState = previous.getState(sourceFile);
 

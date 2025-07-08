@@ -25,24 +25,37 @@ import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompil
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompileSourceProcessor;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Collection;
 
 class IncrementalCompileProcessor {
-	private final ObjectHolder<CompilationState> previousCompileStateCache;
+	private final Object/*Holder<CompilationState>*/ previousCompileStateCache;
 	private final IncrementalCompileFilesFactory incrementalCompileFilesFactory;
 	private final BuildOperationRunner buildOperationExecutor;
 
-	public IncrementalCompileProcessor(ObjectHolder<CompilationState> previousCompileStateCache, IncrementalCompileFilesFactory incrementalCompileFilesFactory, BuildOperationRunner buildOperationExecutor) {
+	public IncrementalCompileProcessor(Object/*Holder<CompilationState>*/ previousCompileStateCache, IncrementalCompileFilesFactory incrementalCompileFilesFactory, BuildOperationRunner buildOperationExecutor) {
 		this.previousCompileStateCache = previousCompileStateCache;
 		this.incrementalCompileFilesFactory = incrementalCompileFilesFactory;
 		this.buildOperationExecutor = buildOperationExecutor;
+	}
+
+	private static <T> T ObjectHolder__get(Object obj) {
+		try {
+			Method get = obj.getClass().getInterfaces()[0].getMethod("get");
+			@SuppressWarnings("unchecked")
+			T result = (T) get.invoke(obj);
+			return result;
+		} catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	public IncrementalCompilation processSourceFiles(final Collection<File> sourceFiles) {
 		return buildOperationExecutor.call(new CallableBuildOperation<IncrementalCompilation>() {
 			@Override
 			public IncrementalCompilation call(BuildOperationContext context) {
-				CompilationState previousCompileState = previousCompileStateCache.get();
+				CompilationState previousCompileState = ObjectHolder__get(previousCompileStateCache);
 				IncrementalCompileSourceProcessor processor = incrementalCompileFilesFactory.files(previousCompileState);
 				for (File sourceFile : sourceFiles) {
 					processor.processSource(sourceFile);

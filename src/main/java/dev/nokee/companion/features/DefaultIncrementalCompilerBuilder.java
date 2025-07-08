@@ -101,7 +101,7 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 		private final String taskPath;
 		private final FileCollection sourceFiles;
 		private final FileCollection headerFilesCollection;
-		private ObjectHolder<CompilationState> compileStateCache;
+		private Object/*Holder<CompilationState>*/ compileStateCache;
 		private IncrementalCompilation incrementalCompilation;
 
 		StateCollectingIncrementalCompiler(
@@ -140,13 +140,28 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 			if (incrementalCompilation == null) {
 				throw new IllegalStateException("Header files should be calculated before compiler is created.");
 			}
-			return new IncrementalNativeCompiler<T>(taskOutputs, compiler, deleter, compileStateCache, incrementalCompilation);
+			try {
+				@SuppressWarnings("unchecked")
+				IncrementalNativeCompiler<T> result = (IncrementalNativeCompiler<T>) IncrementalNativeCompiler.class.getConstructors()[0].newInstance(taskOutputs, compiler, deleter, compileStateCache, incrementalCompilation);
+				return result;
+			} catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
+		}
+
+		private static Object/*Holder<CompilationState>*/ CompilationStateCacheFactory__create(CompilationStateCacheFactory self, String taskPath) {
+			try {
+				Method create = self.getClass().getMethod("create", String.class);
+				return create.invoke(self, taskPath);
+			} catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
 		}
 
 		@Override
 		public Set<File> getFiles() {
 			List<File> includeRoots = new ArrayList<>(includeDirs.getFiles());
-			compileStateCache = compilationStateCacheFactory.create(taskPath);
+			compileStateCache = CompilationStateCacheFactory__create(compilationStateCacheFactory, taskPath);
 			DefaultSourceIncludesParser sourceIncludesParser = new DefaultSourceIncludesParser(sourceParser, importAware.get());
 			DefaultSourceIncludesResolver dependencyParser = new DefaultSourceIncludesResolver(includeRoots, fileSystemAccess);
 			IncludeDirectives includeDirectives = directivesForMacros(macros);
