@@ -63,4 +63,25 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("/src/main/cpp/c.cpp")));
 	}
+
+	@Test
+	default void discoverConsistentHeaderGraphOnMacroIncludeWithDuplicatedHeaders(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-for-gradle-34152-ex") GradleBuildElement project) throws IOException {
+		GradleBuildElement build = project.writeToDirectory(testDirectory);
+		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withArgument("-i");
+		BuildResult result = null;
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+
+		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
+
+		// TODO: Assert incremental, not full rebuild
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/a.cpp"));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("/src/main/cpp/c.cpp")));
+	}
 }

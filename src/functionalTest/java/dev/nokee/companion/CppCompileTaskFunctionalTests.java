@@ -310,4 +310,67 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 
 		return build;
 	}
+
+	@GradleProject("project-for-gradle-34152-ex")
+	public static GradleBuildElement makeProjectForGradle34152Ex() throws IOException {
+		GradleBuildElement build = makeEmptyProject();
+		Files.write(build.file("src/main/cpp/a.cpp"), Arrays.asList(
+			"#include \"a.h\"",
+			"#include \"b.h\""
+		));
+		Files.write(build.file("src/main/cpp/b.cpp"), Arrays.asList(
+			"#include \"b.h\""
+		));
+		Files.write(build.file("src/main/cpp/c.cpp"), Arrays.asList(
+			"int main() { return 0; }"
+		));
+
+		Files.write(build.file("src/main/headers/a.h"), Arrays.asList(
+			"// a.h and copied-a.h have exact same content on purpose",
+			"#ifndef A_H_",
+			"#define A_H_",
+			"#include \"c.h\"",
+			"int a() { return 1; }",
+			"#endif"
+		));
+		Files.write(build.file("src/main/headers/b.h"), Arrays.asList(
+			"#pragma once",
+			"#include \"copied-a.h\"",
+			"int b() { return 2; }"
+		));
+		Files.write(build.file("src/main/headers/copied-a.h"), Arrays.asList(
+			"// a.h and copied-a.h have exact same content on purpose",
+			"#ifndef A_H_",
+			"#define A_H_",
+			"#include \"c.h\"",
+			"int a() { return 1; }",
+			"#endif"
+		));
+		Files.write(build.file("src/main/headers/c.h"), Arrays.asList(
+			"#pragma once",
+			"#include \"d.h\"",
+			"#include MY_MACRO_INCLUDE",
+			"int c() { return 3; }"
+		));
+		Files.write(build.file("src/main/headers/d.h"), Arrays.asList(
+			"#pragma once",
+			"// modifying will only recompile `a.cpp`, not `b.cpp`",
+			"int d() { return 4; }"
+		));
+		Files.write(build.file("src/main/headers/e.h"), Arrays.asList(
+			"#pragma once",
+			"// macro include file, will also be hidden from `b.cpp`",
+			"int e() { return 5; }"
+		));
+
+		build.getBuildFile().append(groovyDsl("""
+			subject.configure {
+				source(files('src/main/cpp').asFileTree)
+				includes.from('src/main/headers')
+				options.preprocessorOptions.define('MY_MACRO_INCLUDE', '"e.h"')
+			}
+		"""));
+
+		return build;
+	}
 }

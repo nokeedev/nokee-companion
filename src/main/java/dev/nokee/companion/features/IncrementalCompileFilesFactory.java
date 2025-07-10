@@ -83,7 +83,7 @@ class IncrementalCompileFilesFactory {
 		private final BuildableCompilationState current = new BuildableCompilationState();
 		private final List<File> toRecompile = new ArrayList<File>();
 		private final Set<File> existingHeaders = new HashSet<File>();
-		private final Map<File, FileDetails> visitedFiles = new HashMap<File, FileDetails>();
+		private final Map<HashCode, FileDetails> visitedFiles = new HashMap<HashCode, FileDetails>();
 		private boolean hasUnresolvedHeaders;
 
 		DefaultIncrementalCompileSourceProcessor(CompilationState previousCompileState) {
@@ -179,7 +179,7 @@ class IncrementalCompileFilesFactory {
 		}
 
 		private FileVisitResult visitFile(File file, HashCode newHash, CollectingMacroLookup visibleMacros, Set<HashCode> visited, Set<File> existingHeaders) {
-			FileDetails fileDetails = visitedFiles.get(file);
+			FileDetails fileDetails = visitedFiles.get(newHash);
 			if (fileDetails != null && fileDetails.results != null) {
 				// A file that we can safely reuse the result for
 				fileDetails.results.collectInto(visibleMacros);
@@ -188,13 +188,17 @@ class IncrementalCompileFilesFactory {
 
 			if (!visited.add(newHash)) {
 				// A cycle, treat as resolved here
-				return new FileVisitResult(file, fileDetails.hasMacroIncludes ? IncludeFileResolutionResult.HasMacroIncludes : IncludeFileResolutionResult.NoMacroIncludes);
+				IncludeFileResolutionResult result = IncludeFileResolutionResult.NoMacroIncludes;
+				if (fileDetails != null && fileDetails.hasMacroIncludes) {
+					result = IncludeFileResolutionResult.HasMacroIncludes;
+				}
+				return new FileVisitResult(file, result);
 			}
 
 			if (fileDetails == null) {
 				IncludeDirectives includeDirectives = sourceIncludesParser.parseIncludes(file);
 				fileDetails = new FileDetails(includeDirectives);
-				visitedFiles.put(file, fileDetails);
+				visitedFiles.put(newHash, fileDetails);
 			}
 
 			CollectingMacroLookup includedFileDirectives = new CollectingMacroLookup();
@@ -207,7 +211,7 @@ class IncrementalCompileFilesFactory {
 			for (Include include : allIncludes) {
 				if (include.getType() == IncludeType.MACRO && result == IncludeFileResolutionResult.NoMacroIncludes) {
 					result = IncludeFileResolutionResult.HasMacroIncludes;
-					fileDetails.hasMacroIncludes = true;
+					fileDetails.hasMacroIncludes = true; // directly contain a macro include
 				}
 				SourceIncludesResolver.IncludeResolutionResult resolutionResult = sourceIncludesResolver.resolveInclude(file, include, visibleMacros);
 				if (!resolutionResult.isComplete()) {
@@ -232,6 +236,8 @@ class IncrementalCompileFilesFactory {
 			if (result == IncludeFileResolutionResult.NoMacroIncludes) {
 				// No macro includes were seen in the include graph of this file, so the result can be reused if this file is seen again
 				fileDetails.results = visitResult;
+			} else {
+				fileDetails.hasMacroIncludes = true; // indirectly contain a macro include
 			}
 			return visitResult;
 		}
