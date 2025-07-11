@@ -92,6 +92,7 @@ Here's summary of all features available:
 - _(disabled)_ [**binary-task-extensions**](#feature-binary-task-extensions): Conveniences for configuring binary tasks (i.e. compile task, etc.) without realizing them.
 - _(disabled)_ [**fix-for-gradle-29492**](#feature-fix-for-gradle-29492): Fixes [gradle/gradle#29492](https://github.com/gradle/gradle/issues/29492) regarding inability to track relative path of native compilation units.
 - _(disabled)_ [**fix-for-gradle-29744**](#feature-fix-for-gradle-29744): Fixes [gradle/gradle#29744](https://github.com/gradle/gradle/issues/29744) regarding header dependencies sensitivity to source ordering.
+- _(disabled)_ [**fix-for-gradle-34152**](#feature-fix-for-gradle-34152): Fixes [gradle/gradle#34152](https://github.com/gradle/gradle/issues/34152) regarding incomplete header discovery when encountering header cycle or duplicated headers and macro includes.
 - _(disabled)_ [**fix-for-public-headers**](#feature-fix-for-public-headers): Propagates generated headers' task dependencies and allows multiple public headers.
 - _(disabled)_ [**fix-for-version-catalog**](#feature-fix-for-version-catalog): Accepts version catalog dependencies in native dependency buckets.
 - _(disabled)_ [**incremental-compilation-after-failure**](#feature-incremental-compilation-after-failure): Conserves incremental compilation after compile task failure.
@@ -126,6 +127,11 @@ Essentially, if only a compilation unit's relative path change, core Gradle nati
 Fixes [gradle/gradle#29744](https://github.com/gradle/gradle/issues/29744) regarding header dependencies sensitivity to source ordering.
 The plugin provide an equivalent fix **only** for affected Gradle version.
 The Gradle team fixed the particular issue in Gradle 8.11 and later.
+
+### Feature: fix-for-gradle-34152
+
+Fixes [gradle/gradle#34152](https://github.com/gradle/gradle/issues/34152) regarding incomplete header discovery when encountering header cycle or duplicated headers and macro includes.
+The plugin provide fix for all Gradle version affected.
 
 ### Feature: fix-for-public-headers
 
