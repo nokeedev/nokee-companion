@@ -15,6 +15,7 @@ Below are the key features included in this preview release:
 
 - Fix to [gradle/gradle#29492](https://github.com/gradle/gradle/issues/29492)
 - Fix to [gradle/gradle#29744](https://github.com/gradle/gradle/issues/29744)
+- Fix to [gradle/gradle#34152](https://github.com/gradle/gradle/issues/34152)
 - Support version catalogue dependencies
 - Fix [gradle/gradle-native#994](https://github.com/gradle/gradle-native/issues/994) depends on public header generation
 - Fix gradle/gradle#??? multiple public header directories
