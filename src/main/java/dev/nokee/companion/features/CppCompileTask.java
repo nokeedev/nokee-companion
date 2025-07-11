@@ -11,39 +11,32 @@ import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.file.ConfigurableFileCollection;
-import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.file.FileSystemOperations;
-import org.gradle.api.file.RegularFileProperty;
-import org.gradle.api.internal.file.TaskFileVarFactory;
-import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
+import org.gradle.api.file.*;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
 import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
 import org.gradle.internal.UncheckedException;
-import org.gradle.internal.file.Deleter;
 import org.gradle.internal.io.StreamByteBuffer;
 import org.gradle.internal.operations.*;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.internal.os.OperatingSystem;
-import org.gradle.internal.vfs.FileSystemAccess;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.language.base.internal.compile.VersionAwareCompiler;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
-import org.gradle.language.nativeplatform.internal.incremental.CompilationStateCacheFactory;
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilerBuilder;
-import org.gradle.language.nativeplatform.internal.incremental.sourceparser.CSourceParser;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.gradle.nativeplatform.internal.BuildOperationLoggingCompilerDecorator;
 import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
+import org.gradle.nativeplatform.toolchain.Clang;
+import org.gradle.nativeplatform.toolchain.Gcc;
 import org.gradle.nativeplatform.toolchain.internal.*;
 import org.gradle.process.CommandLineArgumentProvider;
 import org.gradle.process.ExecOperations;
 import org.gradle.process.internal.ExecException;
-import org.gradle.util.GradleVersion;
+import org.gradle.work.Incremental;
 import org.gradle.work.InputChanges;
 import org.gradle.workers.WorkAction;
 import org.gradle.workers.WorkParameters;
@@ -55,8 +48,6 @@ import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -298,7 +289,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		if (getOptions().getIncrementalAfterFailure().getOrElse(false) && spec.isIncrementalCompile()) {
 			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler), getFileOperations());
 		}
-		Compiler<T> incrementalCompiler = incrementalCompilerOf(this).createCompiler(transactionalCompiler);
+		Compiler<T> incrementalCompiler = getIncrementalCompiler().createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
 		return loggingCompiler.execute(spec);
 	}
@@ -528,35 +519,24 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	}
 
 	//region Incremental rewrite for gradle/gradle#34152
-	@Inject protected abstract BuildOperationRunner getBuildOperationRunner();
-	@Inject protected abstract CompilationStateCacheFactory getCompilationStateCacheFactory();
-	@Inject protected abstract CSourceParser getSourceParser();
-	@Inject protected abstract Deleter getDeleter();
-	@Inject protected abstract DirectoryFileTreeFactory getDirectoryFileTreeFactory();
-	@Inject protected abstract FileSystemAccess getFileSystemAccess();
-	@Inject protected abstract TaskFileVarFactory getFileVarFactory();
+	private transient IncrementalCompilerBuilder.IncrementalCompiler incrementalCompiler;
+
+	@Internal
+	public abstract Property<IncrementalCompilerBuilder> getIncrementalCompilerBuilderService();
+
+	private IncrementalCompilerBuilder.IncrementalCompiler getIncrementalCompiler() {
+		if (incrementalCompiler == null) {
+			final IncrementalCompilerBuilder builder = getIncrementalCompilerBuilderService().getOrElse(getIncrementalCompilerBuilder());
+			incrementalCompiler = builder.newCompiler(this, getSource(), getIncludes().plus(getSystemIncludes()), getMacros(), getToolChain().map(nativeToolChain -> nativeToolChain instanceof Gcc || nativeToolChain instanceof Clang));
+		}
+		return incrementalCompiler;
+	}
 
 	@Override
-	protected IncrementalCompilerBuilder getIncrementalCompilerBuilder() {
-		return new DefaultIncrementalCompilerBuilder(getBuildOperationRunner(), getCompilationStateCacheFactory(), getSourceParser(), getDeleter(), getDirectoryFileTreeFactory(), getFileSystemAccess(), getFileVarFactory());
+	protected final FileCollection getHeaderDependencies() {
+		return getIncrementalCompiler().getHeaderFiles();
 	}
 	//endregion
-
-	// We have to reach to AbstractNativeSourceCompileTask#incrementalCompiler
-	private static IncrementalCompilerBuilder.IncrementalCompiler incrementalCompilerOf(AbstractNativeCompileTask self) {
-		// On Gradle 8.11+, the `incrementalCompiler` field is transient and computed as needed via `getIncrementalCompiler()`
-		if (GradleVersion.current().compareTo(GradleVersion.version("8.11")) >= 0) {
-			try {
-				Method AbstractNativeCompileTask__getIncrementalCompiler = AbstractNativeCompileTask.class.getDeclaredMethod("getIncrementalCompiler");
-				makeAccessible(AbstractNativeCompileTask__getIncrementalCompiler);
-				return (IncrementalCompilerBuilder.IncrementalCompiler) AbstractNativeCompileTask__getIncrementalCompiler.invoke(self);
-			} catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
-				throw new RuntimeException(e);
-			}
-		} else { // On Gradle <8.11, we use `incrementalCompiler` field
-			return readFieldValue(AbstractNativeCompileTask.class, "incrementalCompiler", self);
-		}
-	}
 
 	// For gradle/gradle#29492
 	ConfigurableFileCollection source;
