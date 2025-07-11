@@ -78,12 +78,37 @@ class IncrementalCompileFilesFactory {
 		}
 	}
 
+	// Duplicated headers under the same resolution path are EXACTLY the same
+	//   but duplicated headers under different resolution path _can_ resolve different headers (they see the resolution path differently)
+	private static final class Key {
+		private final File sideBySideIncludePath;
+		private final HashCode hash;
+
+		private Key(File sideBySideIncludePath, HashCode hash) {
+			assert sideBySideIncludePath.isDirectory();
+			this.sideBySideIncludePath = sideBySideIncludePath;
+			this.hash = hash;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (!(o instanceof Key)) return false;
+			Key key = (Key) o;
+			return Objects.equals(sideBySideIncludePath, key.sideBySideIncludePath) && Objects.equals(hash, key.hash);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(sideBySideIncludePath, hash);
+		}
+	}
+
 	private class DefaultIncrementalCompileSourceProcessor implements IncrementalCompileSourceProcessor {
 		private final CompilationState previous;
 		private final BuildableCompilationState current = new BuildableCompilationState();
 		private final List<File> toRecompile = new ArrayList<File>();
 		private final Set<File> existingHeaders = new HashSet<File>();
-		private final Map<HashCode, FileDetails> visitedFiles = new HashMap<HashCode, FileDetails>();
+		private final Map<Key, FileDetails> visitedFiles = new HashMap<Key, FileDetails>();
 		private boolean hasUnresolvedHeaders;
 
 		DefaultIncrementalCompileSourceProcessor(CompilationState previousCompileState) {
@@ -128,7 +153,7 @@ class IncrementalCompileFilesFactory {
 					// Calculate the include file graph for the source file and mark for recompilation
 
 					CollectingMacroLookup visibleMacros = new CollectingMacroLookup(initialIncludeDirectives);
-					FileVisitResult result = visitFile(sourceFile, fileContent, visibleMacros, new HashSet<HashCode>(), existingHeaders);
+					FileVisitResult result = visitFile(sourceFile, fileContent, visibleMacros, new HashSet<Key>(), existingHeaders);
 					Set<IncludeFileEdge> includedFiles = new LinkedHashSet<IncludeFileEdge>();
 					result.collectFilesInto(includedFiles, new HashSet<File>());
 					SourceFileState newState = newState(fileContent, result.result == IncludeFileResolutionResult.UnresolvedMacroIncludes, includedFiles);
@@ -178,15 +203,15 @@ class IncrementalCompileFilesFactory {
 			return true;
 		}
 
-		private FileVisitResult visitFile(File file, HashCode newHash, CollectingMacroLookup visibleMacros, Set<HashCode> visited, Set<File> existingHeaders) {
-			FileDetails fileDetails = visitedFiles.get(newHash);
+		private FileVisitResult visitFile(File file, HashCode newHash, CollectingMacroLookup visibleMacros, Set<Key> visited, Set<File> existingHeaders) {
+			FileDetails fileDetails = visitedFiles.get(new Key(file.getParentFile(), newHash));
 			if (fileDetails != null && fileDetails.results != null) {
 				// A file that we can safely reuse the result for
 				fileDetails.results.collectInto(visibleMacros);
 				return fileDetails.results;
 			}
 
-			if (!visited.add(newHash)) {
+			if (!visited.add(new Key(file.getParentFile(), newHash))) {
 				// A cycle, treat as resolved here
 				IncludeFileResolutionResult result = IncludeFileResolutionResult.NoMacroIncludes;
 				if (fileDetails != null && fileDetails.hasMacroIncludes) {
@@ -198,7 +223,7 @@ class IncrementalCompileFilesFactory {
 			if (fileDetails == null) {
 				IncludeDirectives includeDirectives = sourceIncludesParser.parseIncludes(file);
 				fileDetails = new FileDetails(includeDirectives);
-				visitedFiles.put(newHash, fileDetails);
+				visitedFiles.put(new Key(file.getParentFile(), newHash), fileDetails);
 			}
 
 			CollectingMacroLookup includedFileDirectives = new CollectingMacroLookup();
