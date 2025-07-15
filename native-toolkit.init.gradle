@@ -307,16 +307,20 @@ abstract class VerificationTask extends DefaultTask {
 		def allIncludePaths = new ArrayList<>(task.includes.plus(task.systemIncludes).files)
 		def source = new TreeSet<>(task.source.files)
 
+		def singleFile = singleFile.orNull
+
 		IncludeDirectives includeDirectives = this.directivesForMacros(macros);
 		def incrementalCompileSourceProcessor = new IncrementalCompileFilesFactory(includeDirectives, new DefaultSourceIncludesParser(getCSourceParser(), false), new DefaultSourceIncludesResolver(allIncludePaths, fileSystemAccess), fileSystemAccess)
 		for (def sourceFile in source) {
-			println("=> $sourceFile")
 			def result = incrementalCompileSourceProcessor.visitSourceFile(sourceFile)
-			Set<IncludeFileEdge> edges = new LinkedHashSet();
-			result.collectFilesInto(edges, new HashSet());
-			edges.each { edge ->
-				if (ignores.getOrElse('').contains('system-includes') && edge.includedBy == null) return
-				println(" -> ${edge.includePath} [${edge.includedBy} => ${edge.resolvedTo}]")
+			if (singleFile == null || sourceFile == singleFile) {
+				println("=> $sourceFile")
+				Set<IncludeFileEdge> edges = new LinkedHashSet();
+				result.collectFilesInto(edges, new HashSet());
+				edges.each { edge ->
+					if (ignores.getOrElse('').contains('system-includes') && edge.includedBy == null) return
+					println(" -> ${edge.includePath} [${edge.includedBy} => ${edge.resolvedTo}]")
+				}
 			}
 		}
 	}
