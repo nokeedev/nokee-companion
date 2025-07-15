@@ -53,8 +53,33 @@ public class IncrementalCompileFilesFactory {
 		this.ignoreUnresolvedHeadersInDependencies = Boolean.getBoolean(IGNORE_UNRESOLVED_HEADERS_IN_DEPENDENCIES_PROPERTY_NAME);
 	}
 
+	// Duplicated headers under the same resolution path are EXACTLY the same
+	//   but duplicated headers under different resolution path _can_ resolve different headers (they see the resolution path differently)
+	private static final class Key {
+		private final File sideBySideIncludePath;
+		private final HashCode hash;
+
+		private Key(File sideBySideIncludePath, HashCode hash) {
+			assert sideBySideIncludePath.isDirectory();
+			this.sideBySideIncludePath = sideBySideIncludePath;
+			this.hash = hash;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (!(o instanceof Key)) return false;
+			Key key = (Key) o;
+			return Objects.equals(sideBySideIncludePath, key.sideBySideIncludePath) && Objects.equals(hash, key.hash);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(sideBySideIncludePath, hash);
+		}
+	}
+
 		private final Set<File> existingHeaders = new HashSet();
-		private final Map<File, FileDetails> visitedFiles = new HashMap();
+		private final Map<Key, FileDetails> visitedFiles = new HashMap();
 		private boolean hasUnresolvedHeaders;
 
 		FileVisitResult visitSourceFile(File sourceFile) {
@@ -71,18 +96,22 @@ public class IncrementalCompileFilesFactory {
 			}).orElse(null);
 		}
 
-		private FileVisitResult visitFile(File file, HashCode newHash, CollectingMacroLookup visibleMacros, Set<HashCode> visited, Set<File> existingHeaders) {
-			FileDetails fileDetails = (FileDetails)this.visitedFiles.get(file);
+		private FileVisitResult visitFile(File file, HashCode newHash, CollectingMacroLookup visibleMacros, Set<Key> visited, Set<File> existingHeaders) {
+			FileDetails fileDetails = (FileDetails)this.visitedFiles.get(new Key(file.parentFile, newHash));
 			if (fileDetails != null && fileDetails.results != null) {
 				fileDetails.results.collectInto(visibleMacros)
 				return fileDetails.results;
-			} else if (!visited.add(newHash)) {
-				return new FileVisitResult(file);
+			} else if (!visited.add(new Key(file.parentFile, newHash))) {
+				IncludeFileResolutionResult result = IncludeFileResolutionResult.NoMacroIncludes;
+				if (fileDetails != null && fileDetails.hasMacroIncludes) {
+					result = IncludeFileResolutionResult.HasMacroIncludes;
+				}
+				return new FileVisitResult(file, result);
 			} else {
 				if (fileDetails == null) {
 					IncludeDirectives includeDirectives = sourceIncludesParser.parseIncludes(file);
 					fileDetails = new FileDetails(includeDirectives);
-					this.visitedFiles.put(file, fileDetails);
+					this.visitedFiles.put(new Key(file.parentFile, newHash), fileDetails);
 				}
 
 				CollectingMacroLookup includedFileDirectives = new CollectingMacroLookup();
@@ -95,6 +124,7 @@ public class IncrementalCompileFilesFactory {
 				for(Include include : allIncludes) {
 					if (include.getType() == IncludeType.MACRO && result == IncludeFileResolutionResult.NoMacroIncludes) {
 						result = IncludeFileResolutionResult.HasMacroIncludes;
+						fileDetails.hasMacroIncludes = true; // directly contain a macro include
 					}
 
 					SourceIncludesResolver.IncludeResolutionResult resolutionResult = sourceIncludesResolver.resolveInclude(file, include, visibleMacros);
@@ -121,6 +151,8 @@ public class IncrementalCompileFilesFactory {
 				FileVisitResult visitResult = new FileVisitResult(file, result, fileDetails.directives, included, edges, includedFileDirectives);
 				if (result == IncludeFileResolutionResult.NoMacroIncludes) {
 					fileDetails.results = visitResult;
+				} else {
+					fileDetails.hasMacroIncludes = true; // indirectly contain a macro include
 				}
 
 				return visitResult;
@@ -137,6 +169,7 @@ public class IncrementalCompileFilesFactory {
 		final IncludeDirectives directives;
 //		@Nullable
 		FileVisitResult results;
+		boolean hasMacroIncludes = false;
 
 		FileDetails(IncludeDirectives directives) {
 			this.directives = directives;
@@ -160,9 +193,9 @@ public class IncrementalCompileFilesFactory {
 			this.includeFileDirectives = dependentIncludeDirectives;
 		}
 
-		FileVisitResult(File file) {
+		FileVisitResult(File file, IncludeFileResolutionResult result) {
 			this.file = file;
-			this.result = IncludeFileResolutionResult.NoMacroIncludes;
+			this.result = result;
 			this.includeDirectives = null;
 			this.included = Collections.emptyList();
 			this.edges = Collections.emptyList();
