@@ -19,6 +19,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.companion.fixtures.GradleRunnerKitMatchers.performFullRebuildForIncrementalTask;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
@@ -39,7 +40,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		result = runner.withTasks(taskUnderTest.toString()).build();
 		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
 
-		// TODO: Assert incremental, not full rebuild
+		assertThat(result.task(taskUnderTest.toString()), not(performFullRebuildForIncrementalTask()));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("Found all include files for ':compile'"));
 	}
 
@@ -58,7 +59,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		result = runner.withTasks(taskUnderTest.toString()).build();
 		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
 
-		// TODO: Assert incremental, not full rebuild
+		assertThat(result.task(taskUnderTest.toString()), not(performFullRebuildForIncrementalTask()));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/a.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("/src/main/cpp/c.cpp")));
@@ -79,7 +80,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		result = runner.withTasks(taskUnderTest.toString()).build();
 		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
 
-		// TODO: Assert incremental, not full rebuild
+		assertThat(result.task(taskUnderTest.toString()), not(performFullRebuildForIncrementalTask()));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/a.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("/src/main/cpp/c.cpp")));
@@ -100,7 +101,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		result = runner.withTasks(taskUnderTest.toString()).build();
 		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
 
-		// TODO: Assert incremental, not full rebuild
+		assertThat(result.task(taskUnderTest.toString()), not(performFullRebuildForIncrementalTask()));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/a.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("/src/main/cpp/c.cpp")));
