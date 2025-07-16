@@ -42,6 +42,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
+	private static final Object CURRENT_STATE_VERSION = "v1";
 	private final BuildOperationRunner buildOperationRunner;
 	private final CompilationStateCacheFactory compilationStateCacheFactory;
 	private final CSourceParser sourceParser;
@@ -84,6 +85,10 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 			fileSystemAccess,
 			fileVarFactory
 		);
+	}
+
+	Object currentStateVersion() {
+		return CURRENT_STATE_VERSION;
 	}
 
 	private static class StateCollectingIncrementalCompiler implements IncrementalCompiler, MinimalFileSet, LifecycleAwareValue {

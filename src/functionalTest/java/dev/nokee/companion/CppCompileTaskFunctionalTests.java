@@ -240,7 +240,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		""".stripIndent());
 
 		result.getBuildFile().append(groovyDsl("""
-			compileTask.options.preprocessorOptions.define('INCLUDE_MACRO', '"my-include-macro.h"')
+			compileTask.options.preprocessorOptions.define('INCLUDE_MACRO', providers.gradleProperty('include-file').orElse('my-include-macro.h').map { '"' + it + '"' })
 		""".stripIndent()));
 		return result;
 	}

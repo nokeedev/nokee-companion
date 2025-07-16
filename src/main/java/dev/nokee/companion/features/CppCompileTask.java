@@ -545,6 +545,17 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	protected final FileCollection getHeaderDependencies() {
 		return getIncrementalCompiler().getHeaderFiles();
 	}
+
+	@Input // required because state version is typically assumed by the running Gradle version (not true for Nokee)
+	protected Provider<Object> getCompileStateVersion() {
+		return getIncrementalCompilerBuilderService().orElse(getIncrementalCompilerBuilder()).map(it -> {
+			if (it instanceof DefaultIncrementalCompilerBuilder) {
+				return ((DefaultIncrementalCompilerBuilder) it).currentStateVersion();
+			} else {
+				return it.getClass().getCanonicalName();
+			}
+		});
+	}
 	//endregion
 
 	// For gradle/gradle#29492
