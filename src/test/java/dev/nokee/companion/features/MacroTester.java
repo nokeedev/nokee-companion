@@ -3,6 +3,7 @@ package dev.nokee.companion.features;
 import dev.nokee.commons.fixtures.Subject;
 import dev.nokee.commons.fixtures.SubjectExtension;
 import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
+import org.gradle.api.provider.Provider;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static dev.nokee.companion.features.ShadowPropertyIntegrationTests.providerFactory;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
@@ -25,6 +27,7 @@ public abstract class MacroTester {
 
 		Macros define(String name);
 		Macros define(String name, String definition);
+		Macros define(String name, Provider<String> definition);
 
 		void remove(String name);
 
@@ -67,6 +70,11 @@ public abstract class MacroTester {
 			}
 
 			@Override
+			public Macros define(String name, Provider<String> definition) {
+				return Assumptions.abort("feature not available");
+			}
+
+			@Override
 			public void remove(String name) {
 				task.getMacros().remove(name);
 			}
@@ -98,6 +106,12 @@ public abstract class MacroTester {
 
 			@Override
 			public Macros define(String name, String definition) {
+				options.define(name, definition);
+				return this;
+			}
+
+			@Override
+			public Macros define(String name, Provider<String> definition) {
 				options.define(name, definition);
 				return this;
 			}
@@ -171,5 +185,15 @@ public abstract class MacroTester {
 
 		subject.clear();
 		assertThat(subject.definedMacros(), empty());
+	}
+
+	@Test
+	void canDefineMacroWithProvidedDefinition(@Subject Macros subject) {
+		assertThat(subject.definedMacros(), everyItem(not(equalTo("MACRO1"))));
+
+		subject.define("MACRO1", providerFactory().provider(() -> "val1"));
+
+		assertThat(subject.definedMacros(), hasItem("MACRO1"));
+		assertThat(subject.get("MACRO1"), equalTo("val1"));
 	}
 }

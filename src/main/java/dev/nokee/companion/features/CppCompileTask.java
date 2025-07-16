@@ -36,7 +36,6 @@ import org.gradle.nativeplatform.toolchain.internal.*;
 import org.gradle.process.CommandLineArgumentProvider;
 import org.gradle.process.ExecOperations;
 import org.gradle.process.internal.ExecException;
-import org.gradle.work.Incremental;
 import org.gradle.work.InputChanges;
 import org.gradle.workers.WorkAction;
 import org.gradle.workers.WorkParameters;
@@ -183,7 +182,17 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 				@Override
 				public @Nullable String getDefinition() {
-					return definition == null ? null : definition.toString();
+					return unpack(definition);
+				}
+
+				private @Nullable String unpack(@Nullable Object object) {
+					if (object == null) {
+						return null;
+					} else if (object instanceof Provider) {
+						return unpack(((Provider<?>) object).getOrNull());
+					} else {
+						return object.toString();
+					}
 				}
 			}
 		}
