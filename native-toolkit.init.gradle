@@ -402,7 +402,7 @@ abstract class VerificationTask extends DefaultTask {
 		def taskPath = compileTask.map { it.path }.orNull
 		if (taskPath == null) return
 
-		def state = compilationStateCacheFactory.create(taskPath).get()
+		def state = compilationStateCacheFactory.create(':v1' + taskPath).get()
 		def singleFile = singleFile.orNull
 		state.sourceInputs.each { sourceInput ->
 			if (singleFile == null || sourceInput == singleFile) {
