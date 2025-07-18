@@ -166,7 +166,7 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 		@Override
 		public Set<File> getFiles() {
 			List<File> includeRoots = new ArrayList<>(includeDirs.getFiles());
-			compileStateCache = CompilationStateCacheFactory__create(compilationStateCacheFactory, taskPath);
+			compileStateCache = CompilationStateCacheFactory__create(compilationStateCacheFactory, ":v1" + taskPath);
 			DefaultSourceIncludesParser sourceIncludesParser = new DefaultSourceIncludesParser(sourceParser, importAware.get());
 			DefaultSourceIncludesResolver dependencyParser = new DefaultSourceIncludesResolver(includeRoots, fileSystemAccess);
 			IncludeDirectives includeDirectives = directivesForMacros(macros);

@@ -15,7 +15,6 @@
  */
 package dev.nokee.companion.features;
 
-import org.gradle.cache.ObjectHolder;
 import org.gradle.internal.operations.BuildOperationContext;
 import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationRunner;

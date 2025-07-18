@@ -121,7 +121,6 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
 
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.fix-for-gradle-34152.enabled=true");
-		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
 		result = runner.withTasks(taskUnderTest.toString()).build();
 		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
@@ -130,6 +129,16 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/a.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/c.cpp"));
+
+		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
+
+		assertThat(result.task(taskUnderTest.toString()), not(performFullRebuildForIncrementalTask()));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/a.cpp"));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/b.cpp"));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("/src/main/cpp/c.cpp")));
 	}
 
 	@Test
