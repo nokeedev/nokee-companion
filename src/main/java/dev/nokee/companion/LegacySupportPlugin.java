@@ -9,6 +9,8 @@ import org.gradle.api.plugins.PluginAware;
 import org.gradle.api.provider.ProviderFactory;
 
 import javax.inject.Inject;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /*public*/ abstract /*final*/ class LegacySupportPlugin<TargetType extends PluginAware & ExtensionAware> implements Plugin<TargetType> {
 	@Inject
@@ -60,6 +62,8 @@ import javax.inject.Inject;
 		//   dup link task
 		//   dup configuration
 		//   etc.
+
+		FeatureFlagsProblemReporter.forProject(project).report(feature.allKnownFeatureNames());
 	}
 
 	/*private*/ static abstract /*final*/ class Extension implements NativeCompanionExtension {
@@ -77,6 +81,7 @@ import javax.inject.Inject;
 	}
 
 	/*private*/ static abstract /*final*/ class FeaturePreviews {
+		private final Set<String> knownFeatureNames = new LinkedHashSet<>();
 		private final NativeCompanionExtension extension;
 		private final ProviderFactory providers;
 
@@ -87,12 +92,17 @@ import javax.inject.Inject;
 		}
 
 		public void apply(String featureName) {
+			knownFeatureNames.add(featureName);
 			boolean enabled = providers.gradleProperty("dev.nokee.native-companion." + featureName + ".enabled")
 				.orElse(providers.gradleProperty("dev.nokee.native-companion.all-features.enabled"))
 				.map(Boolean::valueOf).getOrElse(false);
 			if (enabled) {
 				extension.enableFeaturePreview(featureName);
 			}
+		}
+
+		public Set<String> allKnownFeatureNames() {
+			return knownFeatureNames;
 		}
 	}
 }
