@@ -11,7 +11,10 @@ import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.file.*;
+import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
 import org.gradle.api.reflect.TypeOf;
@@ -55,6 +58,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import static dev.nokee.commons.gradle.TransformerUtils.filter;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
@@ -205,31 +209,33 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	@Override
 	protected void compile(InputChanges inputs) {
 		BuildOperationLogger operationLogger = this.getOperationLoggerFactory().newOperationLogger(this.getName(), this.getTemporaryDir());
-		NativeCompileSpec spec = createCompileSpec();
-		spec.setTargetPlatform(getTargetPlatform().get());
-		spec.setTempDir(getTemporaryDir());
-		spec.setObjectFileDir(getObjectFileDir().get().getAsFile());
-		spec.include(getIncludes());
-		spec.systemInclude(getSystemIncludes());
-		spec.source(getSource());
-		spec.setMacros(getMacros());
-		spec.args(getCompilerArgs().get());
-		for (CommandLineArgumentProvider argProvider : getOptions().getCompilerArgumentProviders().get()) {
-			argProvider.asArguments().forEach(spec.getArgs()::add);
-		}
-		spec.setPositionIndependentCode(isPositionIndependentCode());
-		spec.setDebuggable(isDebuggable());
-		spec.setOptimized(isOptimized());
-		spec.setIncrementalCompile(inputs.isIncremental());
-		spec.setOperationLogger(new IsolatableBuildOperationLogger(operationLogger));
+		IsolatableBuildOperationLogger.newLogger(operationLogger, logger -> {
+			NativeCompileSpec spec = createCompileSpec();
+			spec.setTargetPlatform(getTargetPlatform().get());
+			spec.setTempDir(getTemporaryDir());
+			spec.setObjectFileDir(getObjectFileDir().get().getAsFile());
+			spec.include(getIncludes());
+			spec.systemInclude(getSystemIncludes());
+			spec.source(getSource());
+			spec.setMacros(getMacros());
+			spec.args(getCompilerArgs().get());
+			for (CommandLineArgumentProvider argProvider : getOptions().getCompilerArgumentProviders().get()) {
+				argProvider.asArguments().forEach(spec.getArgs()::add);
+			}
+			spec.setPositionIndependentCode(isPositionIndependentCode());
+			spec.setDebuggable(isDebuggable());
+			spec.setOptimized(isOptimized());
+			spec.setIncrementalCompile(inputs.isIncremental());
+			spec.setOperationLogger(logger);
 
-		this.configureSpec(spec);
+			this.configureSpec(spec);
 
-		NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) getToolChain().get();
-		NativePlatformInternal nativePlatform = (NativePlatformInternal) getTargetPlatform().get();
-		PlatformToolProvider platformToolProvider = nativeToolChain.select(nativePlatform);
+			NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) getToolChain().get();
+			NativePlatformInternal nativePlatform = (NativePlatformInternal) getTargetPlatform().get();
+			PlatformToolProvider platformToolProvider = nativeToolChain.select(nativePlatform);
 
-		setDidWork(doCompile(spec, platformToolProvider).getDidWork());
+			setDidWork(doCompile(spec, platformToolProvider).getDidWork());
+		});
 	}
 
 	// Copied from AbstractNativeSourceCompileTask#doCompile with support for per-source options
@@ -395,10 +401,19 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	private static final class IsolatableBuildOperationLogger implements BuildOperationLogger, BuildOperationLoggerRef {
 		private static final Map<String, BuildOperationLogger> LOGGERS = new ConcurrentHashMap<>();
 		private final BuildOperationLogger delegate;
-		private final UseCount count = new UseCount();
 
 		private IsolatableBuildOperationLogger(BuildOperationLogger delegate) {
 			this.delegate = delegate;
+		}
+
+		public static void newLogger(BuildOperationLogger delegate, Consumer<? super BuildOperationLogger> action) {
+			BuildOperationLogger newLogger = new IsolatableBuildOperationLogger(delegate);
+			LOGGERS.put(idOf(newLogger), newLogger);
+			try {
+				action.accept(newLogger);
+			} finally {
+				LOGGERS.remove(idOf(newLogger));
+			}
 		}
 
 		public static BuildOperationLogger loggerOf(String id) {
@@ -406,18 +421,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		}
 
 		public static String idOf(BuildOperationLogger logger) {
-			return logger.toString();
-		}
-
-		public static void incrementUsage(BuildOperationLogger logger) {
-			((BuildOperationLoggerRef) logger).useCount().increment();
-			LOGGERS.put(idOf(logger), logger);
-		}
-
-		public static void decrementUsage(BuildOperationLogger logger) {
-			if (((BuildOperationLoggerRef) logger).useCount().decrement() == 0) {
-				LOGGERS.remove(idOf(logger));
-			}
+			return ((BuildOperationLoggerRef) logger).id();
 		}
 
 		@Override
@@ -446,8 +450,8 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		}
 
 		@Override
-		public UseCount useCount() {
-			return count;
+		public String id() {
+			return toString();
 		}
 	}
 
@@ -464,7 +468,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			protected abstract Property<String> getLoggerId();
 
 			public void setLogger(BuildOperationLogger logger) {
-				IsolatableBuildOperationLogger.incrementUsage(logger);
+				IsolatableBuildOperationLogger.LOGGERS.put(IsolatableBuildOperationLogger.idOf(logger), logger);
 				getLoggerId().set(IsolatableBuildOperationLogger.idOf(logger));
 			}
 
@@ -517,8 +521,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			} catch (ExecException e) {
 				getParameters().getLogger().operationFailed(getParameters().getDescription().get(), this.combineOutput(stdOutput, errOutput));
 				throw new RuntimeException(String.format("%s failed while %s.", getParameters().getName().get(), getParameters().getDescription().get()));
-			} finally {
-				IsolatableBuildOperationLogger.decrementUsage(getParameters().getLogger());
 			}
 		}
 

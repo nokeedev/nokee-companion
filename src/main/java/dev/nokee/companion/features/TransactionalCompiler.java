@@ -101,8 +101,8 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 		}
 
 		@Override
-		public UseCount useCount() {
-			return ((BuildOperationLoggerRef) delegate).useCount();
+		public String id() {
+			return ((BuildOperationLoggerRef) delegate).id();
 		}
 	}
 
