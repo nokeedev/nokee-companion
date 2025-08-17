@@ -296,7 +296,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		Compiler<T> transactionalCompiler = perSourceCompiler;
 		if (getOptions().getIncrementalAfterFailure().getOrElse(false) && spec.isIncrementalCompile()) {
-			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler), getFileOperations());
+			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler), getObjects());
 		}
 		Compiler<T> incrementalCompiler = getIncrementalCompiler().createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
@@ -304,7 +304,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	}
 
 	@Inject
-	protected abstract FileSystemOperations getFileOperations();
+	protected abstract ObjectFactory getObjects();
 
 	/*private*/ static abstract /*final*/ class WorkerBackedBuildOperationExecutor implements BuildOperationExecutor {
 		private final WorkQueue queue;
