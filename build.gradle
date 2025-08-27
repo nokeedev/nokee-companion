@@ -75,6 +75,7 @@ testing {
 			dependencies {
 				implementation gradleTestKit()
 				implementation 'commons-io:commons-io:latest.release'
+				implementation libs.apache.commons.lang3
 				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
 				implementation 'dev.gradleplugins:elements:latest.release'
 				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'

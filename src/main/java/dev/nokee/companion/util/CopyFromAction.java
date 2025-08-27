@@ -5,6 +5,8 @@ import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Action;
 import org.gradle.api.Task;
+import org.gradle.api.Transformer;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
@@ -15,6 +17,7 @@ import org.gradle.nativeplatform.toolchain.VisualCpp;
 import org.gradle.process.CommandLineArgumentProvider;
 
 import javax.annotation.Nullable;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -48,14 +51,18 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 	}
 
 	private void doExecute(AbstractLinkTask task, Provider<? extends AbstractLinkTask> other) {
-		task.getDebuggable().set((Boolean) null);
+		task.getDebuggable().set((Boolean) null); // reset default value
 
 		task.getDebuggable().convention(other.flatMap(AbstractLinkTask::getDebuggable));
 		task.getToolChain().convention(other.flatMap(AbstractLinkTask::getToolChain));
 		task.getTargetPlatform().convention(other.flatMap(AbstractLinkTask::getTargetPlatform));
 		task.getLibs().from(other.flatMap(elementsOf(AbstractLinkTask::getLibs)));
-		task.getLinkerArgs().addAll(other.flatMap(AbstractLinkTask::getLinkerArgs));
+
+		// WARNING: User must configure overlinking avoidance on the copied task using {@code newLinkTask.configure(avoidOverlinking(nativeLink, nativeRuntime))}.
+		task.getLinkerArgs().addAll(other.flatMap(withoutOverlinkingAvoidanceArgs(AbstractLinkTask::getLinkerArgs)));
+
 		task.getSource().from(other.flatMap(elementsOf(AbstractLinkTask::getSource)));
+
 		// WARNING: User must set AbstractLinkTask#getLinkedFile()
 		//   Internally, the task infers AbstractLinkTask#getDestinationDirectory()
 
@@ -63,6 +70,22 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 			((LinkSharedLibrary) task).getInstallName().convention(other.flatMap(this::toInstallName));
 			// WARNING: User must set LinkSharedLibrary#getImportLibrary()
 		}
+	}
+
+	private static Transformer<Provider<List<String>>, AbstractLinkTask> withoutOverlinkingAvoidanceArgs(Transformer<Provider<List<String>>, AbstractLinkTask> mapper) {
+		return task -> {
+			ListProperty<String> prop = task.getProject().getObjects().listProperty(String.class);
+			prop.addAll(task.getProject().provider(() -> {
+				task.getExtensions().getExtraProperties().set("overlinkingLinkerArgsEnabled", false);
+				return Collections.emptyList();
+			}));
+			prop.addAll(task.getLinkerArgs());
+			prop.addAll(task.getProject().provider(() -> {
+				task.getExtensions().getExtraProperties().set("overlinkingLinkerArgsEnabled", true);
+				return Collections.emptyList();
+			}));
+			return prop;
+		};
 	}
 
 	private @Nullable Provider<String> toInstallName(AbstractLinkTask task) {
