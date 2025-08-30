@@ -19,6 +19,7 @@ import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static dev.nokee.elements.core.ProjectElement.ofMain;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 
 class OverlinkingAvoidanceFunctionalTests {
 	@TempDir Path testDirectory;
@@ -103,14 +104,31 @@ class OverlinkingAvoidanceFunctionalTests {
 							implementation 'com.example.vendors:list:+'
 						}
 					}
+					configurations.dependencyScope("runtimeOnly")
+					components.withType(CppBinary) {
+						configurations.getByName("nativeRuntime${(name - "main")}").extendsFrom(configurations.runtimeOnly)
+						configurations.getByName("${(name - "main").uncapitalize()}RuntimeElements").extendsFrom(configurations.runtimeOnly)
+					}
+					dependencies {
+						runtimeOnly project(':common')
+					}
 				""".formatted(project.getLocation().relativize(testDirectory.resolve("repo")))));
-			});
+			})
+			.subproject("common", project -> {
+				// TODO: Maybe use logger instead of duplicated list
+				new GradleLayoutElement().applyTo(ofMain(app.getList())).writeToDirectory(project.getLocation());
+				project.buildFile.plugins(it -> {
+					it.id("cpp-library");
+					it.id("dev.nokee.native-companion");
+				});
+			})
+		;
 
 		runner = GradleRunner.create(gradleTestKit()).withPluginClasspath().inDirectory(main.getLocation()).forwardOutput();
 	}
 
 	@Test
-	void test() {
+	void canExecuteCopiedLinkTaskBeforeOriginalLinkTask() {
 		main.subproject("lib", project -> {
 			project.buildFile.append(Syntax.staticImportClass("dev.nokee.companion.util.CopyFromAction"));
 			project.buildFile.append(groovyDsl("""
@@ -130,9 +148,34 @@ class OverlinkingAvoidanceFunctionalTests {
 		assertThat(result, hasFailureCause(overlinkingFailure()));
 	}
 
+	@Test
+	void doesNotCarryTaskDependencyFromOriginalLinkTaskOverlinkingAvoidanceLinkerArgs() {
+		main.subproject("lib", project -> {
+			project.buildFile.append(Syntax.staticImportClass("dev.nokee.companion.util.CopyFromAction"));
+			project.buildFile.append(groovyDsl("""
+					components.withType(CppBinary).matching { !it.optimized }.all { binary ->
+						def linkTask = tasks.register('linkDebugOpt', LinkSharedLibrary);
+						linkTask.configure(copyFrom(binary.linkTask))
+						linkTask.configure { task ->
+							task.libs.setFrom(configurations.nativeLinkRelease)
+							task.linkedFile.fileProvider(binary.linkTask.flatMap { it.linkedFile.locationOnly }.map { new File(it.asFile.absolutePath.replace('debug', 'debugOpt')) })
+						}
+						binary.linkTask.get().mustRunAfter(linkTask) // force the copied task to run BEFORE to assert copied args doesn't contain any linkerArgs
+
+						tasks.register('verify') {
+							dependsOn { linkTask.get().linkerArgs }
+						}
+					}
+				"""));
+		});
+		BuildResult result = runner.withArgument("-Pdev.nokee.native-companion.overlinking-avoidance.enabled=true").withArgument("-i").withArgument(":lib:verify").build();
+		assertThat(result.task(":common:compileDebugCpp"), nullValue());
+		assertThat(result.task(":common:linkDebug"), nullValue());
+	}
+
 	static String overlinkingFailure() {
 		if (SystemUtils.IS_OS_LINUX) {
-			return "Error while evaluating property 'linkerArgs' of task ':lib:linkDebug'";
+			return "Error while evaluating property 'linkerArgs' of task ':lib:linkDebug'.";
 		}
 		return "Could not resolve all files for configuration ':lib:nativeLinkDebug'.";
 	}

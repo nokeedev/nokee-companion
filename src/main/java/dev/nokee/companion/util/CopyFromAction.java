@@ -77,13 +77,13 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 			ListProperty<String> prop = task.getProject().getObjects().listProperty(String.class);
 			prop.addAll(task.getProject().provider(() -> {
 				task.getExtensions().getExtraProperties().set("overlinkingLinkerArgsEnabled", false);
-				return Collections.emptyList();
-			}));
+				return Collections.<String>emptyList();
+			}).flatMap(it -> task.getProject().provider(() -> it)));
 			prop.addAll(task.getLinkerArgs());
 			prop.addAll(task.getProject().provider(() -> {
 				task.getExtensions().getExtraProperties().set("overlinkingLinkerArgsEnabled", true);
-				return Collections.emptyList();
-			}));
+				return Collections.<String>emptyList();
+			}).flatMap(it -> task.getProject().provider(() -> it)));
 			return prop;
 		};
 	}
