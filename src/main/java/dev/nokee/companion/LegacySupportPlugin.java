@@ -42,6 +42,8 @@ import java.util.Set;
 		plugins.apply(CppUnitTestExtensions.Rule.class);
 		plugins.apply(CppBinaryTaskExtensions.Rule.class);
 		plugins.apply(CppBinaryConfigurationExtensions.Rule.class);
+		plugins.apply(CompileOnlyConfigurationRule.class);
+		plugins.apply(CompileOnlyApiConfigurationRule.class);
 		feature.apply("binary-task-extensions");
 		feature.apply("objects-lifecycle-tasks");
 

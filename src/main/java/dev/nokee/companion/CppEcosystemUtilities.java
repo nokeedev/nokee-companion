@@ -1,5 +1,6 @@
 package dev.nokee.companion;
 
+import dev.nokee.commons.names.CppNames;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.NamedDomainObjectProvider;
 import org.gradle.api.NonExtensible;
@@ -11,6 +12,7 @@ import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.CppComponent;
+import org.gradle.language.cpp.CppLibrary;
 import org.gradle.language.nativeplatform.*;
 import org.gradle.nativeplatform.tasks.CreateStaticLibrary;
 import org.gradle.nativeplatform.tasks.InstallExecutable;
@@ -112,6 +114,22 @@ public abstract class CppEcosystemUtilities {
 	public NamedDomainObjectProvider<Configuration> runtimeElementsOf(ComponentWithRuntimeUsage binary) {
 		assert binary instanceof CppBinary;
 		return configurations.named(runtimeElementsConfigurationName((CppBinary) binary));
+	}
+
+	/**
+	 * {@return a configurable provider to the compile only dependency bucket of the specified component}
+	 * @param component  the target component
+	 */
+	public NamedDomainObjectProvider<Configuration> compileOnlyOf(CppComponent component) {
+		return configurations.named(CppNames.of(component).configurationName("compileOnly").toString());
+	}
+
+	/**
+	 * {@return a configurable provider to the compile only API dependency bucket of the specified library}
+	 * @param library  the target component
+	 */
+	public NamedDomainObjectProvider<Configuration> compileOnlyApiOf(CppLibrary library) {
+		return configurations.named(CppNames.of(library).configurationName("compileOnlyApi").toString());
 	}
 
 	/**
