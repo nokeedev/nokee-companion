@@ -3,6 +3,7 @@ package dev.nokee.companion.util;
 import org.gradle.api.Action;
 import org.gradle.api.Transformer;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.provider.Provider;
@@ -16,13 +17,13 @@ import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 public class AvoidOverlinkingAction implements Action<AbstractLinkTask> {
-	private final Provider<Configuration> nativeLink;
-	private final Provider<Configuration> nativeRuntime;
+	private final FileCollection linkLibraries;
+	private final FileCollection runtimeLibraries;
 	private final ProjectLayout layout;
 
-	private AvoidOverlinkingAction(Provider<Configuration> nativeLink, Provider<Configuration> nativeRuntime, ProjectLayout layout) {
-		this.nativeLink = nativeLink;
-		this.nativeRuntime = nativeRuntime;
+	private AvoidOverlinkingAction(FileCollection linkLibraries, FileCollection runtimeLibraries, ProjectLayout layout) {
+		this.linkLibraries = linkLibraries;
+		this.runtimeLibraries = runtimeLibraries;
 		this.layout = layout;
 	}
 
@@ -57,9 +58,7 @@ public class AvoidOverlinkingAction implements Action<AbstractLinkTask> {
 	}
 
 	private Provider<Set<FileSystemLocation>> secondLevelDependencies() {
-		return nativeLink.zip(nativeRuntime, (linkLibraries, runtimeLibraries) -> {
-			return runtimeLibraries.minus(linkLibraries).getElements();
-		}).flatMap(it -> it);
+		return runtimeLibraries.minus(linkLibraries).getElements();
 	}
 
 	private Provider<Object> rPathLinkSupported(AbstractLinkTask task) {
@@ -79,7 +78,13 @@ public class AvoidOverlinkingAction implements Action<AbstractLinkTask> {
 
 	public static Action<AbstractLinkTask> avoidOverlinking(Provider<Configuration> nativeLink, Provider<Configuration> nativeRuntime) {
 		return task -> {
-			new AvoidOverlinkingAction(nativeLink, nativeRuntime, task.getProject().getLayout()).execute(task);
+			avoidOverlinking(task.getProject().files((Callable<?>) nativeLink::get), task.getProject().files((Callable<?>) nativeRuntime::get)).execute(task);
+		};
+	}
+
+	public static Action<AbstractLinkTask> avoidOverlinking(FileCollection linkLibraries, FileCollection runtimeLibraries) {
+		return task -> {
+			new AvoidOverlinkingAction(linkLibraries, runtimeLibraries, task.getProject().getLayout()).execute(task);
 		};
 	}
 }
