@@ -56,7 +56,7 @@ class CompileOnlyApiConfigurationIntegrationTests {
 
 		@Test
 		void hasCompileOnlyApiBucketForCppLibraryUsingUtilities() {
-			assertThat(forProject(project).compileOnlyOf(subject), providerOf(named("compileOnlyApi")));
+			assertThat(forProject(project).compileOnlyApiOf(subject), providerOf(named("compileOnlyApi")));
 		}
 	}
 
