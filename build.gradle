@@ -53,8 +53,6 @@ gradlePlugin {
 		implementation libs.nokee.commons.backports
 		implementation libs.nokee.commons.gradle
 
-		implementation libs.apache.commons.io
-
 		implementation libs.nokee.plugins.multiplatform.publishing
 	}
 }
@@ -63,6 +61,7 @@ testing {
 	suites {
 		test {
 			dependencies {
+				implementation libs.apache.commons.io
 				implementation 'dev.gradleplugins:gradle-api:latest.release'
 				implementation libs.hamcrest.core
 				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'

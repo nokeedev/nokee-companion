@@ -1,6 +1,9 @@
 package dev.nokee.companion.features;
 
+import org.gradle.api.Action;
 import org.gradle.api.file.FileSystemOperations;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.WorkResults;
@@ -19,23 +22,35 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 final class TransactionalCompiler<T extends NativeCompileSpec> implements Compiler<T> {
+	private static final Logger LOGGER = Logging.getLogger(TransactionalCompiler.class);
 	private final Compiler<T> delegateCompiler;
 	private final OutputFileDirResolver outputFileDirResolver;
-	private final Deleter deleter;
+	private final FileSystemOperations fileOperations;
 
-	public TransactionalCompiler(Compiler<T> delegateCompiler, OutputFileDirResolver outputFileDirResolver, ObjectFactory objects) {
+	public TransactionalCompiler(Compiler<T> delegateCompiler, OutputFileDirResolver outputFileDirResolver, ObjectFactory objects, FileSystemOperations fileOperations) {
 		this.delegateCompiler = delegateCompiler;
 		this.outputFileDirResolver = outputFileDirResolver;
-		this.deleter = objects.newInstance(FileSystemOperationsBackedDeleter.class);
+		this.fileOperations = fileOperations;
 	}
 
 	@Override
 	public WorkResult execute(T spec) {
 		File temporaryDirectory = new File(spec.getTempDir(), "compile-transaction");
+
+		// Ensure the compile-transaction is clean
+		try {
+			fileOperations.delete(it -> it.delete(temporaryDirectory));
+		} catch (Throwable ex) {
+			// ignores, the sync later will "clean" individual transaction
+			LOGGER.warn("Could not clean compile transaction.", ex);
+		}
+
 		File stashDirectory = new File(temporaryDirectory, "stash");
 		File backupDirectory = new File(temporaryDirectory, "backup");
 
@@ -85,12 +100,12 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 			if (failed) {
 				stashedFiles.forEach(StashedFile::unstash);
 				backupFiles.forEach(StashedFile::unstash);
-			} else {
-				try {
-					deleter.deleteRecursively(temporaryDirectory);
-				} catch (IOException e) {
-					throw new UncheckedIOException(e);
-				}
+			}
+			try {
+				fileOperations.delete(spec -> spec.delete(temporaryDirectory));
+			} catch (Throwable ex) {
+				// leave it, and try cleaning it next time
+				LOGGER.warn("Could not clean compile transaction.", ex);
 			}
 			delegate.done();
 		}
@@ -112,33 +127,23 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 			File stashedFile = outputFileDirResolver.outputFileDir(file, stashDirectory).getParentFile();
 
 			if (origFile.exists()) {
-				try {
-					Files.createDirectories(stashedFile.toPath().getParent());
-					Files.move(origFile.toPath(), stashedFile.toPath(), StandardCopyOption.ATOMIC_MOVE);
-				} catch (IOException e) {
-					throw new UncheckedIOException(e);
-				}
+				preserveFileDate(it -> {
+					fileOperations.sync(spec -> spec.from(origFile).into(stashedFile).eachFile(details -> it.put(details.getFile(), new File(stashedFile, details.getPath()))));
+				});
 
 				return new StashedFile() {
 					@Override
 					public void unstash() {
-						try {
-							deleter.deleteRecursively(origFile);
-							Files.move(stashedFile.toPath(), origFile.toPath(), StandardCopyOption.ATOMIC_MOVE);
-						} catch (IOException e) {
-							throw new UncheckedIOException(e);
-						}
+						preserveFileDate(it -> {
+							fileOperations.sync(spec -> spec.from(stashedFile).into(origFile).eachFile(details -> it.put(details.getFile(), new File(origFile, details.getPath()))));
+						});
 					}
 				};
 			} else {
 				return new StashedFile() {
 					@Override
 					public void unstash() {
-						try {
-							deleter.deleteRecursively(origFile);
-						} catch (IOException e) {
-							throw new UncheckedIOException(e);
-						}
+						fileOperations.delete(spec -> spec.delete(origFile));
 					}
 				};
 			}
@@ -149,6 +154,15 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 		public abstract void unstash();
 	}
 
+	private void preserveFileDate(Action<? super Map<File, File>> action) {
+		Map<File, File> srcDsts = new HashMap<>();
+		action.execute(srcDsts);
+		srcDsts.forEach((src, dst) -> {
+			if (!dst.setLastModified(src.lastModified())) {
+				LOGGER.debug("Could not preserve file date for '" + dst + "'.");
+			}
+		});
+	}
 
 	public static OutputFileDirResolver outputFileDir(Compiler<?> nativeCompiler) {
 		try {
@@ -174,37 +188,5 @@ final class TransactionalCompiler<T extends NativeCompileSpec> implements Compil
 
 	interface OutputFileDirResolver {
 		File outputFileDir(File sourceFile, File objectFileDir);
-	}
-
-	private interface Deleter {
-		boolean deleteRecursively(File target) throws IOException;
-	}
-
-	/*private*/ static class FileSystemOperationsBackedDeleter implements Deleter {
-		private final FileSystemOperations fileOperations;
-
-		@Inject
-		public FileSystemOperationsBackedDeleter(FileSystemOperations fileOperations) {
-			this.fileOperations = fileOperations;
-		}
-
-		@Override
-		public boolean deleteRecursively(File target) throws IOException {
-			WorkResult result = WorkResults.didWork(false);
-			for (int failedAttempts = 1; failedAttempts < 10; ++failedAttempts) {
-				try {
-					result = result.or(fileOperations.delete(spec -> spec.delete(target)));
-				} catch (org.gradle.api.UncheckedIOException ignored1) {
-					System.gc(); // this may help
-
-					try {
-						Thread.sleep(10L);
-					} catch (InterruptedException ignored2) {
-						Thread.currentThread().interrupt();
-					}
-				}
-			}
-			return result.getDidWork();
-		}
 	}
 }

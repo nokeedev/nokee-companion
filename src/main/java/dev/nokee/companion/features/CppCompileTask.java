@@ -11,10 +11,7 @@ import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.file.ConfigurableFileCollection;
-import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.file.FileCollection;
-import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.file.*;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
 import org.gradle.api.reflect.TypeOf;
@@ -302,7 +299,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		Compiler<T> transactionalCompiler = perSourceCompiler;
 		if (getOptions().getIncrementalAfterFailure().getOrElse(false) && spec.isIncrementalCompile()) {
-			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler), getObjects());
+			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler), getObjects(), getFileOperations());
 		}
 		Compiler<T> incrementalCompiler = getIncrementalCompiler().createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
@@ -311,6 +308,9 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 	@Inject
 	protected abstract ObjectFactory getObjects();
+
+	@Inject
+	protected abstract FileSystemOperations getFileOperations();
 
 	/*private*/ static abstract /*final*/ class WorkerBackedBuildOperationExecutor implements BuildOperationExecutor {
 		private final WorkQueue queue;
