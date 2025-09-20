@@ -1,6 +1,6 @@
 package dev.nokee.companion.util;
 
-import dev.nokee.commons.gradle.tasks.options.SourceConfiguration;
+import dev.nokee.commons.gradle.tasks.options.SourceOptions;
 import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import org.gradle.api.Action;
@@ -105,8 +105,8 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 			((CppCompile) task).getOptions().getPreprocessorOptions().defines(other.flatMap(this::toDefinedMacros));
 			((CppCompile) task).getOptions().getIncrementalAfterFailure().convention(other.flatMap(this::toIncrementalAfterFailure));
 
-			if (((CppCompile) task).getOptions() instanceof SourceOptionsAware.Options) {
-				((SourceOptionsAware<?>) task).getSourceOptions().from(() -> other.flatMap(this::toSourceOptions).orElse(emptyList()));
+			if (task instanceof SourceOptionsAware) {
+				((SourceOptionsAware) task).getSourceOptions().with(other.flatMap(this::toSourceOptions));
 			}
 		} else {
 			final ProviderFactory providers = task.getProject().getProviders();
@@ -181,9 +181,9 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 		}
 	}
 
-	private @Nullable Provider<Iterable<? extends SourceConfiguration>> toSourceOptions(AbstractNativeCompileTask task) {
+	private @Nullable Provider<SourceOptions> toSourceOptions(AbstractNativeCompileTask task) {
 		if (task instanceof SourceOptionsAware) {
-			return ((SourceOptionsAware<?>) task).getSourceOptions().asProvider();
+			return task.getProject().provider(() -> ((SourceOptionsAware<?>) task).getSourceOptions().forFiles(task.getSource().getAsFileTree()));
 		} else {
 			return null;
 		}

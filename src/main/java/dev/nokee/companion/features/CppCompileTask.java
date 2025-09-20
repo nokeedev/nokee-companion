@@ -1,10 +1,10 @@
 package dev.nokee.companion.features;
 
-import dev.nokee.commons.gradle.Factory;
 import dev.nokee.commons.gradle.Plugins;
-import dev.nokee.commons.gradle.file.SourceFileVisitor;
 import dev.nokee.commons.gradle.provider.ProviderUtils;
-import dev.nokee.commons.gradle.tasks.options.*;
+import dev.nokee.commons.gradle.tasks.options.OptionsAware;
+import dev.nokee.commons.gradle.tasks.options.SourceOptions;
+import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
@@ -14,10 +14,8 @@ import org.gradle.api.Project;
 import org.gradle.api.file.*;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
-import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
-import org.gradle.internal.UncheckedException;
 import org.gradle.internal.io.StreamByteBuffer;
 import org.gradle.internal.operations.*;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
@@ -47,26 +45,21 @@ import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
-import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-import static dev.nokee.commons.gradle.TransformerUtils.filter;
 import static dev.nokee.commons.names.CppNames.compileTaskName;
 import static dev.nokee.companion.features.ReflectionUtils.*;
 import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 @CacheableTask
 /*private*/ abstract /*final*/ class CppCompileTask extends CppCompile implements OptionsAware, SourceOptionsAware<NativeCompileOptions> {
-	public static abstract class DefaultTaskOptions implements dev.nokee.commons.gradle.tasks.options.Options, CppCompile.Options, SourceOptionsAware.Options<NativeCompileOptions> {
+	public static abstract class DefaultTaskOptions implements dev.nokee.commons.gradle.tasks.options.Options, CppCompile.Options {
 		private ListProperty<String> compilerArgs;
-		private SourceOptionsLookup<NativeCompileOptions> allOptions;
+		private SourceOptionsLookup allOptions;
 
 		@Inject
 		public DefaultTaskOptions() {}
@@ -74,11 +67,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		@Override
 		public Provider<NativeCompileOptions> forSource(File file) {
 			return allOptions.get(file);
-		}
-
-		@Override
-		public Provider<Iterable<SourceOptions<NativeCompileOptions>>> forAllSources() {
-			return allOptions.getAll();
 		}
 
 		@Nested
@@ -241,41 +229,63 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		Compiler<T> baseCompiler = platformToolProvider.newCompiler(specType);
 
 		Compiler<T> perSourceCompiler = baseCompiler;
-		if (allOptions != null) { // only if there are some per-options sources
-			PerSourceCompiler.SpecProvider specProvider = new PerSourceCompiler.SpecProvider() {
+
+		SourceOptions<NativeCompileOptions> allOptions = getAllSourceOptions().getOrNull();
+		if (allOptions != null) {
+			PerSourceCompiler.SourceSpecProvider<T> sourceSpecProvider = new PerSourceCompiler.SourceSpecProvider<T>() {
 				@Override
-				public ISourceKey forFile(File file) {
-					return allOptions.keyOf(file).get();
+				public Iterable<T> forFiles(Collection<File> files) {
+					List<T> result = new ArrayList<>();
+					for (SourceOptions.Group<NativeCompileOptions> groupedOptions : allOptions.forFiles(getObjects().fileCollection().from(files).getAsFileTree()).groupedByOptions()) {
+						NativeCompileSpec newSpec = createCompileSpec();
+
+						//region Copy default spec to new spec
+						newSpec.setTargetPlatform(spec.getTargetPlatform());
+						newSpec.setTempDir(spec.getTempDir());
+						newSpec.getArgs().addAll(spec.getArgs());
+						newSpec.getSystemArgs().addAll(spec.getSystemArgs());
+						newSpec.setOperationLogger(spec.getOperationLogger());
+
+						newSpec.setObjectFileDir(spec.getObjectFileDir());
+						newSpec.getIncludeRoots().addAll(spec.getIncludeRoots());
+						newSpec.getSystemIncludeRoots().addAll(spec.getSystemIncludeRoots());
+						newSpec.setSourceFiles(spec.getSourceFiles());
+						newSpec.setRemovedSourceFiles(spec.getRemovedSourceFiles());
+						newSpec.setMacros(spec.getMacros());
+						newSpec.setPositionIndependentCode(spec.isPositionIndependentCode());
+						newSpec.setDebuggable(spec.isDebuggable());
+						newSpec.setOptimized(spec.isOptimized());
+						newSpec.setIncrementalCompile(spec.isIncrementalCompile());
+						newSpec.setPrefixHeaderFile(spec.getPrefixHeaderFile());
+						newSpec.setPreCompiledHeaderObjectFile(spec.getPreCompiledHeaderObjectFile());
+						newSpec.setPreCompiledHeader(spec.getPreCompiledHeader());
+						newSpec.setSourceFilesForPch(spec.getSourceFilesForPch());
+						//endregion
+
+						newSpec.setSourceFiles(groupedOptions.getSourceFiles()); // set only the bucket source
+						newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
+
+						// Namespace the temporary directory (i.e. where the options.txt will be written)
+						newSpec.setTempDir(new File(spec.getTempDir(), groupedOptions.getUniqueId()));
+
+						// Configure the bucket spec from the per-source options
+						newSpec.args(groupedOptions.getOptions().getCompilerArgs().get());
+						for (CommandLineArgumentProvider argumentProvider : groupedOptions.getOptions().getCompilerArgumentProviders().get()) {
+							argumentProvider.asArguments().forEach(newSpec.getArgs()::add);
+						}
+
+						result.add((T) newSpec);
+					}
+					try {
+						((AutoCloseable) getSourceOptions()).close(); // release some memory
+					} catch (Exception e) {
+						throw new RuntimeException(e);
+					}
+					return result;
 				}
 			};
 			WorkQueue queue = executor.noIsolation();
-			perSourceCompiler = new PerSourceCompiler<>(baseCompiler, specProvider, () -> (T) createCompileSpec(), new PerSourceCompiler.SpecConfigure<T>() {
-				@Override
-				public void configureSpec(T spec, ISourceKey key) {
-					NativeCompileOptions options = allOptions.forKey(key).get();
-
-					// Namespace the temporary directory (i.e. where the options.txt will be written)
-					spec.setTempDir(new File(spec.getTempDir(), hash(key)));
-
-					// Configure the bucket spec from the per-source options
-					spec.args(options.getCompilerArgs().get());
-					for (CommandLineArgumentProvider argumentProvider : options.getCompilerArgumentProviders().get()) {
-						argumentProvider.asArguments().forEach(spec.getArgs()::add);
-					}
-				}
-
-				public String hash(ISourceKey key) {
-					try {
-						MessageDigest messageDigest = MessageDigest.getInstance("MD5");
-						for (Integer i : (Iterable<Integer>) key) {
-							messageDigest.update(ByteBuffer.allocate(4).putInt(i).array());
-						}
-						return new BigInteger(1, messageDigest.digest()).toString(36);
-					} catch (NoSuchAlgorithmException e) {
-						throw UncheckedException.throwAsUncheckedException(e);
-					}
-				}
-			}, queue);
+			perSourceCompiler = new PerSourceCompiler<>(baseCompiler, sourceSpecProvider, queue);
 
 			// region Patching BuildOperationExecutor
 			try {
@@ -284,7 +294,7 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 					if (compiler instanceof VersionAwareCompiler) {
 						compiler = readFieldValue(getField(compiler.getClass(), "compiler"), compiler);
 					} else if (compiler instanceof OutputCleaningCompiler) {
-						compiler = readFieldValue(getField(compiler.getClass(),"compiler"), compiler);
+						compiler = readFieldValue(getField(compiler.getClass(), "compiler"), compiler);
 					}
 				}
 
@@ -574,60 +584,19 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		replaceMacrosField(getMacros());
 
-		getBundles().set(providers.provider(() -> {
-			if (this.allOptions == null) {
-				return Collections.emptyList(); // bailout quickly
-			}
-			List<Object> result = new ArrayList<>();
-			Map<ISourceKey, Collection<String>> map = new TreeMap<>(); // important to sort the keys...
-			//  ...remember properties are flat hence it doesn't matter if a nested holder is a set, list or map.
-			//  Everything will flatten into a non-hierarchical names, losing any concept of "unorderedness".
-			//  Set vs List only take into effect for value snapshotting
-			source.getAsFileTree().visit(new SourceFileVisitor(sourceFile -> {
-				ISourceKey key = allOptions.keyOf(sourceFile.getFile()).get();
-				if (key != ISourceKey.DEFAULT_KEY) { // must avoid capturing the default bucket
-					map.computeIfAbsent(key, __ -> new ArrayList<>()).add(sourceFile.getPath());
-				}
-			}));
-
-			map.forEach((key, files) -> {
-				result.add(new Object() {
-					@Input
-					public Set<String> getPaths() {
-						return new LinkedHashSet<>(files);
-					}
-
-					@Nested
-					public Object getOptions() {
-						return allOptions.forKey(key).get();
-					}
-				});
-			});
-			return result;
-		}));
-		getBundles().finalizeValueOnRead();
-		getBundles().disallowChanges();
-
 		getOptions().compilerArgs = getCompilerArgs();
-		getOptions().allOptions = new SourceOptionsLookup<NativeCompileOptions>() {
+		getOptions().allOptions = new SourceOptionsLookup() {
 			@Override
 			public Provider<NativeCompileOptions> get(File file) {
-				if (allOptions == null) {
-					return providers.provider(() -> getOptions());
-				}
-				return allOptions.forFile(file).map(filter(it -> getSource().contains(file)));
-			}
-
-			@Override
-			public Provider<Iterable<SourceOptions<NativeCompileOptions>>> getAll() {
-				if (allOptions == null) {
-					return providers.provider(() -> {
-						return () -> new SourceOptionsIterator<>(getSource(), __ -> getOptions(), objects);
-					});
-				}
-				return allOptions.forAllSources(getSource().getAsFileTree()).map(OptionsIter::unrolled);
+				return getAllSourceOptions().map(allOptions -> {
+					return allOptions.forFile(file).getOptions();
+				});
 			}
 		};
+	}
+
+	private interface SourceOptionsLookup {
+		Provider<NativeCompileOptions> get(File file);
 	}
 
 	private void replaceMacrosField(Map<String, String> lazyMacros) {
@@ -650,41 +619,6 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	}
 
 	//region Per-source Options
-	@Internal // track bundle scope
-	protected abstract ListProperty<Object> getBundles();
-
-	@Nested
-	protected Iterable<Object> getSourceOptionsSnapshotting() {
-		if (allOptions == null) {
-			return Collections.emptyList();
-		} else {
-			for (StackTraceElement stackTraceElement : Thread.currentThread().getStackTrace()) {
-				if (stackTraceElement.getClassName().endsWith(".DefaultTaskProperties") && stackTraceElement.getMethodName().equals("resolve")) {
-					return getBundles().get();
-				} else if (stackTraceElement.getClassName().endsWith(".DefaultTaskInputs") && stackTraceElement.getMethodName().equals("visitDependencies")) {
-					return allOptions.getDepEntries().get();
-				}
-			}
-			throw new UnsupportedOperationException();
-		}
-	}
-
-	private AllSourceOptionsEx2<NativeCompileOptions> allOptions;
-
-	@Override
-	public AllSourceOptionsEx2<NativeCompileOptions> getSourceOptions() {
-		if (allOptions == null) {
-			Factory<NativeCompileOptions> factory = () -> objects.newInstance(NativeCompileOptions.class);
-			factory = factory.tap(t -> {
-				t.getCompilerArgumentProviders().set(getOptions().getCompilerArgumentProviders());
-				t.getCompilerArgs().set(getOptions().getCompilerArgs());
-			});
-			allOptions = objects.newInstance(new TypeOf<AllSourceOptionsEx2<NativeCompileOptions>>() {}.getConcreteClass(), factory);
-
-		}
-		return allOptions;
-	}
-
 	@Override
 	public CppCompileTask source(Object source, Action<? super NativeCompileOptions> action) {
 		SourceOptionsAware.super.source(source, action);

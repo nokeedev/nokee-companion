@@ -103,6 +103,30 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		return build;
 	}
 
+	@GradleProject("project-with-source-options-ex")
+	public static GradleBuildElement makeProjectWithSourceOptionsEx() throws IOException {
+		GradleBuildElement build = makeProjectWithSourceFiles();
+		Files.writeString(build.file("src/main/cpp/source-with-options.cpp"), """
+		#ifndef FOO
+		#error "Missing source options"
+		#endif
+		""");
+
+		build.getBuildFile().append(groovyDsl("""
+			def file1 = 'src/main/cpp/message.cpp'
+			def file2 = 'src/main/cpp/join.cpp'
+			def file3 = 'src/main/cpp/split.cpp'
+			def file4 = 'src/main/cpp/add.cpp'
+			def missingSourceBucket = { it.compilerArgs.add('-DOTHER_MACRO') } as Action
+			def moreSourceOptions = { it.compilerArgs.add('-DMORE_MACROS') } as Action
+
+			compileTask.source(file1) { compilerArgs.add('-DMY_MACRO') }
+			compileTask.source('src/main/cpp/source-with-options.cpp') { compilerArgs.add('-DFOO') }
+		""".stripIndent()));
+
+		return build;
+	}
+
 	@GradleProject("project-with-source-options-on-generated-source")
 	public static GradleBuildElement makeProjectWithGeneratedSource() throws IOException {
 		GradleBuildElement result = makeProjectWithSourceOptions();
@@ -150,7 +174,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 
 				@Internal
 				Provider<List<String>> getArgs() {
-					return outputFile.asFile.map { it.readLines().collect { it.trim() } }
+					return outputFile.zip(project.providers.fileContents(outputFile).asText.map { it.readLines().collect { it.trim() } }) { a, b -> b }
 				}
 
 				@TaskAction
@@ -181,7 +205,7 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 
 				@Internal
 				Provider<List<String>> getArgs() {
-					return outputFile.asFile.map { it.readLines().collect { it.trim() } }
+					return outputFile.zip(project.providers.fileContents(outputFile).asText.map { it.readLines().collect { it.trim() } }) { a, b -> b }
 				}
 
 				@TaskAction

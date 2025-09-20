@@ -101,7 +101,7 @@ class CppCompileCopyFromIntegrationTests {
 		assertThat(subject.getCompilerArgs(), providerOf(contains("--some-flag")));
 		assertThat(subject.getSource(), contains(aFileNamed("file1.cpp"), aFileNamed("file2.cpp"), aFileNamed("file3.cpp")));
 		assertThat(subject.getIncludes(), contains(aFileNamed("my-includes")));
-		assertThat(((SourceOptionsAware.Options<?>) subject.getOptions()).forAllSources(), providerOf(contains(with(sourceFile(aFileNamed("file1.cpp"))), with(sourceFile(aFileNamed("file2.cpp"))), with(sourceFile(aFileNamed("file3.cpp"))))));
+		assertThat(((SourceOptionsAware<?>) subject).getSourceOptions(), contains(sourceFile(aFileNamed("file2.cpp")), sourceFile(aFileNamed("file3.cpp"))));
 	}
 
 	@Test
@@ -136,7 +136,7 @@ class CppCompileCopyFromIntegrationTests {
 		assertThat(subject.getCompilerArgs(), providerOf(contains("--some-flag")));
 		assertThat(subject.getSource(), contains(aFileNamed("file1.cpp"), aFileNamed("file2.cpp"), aFileNamed("file3.cpp")));
 		assertThat(subject.getIncludes(), contains(aFileNamed("my-includes")));
-		assertThat(((SourceOptionsAware.Options<?>) subject.getOptions()).forAllSources(), providerOf(contains(with(sourceFile(aFileNamed("file1.cpp"))), with(sourceFile(aFileNamed("file2.cpp"))), with(sourceFile(aFileNamed("file3.cpp"))))));
+		assertThat(((SourceOptionsAware<?>) subject).getSourceOptions(), emptyIterable());
 	}
 
 	@Test
