@@ -64,7 +64,7 @@ testing {
 				implementation libs.apache.commons.io
 				implementation 'dev.gradleplugins:gradle-api:latest.release'
 				implementation libs.hamcrest.core
-				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'
+				implementation 'dev.nokee.commons:nokee-hamcrest:latest.integration'
 				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.integration')
 				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
 				implementation('com.google.guava:guava:33.4.6-jre') { because 'TypeToken' }
