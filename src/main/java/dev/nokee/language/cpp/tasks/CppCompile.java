@@ -6,6 +6,7 @@ import org.gradle.api.Action;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
@@ -47,6 +48,8 @@ public abstract class CppCompile extends org.gradle.language.cpp.tasks.CppCompil
 	 * @return this task
 	 */
 	public abstract CppCompile source(Object sourceFiles, Action<? super NativeCompileOptions> configureAction);
+
+	public abstract CppCompile options(Spec<? super File> sourceSpec, Action<? super NativeCompileOptions> configureAction);
 
 	/**
 	 * {@return the task options for this task}

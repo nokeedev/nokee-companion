@@ -14,6 +14,7 @@ import org.gradle.api.Project;
 import org.gradle.api.file.*;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
+import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
 import org.gradle.internal.io.StreamByteBuffer;
@@ -622,6 +623,12 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	@Override
 	public CppCompileTask source(Object source, Action<? super NativeCompileOptions> action) {
 		SourceOptionsAware.super.source(source, action);
+		return this;
+	}
+
+	@Override
+	public CppCompileTask options(Spec<? super File> sourceSpec, Action<? super NativeCompileOptions> action) {
+		getSourceOptions().forFilesMatching(sourceSpec, action);
 		return this;
 	}
 	//endregion
