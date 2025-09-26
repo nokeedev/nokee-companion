@@ -34,7 +34,7 @@ class CppUnitTestForLibraryLinkAgainstLibraryTransitiveFunctionalTests {
 
 		build = GradleBuildElement.inDirectory(testDirectory);
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.all-features.enabled=true");
-		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withGradleVersion("7.6.4");
+		runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput();//.withGradleVersion("7.6.4");
 		build.getSettingsFile().plugins(it -> it.id("dev.nokee.native-companion"));
 		build.getSettingsFile().append(groovyDsl("""
 			rootProject.name = 'test'
