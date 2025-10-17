@@ -1,0 +1,24 @@
+gradle.allprojects { project ->
+	project.plugins.withType(CppBasePlugin.class) {
+		project.components.withType(CppBinary.class).configureEach {binary ->
+			if (binary instanceof CppSharedLibrary || binary instanceof ComponentWithExecutable) {
+				def qualifyingName = (binary.name - 'main' - 'Executable').uncapitalize()
+				tasks.named("link${qualifyingName.capitalize()}", AbstractLinkTask).configure { AbstractLinkTask task ->
+					FileCollection runtimeLibraries = configurations."nativeRuntime${qualifyingName.capitalize()}"
+					FileCollection linkLibraries = configurations."nativeLink${qualifyingName.capitalize()}"
+					Provider rPathLinkSupported = task.toolChain.zip(task.targetPlatform, (toolchain, platform) -> (toolchain instanceof GccCompatibleToolChain && platform.operatingSystem.linux) ? new Object() : null);
+					Provider<Set<FileSystemLocation>> secondLevelDependencies = runtimeLibraries.minus(linkLibraries).elements
+
+
+					ProjectLayout layout = task.project.layout
+					Provider<Set<FileSystemLocation>> additionalDependencies = rPathLinkSupported.flatMap { secondLevelDependencies }.orElse([] as Set);
+					task.inputs.files(additionalDependencies)
+					task.linkerArgs.addAll(additionalDependencies.map { Set<FileSystemLocation> libraries ->
+						// Use relative path to avoid trashing the up-to-date checking and cacheability.
+						return libraries.collect { "-Wl,-rpath-link=" + layout.projectDirectory.asFile.toPath().relativize(it.asFile.parentFile.toPath()) }
+					})
+				}
+			}
+		}
+	}
+}
