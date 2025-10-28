@@ -283,6 +283,14 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		return build;
 	}
 
+	/*
+	s1.cpp -> a.h -> c.h
+	s1.cpp -> b.h -> c.h
+	s2.cpp -> b.h
+
+	c.h -> d.h
+	c.h -> MY_MACRO_INCLUDE (e.h)
+	 */
 	@GradleProject("project-for-gradle-34152")
 	public static GradleBuildElement makeProjectForGradle34152() throws IOException {
 		GradleBuildElement build = makeEmptyProject();
@@ -335,6 +343,16 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		return build;
 	}
 
+	/*
+	s1.cpp -> a.h -> c.h
+	s1.cpp -> b.h -> copied-a.h -> c.h
+	s2.cpp -> b.h
+
+	a.h <-> copied-a.h
+
+	c.h -> d.h
+	c.h -> MY_MACRO_INCLUDE (e.h)
+	 */
 	@GradleProject("project-for-gradle-34152-ex")
 	public static GradleBuildElement makeProjectForGradle34152Ex() throws IOException {
 		GradleBuildElement build = makeEmptyProject();
@@ -398,6 +416,18 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		return build;
 	}
 
+	/* dot header graph
+	s1.cpp -> a.h -> c.h
+	s1.cpp -> b.h -> dir/a.h -> [dir/]c.h
+	s2.cpp -> b.h
+
+	a.h <-> dir/a.h
+
+	c.h -> d.h
+	c.h -> MY_MACRO_INCLUDE (e.h)
+
+	dir/c.h -> f.h
+	 */
 	@GradleProject("project-for-gradle-34152-ex2")
 	public static GradleBuildElement makeProjectForGradle34152Ex2() throws IOException {
 		GradleBuildElement build = makeEmptyProject();
