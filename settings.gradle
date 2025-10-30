@@ -10,3 +10,5 @@ plugins {
 
 rootProject.name = 'nokee-companion'
 includeBuild 'gradle/templates'
+
+//includeBuild '../nokee-commons'

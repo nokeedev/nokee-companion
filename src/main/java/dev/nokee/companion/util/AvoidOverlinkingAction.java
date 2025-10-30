@@ -29,7 +29,7 @@ public class AvoidOverlinkingAction implements Action<AbstractLinkTask> {
 
 	@Override
 	public void execute(AbstractLinkTask task) {
-		if (!task.getProject().getPlugins().hasPlugin("native-companion.features.overlinking-avoidance")) {
+		if (!task.getProject().getPlugins().hasPlugin("native-companion.features.rpath-link-flags")) {
 			return; // skip configuration as overlinking avoidance is disabled
 		}
 

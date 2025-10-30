@@ -62,6 +62,7 @@ testing {
 		test {
 			dependencies {
 				implementation libs.apache.commons.io
+				implementation libs.mockito.core
 				implementation 'dev.gradleplugins:gradle-api:latest.release'
 				implementation libs.hamcrest.core
 				implementation 'dev.nokee.commons:nokee-hamcrest:latest.integration'
