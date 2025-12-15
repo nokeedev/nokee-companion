@@ -499,4 +499,25 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 
 		return build;
 	}
+
+
+	@GradleProject("project-with-unresolved-include-macros")
+	public static GradleBuildElement makeProjectForUnresolvedIncludeMacros() throws IOException {
+		GradleBuildElement build = makeEmptyProject();
+		Files.write(build.file("src/main/cpp/a.cpp"), Arrays.asList(
+			"#ifdef UNRESOLVED_MACRO",
+			"#include UNRESOLVED_MACRO",
+			"#endif",
+			"int a() { return 1; }"
+		));
+
+		build.getBuildFile().append(groovyDsl("""
+			subject.configure {
+				source(files('src/main/cpp').asFileTree)
+				includes.from('src/main/headers')
+			}
+		"""));
+
+		return build;
+	}
 }

@@ -8,17 +8,16 @@ import dev.nokee.commons.fixtures.GradleProjectExtension;
 import dev.nokee.commons.fixtures.GradleTaskUnderTestExtension;
 import dev.nokee.commons.fixtures.TaskUnderTest;
 import dev.nokee.commons.sources.GradleBuildElement;
+import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 
-import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static dev.nokee.companion.fixtures.GradleRunnerKitMatchers.performFullRebuildForIncrementalTask;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -166,5 +165,65 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 
 		assertThat(result.task(taskUnderTest.toString()), performFullRebuildForIncrementalTask());
 		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("/src/main/cpp/source-with-include-macros.cpp"));
+	}
+
+	@Test
+	default void canReuseNativeCompileWhenRestoringFromBuildCache(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-with-unresolved-include-macros") GradleBuildElement project) throws IOException {
+		GradleBuildElement build = project.writeToDirectory(testDirectory);
+
+		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withArgument("-i").withArgument("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true").withBuildCacheEnabled().requireOwnGradleUserHomeDirectory();
+		BuildResult result = null;
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+
+		Files.walkFileTree(testDirectory.resolve(".gradle"), new SimpleFileVisitor<>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+				if (dir.getFileName().toString().equals("nativeCompile")) {
+					FileUtils.deleteDirectory(dir.toFile());
+					return FileVisitResult.SKIP_SUBTREE;
+				}
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		result = runner.withTasks("clean", taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.FROM_CACHE));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."));
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")));
+	}
+
+	@Test
+	default void canReuseNativeCompileWhenLocalProjectCacheClearedButNotBuildDirectory(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-with-unresolved-include-macros") GradleBuildElement project) throws IOException {
+		GradleBuildElement build = project.writeToDirectory(testDirectory);
+
+		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withArgument("-i").withArgument("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true");
+		BuildResult result = null;
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+
+		Files.walkFileTree(testDirectory.resolve(".gradle"), new SimpleFileVisitor<>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+				if (dir.getFileName().toString().equals("nativeCompile")) {
+					FileUtils.deleteDirectory(dir.toFile());
+					return FileVisitResult.SKIP_SUBTREE;
+				}
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."));
+
+		result = runner.withTasks(taskUnderTest.toString()).build();
+		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+		assertThat(result.task(taskUnderTest.toString()).getOutput(), not(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")));
 	}
 }

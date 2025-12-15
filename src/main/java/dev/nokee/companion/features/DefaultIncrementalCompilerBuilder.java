@@ -23,7 +23,6 @@ import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
 import org.gradle.api.internal.file.collections.MinimalFileSet;
 import org.gradle.api.internal.tasks.properties.LifecycleAwareValue;
 import org.gradle.api.provider.Provider;
-import org.gradle.cache.ObjectHolder;
 import org.gradle.internal.file.Deleter;
 import org.gradle.internal.operations.BuildOperationRunner;
 import org.gradle.internal.vfs.FileSystemAccess;
@@ -108,6 +107,7 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 		private final FileCollection headerFilesCollection;
 		private Object/*Holder<CompilationState>*/ compileStateCache;
 		private IncrementalCompilation incrementalCompilation;
+		private boolean saveIncrementalCompilationDuringCleanup = true;
 
 		StateCollectingIncrementalCompiler(
 			TaskInternal task,
@@ -145,6 +145,9 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 			if (incrementalCompilation == null) {
 				throw new IllegalStateException("Header files should be calculated before compiler is created.");
 			}
+
+			saveIncrementalCompilationDuringCleanup = false; // will be handled by the incremental compiler
+
 			try {
 				@SuppressWarnings("unchecked")
 				IncrementalNativeCompiler<T> result = (IncrementalNativeCompiler<T>) IncrementalNativeCompiler.class.getConstructors()[0].newInstance(taskOutputs, compiler, deleter, compileStateCache, incrementalCompilation);
@@ -264,6 +267,9 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 
 		@Override
 		public void cleanupValue() {
+			if (saveIncrementalCompilationDuringCleanup && incrementalCompilation != null) {
+				ObjectHolder__set(compileStateCache, incrementalCompilation.getFinalState());
+			}
 			compileStateCache = null;
 			incrementalCompilation = null;
 		}
@@ -276,6 +282,15 @@ class DefaultIncrementalCompilerBuilder implements IncrementalCompilerBuilder {
 		@Override
 		public FileCollection getHeaderFiles() {
 			return headerFilesCollection;
+		}
+
+		private static <T> void ObjectHolder__set(Object obj, T val) {
+			try {
+				Method set = obj.getClass().getInterfaces()[0].getMethod("set", Object.class);
+				set.invoke(obj, val);
+			} catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
 		}
 	}
 }
