@@ -27,13 +27,21 @@ import org.gradle.language.nativeplatform.internal.incremental.sourceparser.Simp
 
 import javax.annotation.Nullable;
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class DefaultSourceIncludesResolver implements SourceIncludesResolver {
+	private static final String NORMALIZE_PATH_CASING_PROPERTY_NAME = "dev.nokee.internal.native.headers.normalize-path-casing";
 	private static final MissingIncludeFile MISSING_INCLUDE_FILE = new MissingIncludeFile();
 	private final FileSystemAccess fileSystemAccess;
 	private final Map<File, DirectoryContents> includeRoots = new HashMap<File, DirectoryContents>();
 	private final FixedIncludePath includePath;
+	private final boolean normalizePathCasing;
 
 	public DefaultSourceIncludesResolver(List<File> includePaths, FileSystemAccess fileSystemAccess) {
 		this.fileSystemAccess = fileSystemAccess;
@@ -42,6 +50,7 @@ public class DefaultSourceIncludesResolver implements SourceIncludesResolver {
 			includeDirs.add(toDir(includeDir));
 		}
 		this.includePath = new FixedIncludePath(includeDirs);
+		this.normalizePathCasing = Boolean.getBoolean(NORMALIZE_PATH_CASING_PROPERTY_NAME);
 	}
 
 	@Override
@@ -345,6 +354,13 @@ public class DefaultSourceIncludesResolver implements SourceIncludesResolver {
 	}
 
 	private File normalizeIncludePath(File searchDir, String prefixPath) {
+		if (normalizePathCasing) {
+			return normalizeIncludePathCasing(searchDir, prefixPath);
+		}
+		return normalizeIncludePathLegacy(searchDir, prefixPath);
+	}
+
+	private File normalizeIncludePathLegacy(File searchDir, String prefixPath) {
 		boolean onlyDotsSinceLastSeparator = true;
 		for (int i = 0; i < prefixPath.length(); i++) {
 			char currentChar = prefixPath.charAt(i);
@@ -360,6 +376,63 @@ public class DefaultSourceIncludesResolver implements SourceIncludesResolver {
 			}
 		}
 		return new File(searchDir, prefixPath);
+	}
+
+	public File normalizeIncludePathCasing(File searchDir, String relativePath) {
+		Objects.requireNonNull(searchDir);
+		Objects.requireNonNull(relativePath);
+
+		Path base = searchDir.toPath();
+
+		// Normalize structure only (no filesystem access yet)
+		Path rel = Paths.get(relativePath).normalize();
+
+		// If absolute path is passed, ignore searchDir
+		Path current = rel.isAbsolute() ? rel.getRoot() : base;
+
+		for (Path part : rel) {
+			String name = part.toString();
+
+			// Handle ".."
+			if (name.equals("..")) {
+				current = current.getParent();
+				if (current == null) {
+					return null;
+				}
+				continue;
+			}
+
+			// Handle "."
+			if (name.equals(".")) {
+				continue;
+			}
+
+			if (!Files.isDirectory(current)) {
+				return null;
+			}
+
+			Path match = null;
+
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(current)) {
+				for (Path entry : stream) {
+					if (entry.getFileName().toString().equalsIgnoreCase(name)) {
+						match = entry.getFileName();
+						break;
+					}
+				}
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+
+			if (match == null) {
+				// Path does not exist → abort
+				return normalizeIncludePathLegacy(searchDir, relativePath);
+			}
+
+			current = current.resolve(match);
+		}
+
+		return current.toFile();
 	}
 
 	private static abstract class CachedIncludeFile {
