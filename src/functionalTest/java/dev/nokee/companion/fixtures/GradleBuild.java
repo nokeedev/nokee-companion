@@ -1,9 +1,13 @@
 package dev.nokee.companion.fixtures;
 
+import dev.gradleplugins.buildscript.ast.expressions.Expression;
 import dev.gradleplugins.buildscript.ast.expressions.MethodCallExpression;
+import dev.gradleplugins.buildscript.ast.statements.Statement;
 import dev.gradleplugins.buildscript.io.GradleBuildFile;
 import dev.gradleplugins.buildscript.io.GradleSettingsFile;
 import dev.gradleplugins.buildscript.syntax.Syntax;
+import org.gradle.api.Action;
+import org.junit.jupiter.api.function.ThrowingConsumer;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -31,6 +35,11 @@ public class GradleBuild {
 	public GradleBuild subproject(String path, Consumer<? super GradleProject> action) {
 		action.accept(subprojects.computeIfAbsent(path, this::newSubproject));
 		return this;
+	}
+
+	// TODO: Do not return full GradleProject
+	public GradleProject subproject(String path) {
+		return subprojects.computeIfAbsent(path, this::newSubproject);
 	}
 
 	public GradleBuild rootProject(Consumer<? super GradleBuildFile> action) {
@@ -66,6 +75,36 @@ public class GradleBuild {
 		public GradleProject(Path location, GradleBuildFile buildFile) {
 			this.location = location;
 			this.buildFile = buildFile;
+		}
+
+		public Path file(String path) {
+			return getLocation().resolve(path);
+		}
+
+		public void plugins(Action<? super PluginBlock> action) {
+			buildFile.plugins(it -> {
+				action.execute(new PluginBlock() {
+					@Override
+					public PluginBlock id(String pluginId) {
+						it.id(pluginId);
+						return this;
+					}
+				});
+			});
+		}
+
+		public void append(Object snippet) {
+			if (snippet instanceof Expression) {
+				buildFile.append((Expression) snippet);
+			} else if (snippet instanceof Statement) {
+				buildFile.append((Statement) snippet);
+			} else {
+				throw new RuntimeException("no valid");
+			}
+		}
+
+		public interface PluginBlock {
+			PluginBlock id(String pluginId);
 		}
 
 		public Path getLocation() {

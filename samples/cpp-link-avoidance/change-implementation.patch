@@ -1,0 +1,9 @@
+diff --git a/lib/src/main/cpp/greeter.cpp b/lib/src/main/cpp/greeter.cpp
+index 4c0224f..e203233 100644
+--- a/lib/src/main/cpp/greeter.cpp
++++ b/lib/src/main/cpp/greeter.cpp
+@@ -1,3 +1,3 @@
+ #include "greeter.h"
+ 
+-int greet() { return 42; }
++int greet() { return 99; }
