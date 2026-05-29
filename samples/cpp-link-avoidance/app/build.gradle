@@ -1,0 +1,10 @@
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.native-companion'
+}
+
+application {
+	dependencies {
+		implementation project(':lib')
+	}
+}

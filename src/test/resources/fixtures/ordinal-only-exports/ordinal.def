@@ -1,0 +1,4 @@
+LIBRARY ordinal.dll
+EXPORTS
+    func_one @1 NONAME
+    func_two @2 NONAME
