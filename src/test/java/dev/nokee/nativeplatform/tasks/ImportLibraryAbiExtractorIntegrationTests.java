@@ -24,13 +24,13 @@ import static org.hamcrest.Matchers.*;
  */
 @Disabled
 class ImportLibraryAbiExtractorIntegrationTests {
-	static NativeLibraryAbiExtractor extractor;
+	static DefaultNativeLibraryAbiExtractor extractor;
 	@TempDir static Path tempDir;
 
 	@BeforeAll
 	static void setup() {
 		Project project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
-		extractor = new NativeLibraryAbiExtractor(project.getObjects());
+		extractor = new DefaultNativeLibraryAbiExtractor(project.getObjects());
 	}
 
 	@Test

@@ -3,7 +3,6 @@ package dev.nokee.nativeplatform.tasks;
 import org.gradle.api.Project;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -23,13 +22,13 @@ import static org.hamcrest.Matchers.*;
  * fixture directory's BUILD file for the commands to produce them.
  */
 class ElfAbiExtractorIntegrationTests {
-	static NativeLibraryAbiExtractor extractor;
+	static DefaultNativeLibraryAbiExtractor extractor;
 	@TempDir static Path tempDir;
 
 	@BeforeAll
 	static void setup() {
 		Project project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
-		extractor = new NativeLibraryAbiExtractor(project.getObjects());
+		extractor = new DefaultNativeLibraryAbiExtractor(project.getObjects());
 	}
 
 	@ParameterizedTest

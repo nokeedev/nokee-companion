@@ -9,11 +9,11 @@ import java.util.AbstractMap;
 import java.util.Map;
 
 /*private*/ abstract /*final*/ class AbiExtractorService {
-	private final NativeLibraryAbiExtractor extractor;
+	private final CachingNativeLibraryAbiExtractor extractor;
 
 	@Inject
-	public AbiExtractorService(ObjectFactory objects) {
-		this.extractor = new NativeLibraryAbiExtractor(objects);
+	public AbiExtractorService(CachingNativeLibraryAbiExtractor extractor) {
+		this.extractor = extractor;
 	}
 
 	Map.Entry<String, AbiModel> extract(File library, Path projectRoot) {

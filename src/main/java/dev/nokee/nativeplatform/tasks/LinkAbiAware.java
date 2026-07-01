@@ -5,6 +5,7 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.file.ProjectLayout;
+import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
@@ -16,7 +17,6 @@ import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 
 import javax.inject.Inject;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -31,7 +31,10 @@ interface LinkAbiAware extends Task {
 		if (!getExt_linkAbi().isPresent()) { // safe as we control the lifecycle
 			assert this instanceof AbstractLinkTask : "task must be an AbstractLinkTask";
 			FileCollection libs = ((AbstractLinkTask) this).getLibs();
-			getExt_linkAbi().set(getProject().getObjects().newInstance(LinkAbiExtension.class, libs));
+			ObjectFactory objects = getProject().getObjects();
+			LinkAbiExtension extension = objects.newInstance(LinkAbiExtension.class, libs);
+			extension.getExtractor().set(getProject().getGradle().getSharedServices().registerIfAbsent("link-abi-cache", LinkAbiCache.class).map(it -> objects.newInstance(CachingNativeLibraryAbiExtractor.class, it)));
+			getExt_linkAbi().set(extension);
 		}
 
 		return getExt_linkAbi().get();
@@ -39,6 +42,9 @@ interface LinkAbiAware extends Task {
 
 
 	abstract /*final*/ class LinkAbiExtension {
+		@Internal
+		protected abstract Property<CachingNativeLibraryAbiExtractor> getExtractor();
+
 		@Inject
 		public LinkAbiExtension(FileCollection libs) {
 			getFis().from(getLinkLibInputs().map(it -> {
@@ -61,11 +67,12 @@ interface LinkAbiAware extends Task {
 			}));
 		}
 
-		@Inject
-		protected abstract ProjectLayout getLayout();
+		@Inject protected abstract ProjectLayout getLayout();
+		@Inject protected abstract ObjectFactory getObjects();
 
-		@Nested
-		protected abstract AbiExtractorService getAbiExtractor();
+		private AbiExtractorService getAbiExtractor() {
+			return getObjects().newInstance(AbiExtractorService.class, getExtractor().get());
+		}
 
 		@Internal
 		protected abstract MapProperty<String, AbiModel> getLinkLibInputs();
