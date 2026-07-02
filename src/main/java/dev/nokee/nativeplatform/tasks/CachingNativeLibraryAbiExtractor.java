@@ -8,7 +8,7 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.nio.file.Path;
 
-class CachingNativeLibraryAbiExtractor implements NativeLibraryAbiExtractor {
+abstract /*final*/ class CachingNativeLibraryAbiExtractor implements NativeLibraryAbiExtractor {
 	private final FileSystemAccess fileAccess;
 	private final LinkAbiCache cache;
 	private final DefaultNativeLibraryAbiExtractor extractor;
