@@ -27,7 +27,7 @@ final class ElfAbiExtractor {
 		this.objects = objects;
 	}
 
-	AbiEntry extract(FileChannel channel, File fallback) throws IOException {
+	public AbiEntry extract(FileChannel channel) throws IOException {
 		ByteBuffer ident = BinaryUtils.readAt(channel, 0, 16);
 		boolean is64 = ident.get(4) == 2;
 		ByteOrder order = ident.get(5) == 1 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
@@ -37,7 +37,7 @@ final class ElfAbiExtractor {
 
 		int eType = hdr.getShort(16) & 0xFFFF;
 		if (eType != ET_DYN) {
-			return new AbiEntry(null, new StaticLibraryAbiModel(fallback));
+			return null;
 		}
 
 		long shoff = is64 ? hdr.getLong(40) : (hdr.getInt(32) & 0xFFFFFFFFL);
@@ -158,12 +158,12 @@ final class ElfAbiExtractor {
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
 				String name = BinaryUtils.readCString(strtab, stName);
 				if (!name.isEmpty()) {
-					result.add(new ElfExportedSymbol(name, binding, type));
+					result.add(objects.newInstance(ElfExportedSymbol.class, name, binding, type));
 				}
 			}
 		}
 
-		result.sort(Comparator.comparing(ExportedSymbol::getName));
+		result.sort(Comparator.comparing(thiz -> thiz.getName().get()));
 		return Collections.unmodifiableList(result);
 	}
 }

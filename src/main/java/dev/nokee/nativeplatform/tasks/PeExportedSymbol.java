@@ -1,24 +1,21 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 
-final class PeExportedSymbol implements ExportedSymbol {
-	private final String name;
-	private final int ordinal;
+import javax.inject.Inject;
 
-	PeExportedSymbol(String name, int ordinal) {
-		this.name = name;
-		this.ordinal = ordinal;
+abstract /*final*/ class PeExportedSymbol implements ExportedSymbol {
+	@Inject
+	public PeExportedSymbol(String name, int ordinal) {
+		getName().set(name);
+		getOrdinal().set(ordinal);
 	}
 
 	@Override
 	@Input
-	public String getName() {
-		return name;
-	}
+	public abstract Property<String> getName();
 
 	@Input
-	int getOrdinal() {
-		return ordinal;
-	}
+	abstract Property<Integer> getOrdinal();
 }

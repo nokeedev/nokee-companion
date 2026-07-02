@@ -46,10 +46,6 @@ final class AbiMatchers {
 		return sharedLibrary(empty());
 	}
 
-	static Matcher<AbiModel> staticLibrary() {
-		return instanceOf(StaticLibraryAbiModel.class);
-	}
-
 	static Matcher<ExportedSymbol> strongElfSymbol(String name) {
 		return elfSymbol(name, STB_GLOBAL);
 	}
@@ -65,7 +61,7 @@ final class AbiMatchers {
 			protected boolean matchesSafely(ExportedSymbol sym) {
 				if (!(sym instanceof ElfExportedSymbol)) return false;
 				ElfExportedSymbol elf = (ElfExportedSymbol) sym;
-				return name.equals(elf.getName()) && elf.getBinding() == binding;
+				return name.equals(elf.getName().get()) && elf.getBinding().get() == binding;
 			}
 
 			@Override
@@ -89,7 +85,7 @@ final class AbiMatchers {
 			protected boolean matchesSafely(ExportedSymbol sym) {
 				if (!(sym instanceof MachOExportedSymbol)) return false;
 				MachOExportedSymbol macho = (MachOExportedSymbol) sym;
-				return name.equals(macho.getName()) && macho.isWeak() == weak;
+				return name.equals(macho.getName().get()) && macho.getWeak().get() == weak;
 			}
 
 			@Override
@@ -103,7 +99,7 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol sym) {
-				return sym instanceof PeExportedSymbol && name.equals(sym.getName());
+				return sym instanceof PeExportedSymbol && name.equals(sym.getName().get());
 			}
 
 			@Override

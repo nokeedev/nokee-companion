@@ -1,31 +1,26 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 
-import java.io.Serializable;
+import javax.inject.Inject;
 
-final class MachOExportedSymbol implements ExportedSymbol, Serializable {
-	private final String name;
-	private final boolean weak;
-
-	MachOExportedSymbol(String name, boolean weak) {
-		this.name = name;
-		this.weak = weak;
+abstract /*final*/ class MachOExportedSymbol implements ExportedSymbol {
+	@Inject
+	public MachOExportedSymbol(String name, boolean weak) {
+		getName().set(name);
+		getWeak().set(weak);
 	}
 
 	@Override
 	@Input
-	public String getName() {
-		return name;
-	}
+	public abstract Property<String> getName();
 
 	@Input
-	boolean isWeak() {
-		return weak;
-	}
+	abstract Property<Boolean> getWeak();
 
 	@Override
 	public String toString() {
-		return (isWeak() ? "weak " : "") + "exported symbol { name: '" + getName() + "' }";
+		return (getWeak().get() ? "weak " : "") + "exported symbol { name: '" + getName().get() + "' }";
 	}
 }

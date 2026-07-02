@@ -9,6 +9,7 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.SetProperty;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
@@ -16,8 +17,11 @@ import org.gradle.api.tasks.Nested;
 import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 
 import javax.inject.Inject;
+import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -48,20 +52,30 @@ interface LinkAbiAware extends Task {
 		@Inject
 		public LinkAbiExtension(FileCollection libs) {
 			getFis().from(getLinkLibInputs().map(it -> {
-				return it.values().stream().flatMap(t -> {
-					if (t instanceof LibraryFileAware) {
-						return Stream.of(((LibraryFileAware) t).getFile());
+				return it.stream().flatMap(t -> {
+					if (t instanceof File) {
+						return Stream.of((File) t);
 					}
 					return Stream.empty();
 				}).collect(Collectors.toList());
 			}));
+			getIns().set(getLinkLibInputs().map(it -> {
+				return it.stream().flatMap(t -> {
+					if (t instanceof Map.Entry) {
+						return Stream.of((Map.Entry<String, AbiModel>) t);
+					}
+					return Stream.empty();
+				}).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+			}));
+			getIns().disallowChanges();
+			getIns().finalizeValueOnRead();
 			getLinkLibInputs().set(libs.getElements().map(libsx -> {
 				Path root = getLayout().getProjectDirectory().getAsFile().toPath();
 				AbiExtractorService extractor = getAbiExtractor();
-				Map<String, AbiModel> result = new LinkedHashMap<>();
+				List<Object> result = new ArrayList<>();
 				for (FileSystemLocation lib : libsx) {
-					Map.Entry<String, AbiModel> entry = extractor.extract(lib.getAsFile(), root);
-					result.put(entry.getKey(), entry.getValue());
+					Object entry = extractor.extract(lib.getAsFile(), root);
+					result.add(entry);
 				}
 				return result;
 			}));
@@ -77,14 +91,10 @@ interface LinkAbiAware extends Task {
 		}
 
 		@Internal
-		protected abstract MapProperty<String, AbiModel> getLinkLibInputs();
+		protected abstract SetProperty<Object> getLinkLibInputs();
 
 		@Input
-		protected Provider<Map<String, AbiModel>> getIns() {
-			return getLinkLibInputs().map(it -> {
-				return it.entrySet().stream().filter(t -> !(t.getValue() instanceof LibraryFileAware)).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-			});
-		}
+		protected abstract MapProperty<String, AbiModel> getIns();
 
 		@InputFiles
 		protected abstract ConfigurableFileCollection getFis();

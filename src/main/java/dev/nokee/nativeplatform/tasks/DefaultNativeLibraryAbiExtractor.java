@@ -2,6 +2,7 @@ package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.api.model.ObjectFactory;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -30,26 +31,26 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 		importLibraryExtractor = new ImportLibraryAbiExtractor(objects);
 	}
 
-	public AbiEntry extract(Path library) {
+	public @Nullable AbiEntry extract(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 			if (channel.size() < 8) {
-				return new AbiEntry(null, new UnknownLibraryAbiModel(library.toFile()));
+				return null;
 			}
 			byte[] header = BinaryUtils.readBytes(channel, 0, 8);
 
 			if (isElfMagic(header)) {
-				return elfExtractor.extract(channel, library.toFile());
+				return elfExtractor.extract(channel);
 			} else if (isMachOMagic(header)) {
-				return machOExtractor.extract(channel, header, library.toFile());
+				return machOExtractor.extract(channel, header);
 			} else if (isArMagic(header)) {
 				try {
 					if (isWindowsImportLibrary(channel)) {
 						return importLibraryExtractor.extract(library);
 					}
 				} catch (IOException ignored) {}
-				return new AbiEntry(null, new StaticLibraryAbiModel(library.toFile()));
+				return null;
 			} else {
-				return new AbiEntry(null, new UnknownLibraryAbiModel(library.toFile()));
+				return null;
 			}
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
@@ -128,13 +129,13 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			this.objects = objects;
 		}
 
-		AbiEntry extract(Path library) throws IOException {
+		public AbiEntry extract(Path library) throws IOException {
 			try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
-				return parse(channel, library.toFile());
+				return parse(channel);
 			}
 		}
 
-		private AbiEntry parse(FileChannel channel, File fallback) throws IOException {
+		private AbiEntry parse(FileChannel channel) throws IOException {
 			long offset = 8; // skip !<arch>\n
 			String dllName = null;
 			List<ExportedSymbol> symbols = new ArrayList<>();
@@ -172,7 +173,7 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 					// data = dll_name\0 (no symbol name)
 					String dll = BinaryUtils.readCString(strData, 0);
 					if (dllName == null && !dll.isEmpty()) dllName = dll;
-					symbols.add(new PeExportedSymbol("#" + ordinalOrHint, ordinalOrHint));
+					symbols.add(objects.newInstance(PeExportedSymbol.class, "#" + ordinalOrHint, ordinalOrHint));
 				} else {
 					// data = symbol_name\0dll_name\0
 					String symName = BinaryUtils.readCString(strData, 0);
@@ -182,12 +183,12 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 						if (dllName == null && !dll.isEmpty()) dllName = dll;
 					}
 					if (!symName.isEmpty()) {
-						symbols.add(new PeExportedSymbol(symName, ordinalOrHint));
+						symbols.add(objects.newInstance(PeExportedSymbol.class, symName, ordinalOrHint));
 					}
 				}
 			}
 
-			symbols.sort(Comparator.comparing(ExportedSymbol::getName));
+			symbols.sort(Comparator.comparing(thiz -> thiz.getName().get()));
 			return new AbiEntry(dllName, objects.newInstance(SharedLibraryAbiModel.class, Collections.unmodifiableList(symbols)));
 		}
 	}

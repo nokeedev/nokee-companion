@@ -2,6 +2,7 @@ package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.api.Project;
 import org.gradle.testfixtures.ProjectBuilder;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -65,7 +66,7 @@ class ElfAbiExtractorIntegrationTests {
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractStaticArchiveReturnsStaticLibraryModel(String arch) throws IOException {
 		AbiEntry entry = extractor.extract(fixture("static-archive/" + arch + "/libstatic.a"));
-		assertThat(entry.model, is(staticLibrary()));
+		assertThat(entry, nullValue());
 	}
 
 	private static Path fixture(String relativePath) {

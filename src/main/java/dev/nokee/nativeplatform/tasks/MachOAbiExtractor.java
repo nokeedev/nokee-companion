@@ -2,7 +2,7 @@ package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.api.model.ObjectFactory;
 
-import java.io.File;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -36,30 +36,30 @@ final class MachOAbiExtractor {
 		this.objects = objects;
 	}
 
-	AbiEntry extract(FileChannel channel, byte[] header, File fallback) throws IOException {
+	public @Nullable AbiEntry extract(FileChannel channel, byte[] header) throws IOException {
 		int m = asInt(header, 0);
 		if (m == 0xCAFEBABE || m == Integer.reverseBytes(0xCAFEBABE)) {
-			return extractFat(channel, fallback);
+			return extractFat(channel);
 		}
-		return extractSlice(channel, 0, header, fallback);
+		return extractSlice(channel, 0, header);
 	}
 
-	private AbiEntry extractFat(FileChannel channel, File fallback) throws IOException {
+	private AbiEntry extractFat(FileChannel channel) throws IOException {
 		ByteBuffer fatHdr = BinaryUtils.readAt(channel, 0, 8);
 		fatHdr.order(ByteOrder.BIG_ENDIAN); // fat binary is always big-endian
 		int nfatArch = fatHdr.getInt(4);
 		if (nfatArch == 0) {
-			return new AbiEntry(null, new UnknownLibraryAbiModel(fallback));
+			return null;
 		}
 		// fat_arch[0]: cputype(4), cpusubtype(4), offset(4), size(4), align(4)
 		ByteBuffer arch0 = BinaryUtils.readAt(channel, 8, 20);
 		arch0.order(ByteOrder.BIG_ENDIAN);
 		long sliceOffset = arch0.getInt(8) & 0xFFFFFFFFL;
 		byte[] sliceHeader = BinaryUtils.readBytes(channel, sliceOffset, 4);
-		return extractSlice(channel, sliceOffset, sliceHeader, fallback);
+		return extractSlice(channel, sliceOffset, sliceHeader);
 	}
 
-	private AbiEntry extractSlice(FileChannel channel, long offset, byte[] header, File fallback) throws IOException {
+	private AbiEntry extractSlice(FileChannel channel, long offset, byte[] header) throws IOException {
 		int m = asInt(header, 0);
 		boolean is64;
 		ByteOrder order;
@@ -68,7 +68,7 @@ final class MachOAbiExtractor {
 			case MH_CIGAM:    is64 = false; order = ByteOrder.LITTLE_ENDIAN; break;
 			case MH_MAGIC_64: is64 = true;  order = ByteOrder.BIG_ENDIAN;    break;
 			case MH_CIGAM_64: is64 = true;  order = ByteOrder.LITTLE_ENDIAN; break;
-			default: return new AbiEntry(null, new UnknownLibraryAbiModel(fallback));
+			default: return null;
 		}
 
 		int hdrSize = is64 ? 32 : 28;
@@ -77,7 +77,7 @@ final class MachOAbiExtractor {
 
 		int filetype = hdr.getInt(12);
 		if (filetype != MH_DYLIB && filetype != MH_DYLIB_STUB) {
-			return new AbiEntry(null, new StaticLibraryAbiModel(fallback));
+			return null;
 		}
 
 		int ncmds = hdr.getInt(16);
@@ -158,11 +158,11 @@ final class MachOAbiExtractor {
 
 			String name = BinaryUtils.readCString(strtab, strx);
 			if (!name.isEmpty()) {
-				result.add(new MachOExportedSymbol(name, (nDesc & N_WEAK_DEF) != 0));
+				result.add(objects.newInstance(MachOExportedSymbol.class, name, (nDesc & N_WEAK_DEF) != 0));
 			}
 		}
 
-		result.sort(Comparator.comparing(ExportedSymbol::getName));
+		result.sort(Comparator.comparing(thiz -> thiz.getName().get()));
 		return Collections.unmodifiableList(result);
 	}
 

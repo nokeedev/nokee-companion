@@ -1,40 +1,32 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 
-import java.io.Serializable;
+import javax.inject.Inject;
 
-final class ElfExportedSymbol implements ExportedSymbol, Serializable {
-	private final String name;
-	private final int binding;
-	private final int type;
-
-	ElfExportedSymbol(String name, int binding, int type) {
-		this.name = name;
-		this.binding = binding;
-		this.type = type;
+abstract /*final*/ class ElfExportedSymbol implements ExportedSymbol {
+	@Inject
+	public ElfExportedSymbol(String name, int binding, int type) {
+		getName().set(name);
+		getBinding().set(binding);
+		getType().set(type);
 	}
 
 	@Override
 	@Input
-	public String getName() {
-		return name;
-	}
+	public abstract Property<String> getName();
 
 	@Input
-	int getBinding() {
-		return binding;
-	}
+	abstract Property<Integer> getBinding();
 
 	@Input
-	int getType() {
-		return type;
-	}
+	abstract Property<Integer> getType();
 
 	@Override
 	public String toString() {
-		return "exported symbol { name: '" + name + "', binding=" + binding +
-			", type=" + type +
+		return "exported symbol { name: '" + getName().get() + "', binding=" + getBinding().get() +
+			", type=" + getType().get() +
 			'}';
 	}
 }
