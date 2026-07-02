@@ -89,9 +89,11 @@ final class MachOAbiExtractor {
 		int iextdefsym = 0, nextdefsym = 0;
 		boolean hasDysymtab = false;
 
+		// Reuse a single buffer for the per-command header peek instead of allocating one per load command.
+		ByteBuffer lc = ByteBuffer.allocate(8);
+		lc.order(order);
 		for (int i = 0; i < ncmds; i++) {
-			ByteBuffer lc = BinaryUtils.readAt(channel, lcOffset, 8);
-			lc.order(order);
+			BinaryUtils.readInto(channel, lcOffset, lc, 8);
 			int cmd = lc.getInt(0);
 			int cmdsize = lc.getInt(4);
 			if (cmdsize <= 0) break;
@@ -141,9 +143,11 @@ final class MachOAbiExtractor {
 		ByteBuffer strtab = BinaryUtils.readAt(channel, stroff, strsize);
 		List<ExportedSymbol> result = new ArrayList<>();
 
+		// Reuse a single nlist-sized buffer across all symbols instead of allocating one per entry.
+		ByteBuffer sym = ByteBuffer.allocate(nlistSize);
+		sym.order(order);
 		for (int i = startSym; i < endSym; i++) {
-			ByteBuffer sym = BinaryUtils.readAt(channel, symoff + (long) i * nlistSize, nlistSize);
-			sym.order(order);
+			BinaryUtils.readInto(channel, symoff + (long) i * nlistSize, sym, nlistSize);
 			int strx = sym.getInt(0);
 			int nType = sym.get(4) & 0xFF;
 			int nDesc = sym.getShort(6) & 0xFFFF;
