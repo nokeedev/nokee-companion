@@ -34,12 +34,11 @@ final class BinaryUtils {
 	}
 
 	static String readCString(ByteBuffer buf, int offset) {
-		StringBuilder sb = new StringBuilder();
-		while (offset < buf.limit()) {
-			byte b = buf.get(offset++);
-			if (b == 0) break;
-			sb.append((char) (b & 0xFF));
+		byte[] b = buf.array();
+		int length = 0;
+		for (int i = offset; i < buf.limit() && b[i] != 0; ++i) {
+			length++;
 		}
-		return sb.toString();
+		return new String(b, offset, length);
 	}
 }
