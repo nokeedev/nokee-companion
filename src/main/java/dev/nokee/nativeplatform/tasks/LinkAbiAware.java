@@ -65,6 +65,8 @@ interface LinkAbiAware extends Task {
 				}
 				return result;
 			}));
+			getLinkLibInputs().finalizeValueOnRead(); // ensure one resolution per snapshot
+			getLinkLibInputs().disallowChanges();
 		}
 
 		@Inject protected abstract ProjectLayout getLayout();
