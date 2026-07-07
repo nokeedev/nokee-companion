@@ -20,7 +20,7 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 	@Inject
 	public LinkAbiCache() {}
 
-	public AbiEntry find(Path path, Callable<AbiEntry> mapper) {
+	public AbiModel find(Path path, Callable<AbiModel> mapper) {
 		return cache.computeIfAbsent(path.toFile(), MapEntry::new).get(mapper);
 	}
 
@@ -32,18 +32,18 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 			this.path = path;
 		}
 
-		synchronized AbiEntry get(Callable<AbiEntry> mapper) {
+		synchronized AbiModel get(Callable<AbiModel> mapper) {
 			try {
 				BasicFileAttributes attributes = Files.getFileAttributeView(path.toPath(), BasicFileAttributeView.class).readAttributes();
 
 				if (ref == null) {
-					AbiEntry result = mapper.call();
+					AbiModel result = mapper.call();
 					ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
 					return result;
 				}
 
 				if (attributes.size() == ref.size && attributes.lastModifiedTime().toMillis() == ref.modtime) {
-					AbiEntry result = ref.get();
+					AbiModel result = ref.get();
 					if (result == null) {
 						result = mapper.call();
 						ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
@@ -52,7 +52,7 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 					return result;
 				}
 
-				AbiEntry result = mapper.call();
+				AbiModel result = mapper.call();
 				ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
 				return result;
 			} catch (Exception e) {
@@ -61,11 +61,11 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 		}
 	}
 
-	private static final class CachedAbiEntry extends SoftReference<AbiEntry> {
+	private static final class CachedAbiEntry extends SoftReference<AbiModel> {
 		private final long size;
 		private final long modtime;
 
-		public CachedAbiEntry(long size, long modtime, AbiEntry entry) {
+		public CachedAbiEntry(long size, long modtime, AbiModel entry) {
 			super(entry);
 			this.size = size;
 			this.modtime = modtime;

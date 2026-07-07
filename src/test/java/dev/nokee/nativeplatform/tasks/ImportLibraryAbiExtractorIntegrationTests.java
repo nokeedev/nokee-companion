@@ -25,18 +25,18 @@ import static org.hamcrest.Matchers.*;
 @Disabled
 class ImportLibraryAbiExtractorIntegrationTests {
 	static DefaultNativeLibraryAbiExtractor extractor;
-	@TempDir static Path tempDir;
+	@TempDir static Path testDirectory;
 
 	@BeforeAll
 	static void setup() {
-		Project project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+		Project project = ProjectBuilder.builder().withProjectDir(testDirectory.toFile()).build();
 		extractor = new DefaultNativeLibraryAbiExtractor(project.getObjects());
 	}
 
 	@Test
 	void extractImportLibraryWithNamedExports() throws IOException {
-		AbiEntry entry = extractor.extract(fixture("named-exports/named.lib"));
-		assertThat(entry.model, is(sharedLibrary(hasItems(
+		AbiModel model = extractor.extract(fixture("named-exports/named.lib"));
+		assertThat(model, is(sharedLibrary(hasItems(
 			namedPeSymbol("compute"),
 			namedPeSymbol("greet"),
 			namedPeSymbol("value")
@@ -45,18 +45,18 @@ class ImportLibraryAbiExtractorIntegrationTests {
 
 	@Test
 	void extractImportLibraryWithNoExports() throws IOException {
-		AbiEntry entry = extractor.extract(fixture("no-exports/no_exports.lib"));
-		assertThat(entry.model, is(emptySharedLibrary()));
+		AbiModel model = extractor.extract(fixture("no-exports/no_exports.lib"));
+		assertThat(model, is(emptySharedLibrary()));
 	}
 
 	@Test
 	void extractImportLibraryWithOrdinalOnlyExports() throws IOException {
-		AbiEntry entry = extractor.extract(fixture("ordinal-only-exports/ordinal.lib"));
-		assertThat(entry.model, is(sharedLibrary(hasItems(
+		AbiModel model = extractor.extract(fixture("ordinal-only-exports/ordinal.lib"));
+		assertThat(model, is(sharedLibrary(hasItems(
 			ordinalOnlyPeSymbol(1),
 			ordinalOnlyPeSymbol(2)
 		))));
-		assertThat(entry.model, is(sharedLibrary(not(hasItem(namedPeSymbol("func_one"))))));
+		assertThat(model, is(sharedLibrary(not(hasItem(namedPeSymbol("func_one"))))));
 	}
 
 	private static Path fixture(String relativePath) {

@@ -7,10 +7,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 final class MachOAbiExtractor {
 	private static final int MH_MAGIC = 0xFEEDFACE;
@@ -36,7 +33,7 @@ final class MachOAbiExtractor {
 		this.objects = objects;
 	}
 
-	public @Nullable AbiEntry extract(FileChannel channel, byte[] header) throws IOException {
+	public @Nullable AbiModel extract(FileChannel channel, byte[] header) throws IOException {
 		int m = asInt(header, 0);
 		if (m == 0xCAFEBABE || m == Integer.reverseBytes(0xCAFEBABE)) {
 			return extractFat(channel);
@@ -44,7 +41,7 @@ final class MachOAbiExtractor {
 		return extractSlice(channel, 0, header);
 	}
 
-	private AbiEntry extractFat(FileChannel channel) throws IOException {
+	private AbiModel extractFat(FileChannel channel) throws IOException {
 		ByteBuffer fatHdr = BinaryUtils.readAt(channel, 0, 8);
 		fatHdr.order(ByteOrder.BIG_ENDIAN); // fat binary is always big-endian
 		int nfatArch = fatHdr.getInt(4);
@@ -59,7 +56,7 @@ final class MachOAbiExtractor {
 		return extractSlice(channel, sliceOffset, sliceHeader);
 	}
 
-	private AbiEntry extractSlice(FileChannel channel, long offset, byte[] header) throws IOException {
+	private AbiModel extractSlice(FileChannel channel, long offset, byte[] header) throws IOException {
 		int m = asInt(header, 0);
 		boolean is64;
 		ByteOrder order;
@@ -130,7 +127,7 @@ final class MachOAbiExtractor {
 				hasDysymtab ? nextdefsym : nsyms);
 		}
 
-		return new AbiEntry(installName, objects.newInstance(SharedLibraryAbiModel.class, symbols));
+		return objects.newInstance(SharedLibraryAbiModel.class, Optional.ofNullable(installName), symbols);
 	}
 
 	private List<ExportedSymbol> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,

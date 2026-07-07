@@ -3,7 +3,6 @@ package dev.nokee.nativeplatform.tasks;
 import org.gradle.api.model.ObjectFactory;
 
 import javax.annotation.Nullable;
-import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
@@ -12,10 +11,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtractor {
 	private static final byte[] ELF_MAGIC = {0x7f, 0x45, 0x4c, 0x46};
@@ -31,7 +27,7 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 		importLibraryExtractor = new ImportLibraryAbiExtractor(objects);
 	}
 
-	public @Nullable AbiEntry extract(Path library) {
+	public @Nullable AbiModel extract(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 			if (channel.size() < 8) {
 				return null;
@@ -129,13 +125,13 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			this.objects = objects;
 		}
 
-		public AbiEntry extract(Path library) throws IOException {
+		public AbiModel extract(Path library) throws IOException {
 			try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 				return parse(channel);
 			}
 		}
 
-		private AbiEntry parse(FileChannel channel) throws IOException {
+		private AbiModel parse(FileChannel channel) throws IOException {
 			long offset = 8; // skip !<arch>\n
 			String dllName = null;
 			List<ExportedSymbol> symbols = new ArrayList<>();
@@ -189,7 +185,7 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			}
 
 			symbols.sort(Comparator.comparing(thiz -> thiz.getName().get()));
-			return new AbiEntry(dllName, objects.newInstance(SharedLibraryAbiModel.class, Collections.unmodifiableList(symbols)));
+			return objects.newInstance(SharedLibraryAbiModel.class, Optional.ofNullable(dllName), Collections.unmodifiableList(symbols));
 		}
 	}
 }

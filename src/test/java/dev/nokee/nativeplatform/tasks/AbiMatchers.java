@@ -8,7 +8,6 @@ import java.util.Collection;
 import java.util.List;
 
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.instanceOf;
 
 final class AbiMatchers {
 	private static final int STB_GLOBAL = 1;

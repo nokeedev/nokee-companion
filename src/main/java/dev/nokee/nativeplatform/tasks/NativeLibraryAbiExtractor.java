@@ -4,5 +4,5 @@ import javax.annotation.Nullable;
 import java.nio.file.Path;
 
 interface NativeLibraryAbiExtractor {
-	@Nullable AbiEntry extract(Path library);
+	@Nullable AbiModel extract(Path library);
 }

@@ -7,10 +7,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 final class ElfAbiExtractor {
 	private static final int ET_DYN = 3;
@@ -27,7 +24,7 @@ final class ElfAbiExtractor {
 		this.objects = objects;
 	}
 
-	public AbiEntry extract(FileChannel channel) throws IOException {
+	public AbiModel extract(FileChannel channel) throws IOException {
 		ByteBuffer ident = BinaryUtils.readAt(channel, 0, 16);
 		boolean is64 = ident.get(4) == 2;
 		ByteOrder order = ident.get(5) == 1 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
@@ -45,7 +42,7 @@ final class ElfAbiExtractor {
 		int shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
 
 		if (shoff == 0 || shnum == 0 || shentsize == 0) {
-			return new AbiEntry(null, objects.newInstance(SharedLibraryAbiModel.class, Collections.emptyList()));
+			return objects.newInstance(SharedLibraryAbiModel.class, Optional.empty(), Collections.emptyList());
 		}
 
 		ByteBuffer shdrs = BinaryUtils.readAt(channel, shoff, shentsize * shnum);
@@ -106,7 +103,7 @@ final class ElfAbiExtractor {
 			symbols = extractSymbols(channel, order, is64, dynsymOff, dynsymSize, dynsymEntsize, dynstrOff, dynstrSize);
 		}
 
-		return new AbiEntry(soname, objects.newInstance(SharedLibraryAbiModel.class, symbols));
+		return objects.newInstance(SharedLibraryAbiModel.class, Optional.ofNullable(soname), symbols);
 	}
 
 	private String extractSoname(FileChannel channel, ByteOrder order, boolean is64,
