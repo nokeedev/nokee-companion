@@ -229,6 +229,36 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@Test
+		void doesNotRelinkWhenLibraryChangeLocationButNotAbi() {
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.subproject("lib", project -> {
+				project.append(groovyDsl("""
+					afterEvaluate {
+						tasks.withType(LinkSharedLibrary).configureEach {
+							installName = linkedFile.get().asFile.name // use non-absolute default value
+						}
+					}
+				"""));
+			});
+
+			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+
+			// relocating a library should not cause a relink
+			build.subproject("lib", project -> {
+				project.append(groovyDsl("""
+					afterEvaluate {
+						tasks.withType(LinkSharedLibrary).configureEach {
+							linkedFile = layout.buildDirectory.file(linkedFile.get().asFile.name) // safe-ish as we are just building one varia
+						}
+					}
+				"""));
+			});
+
+			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+		}
+
+		@Test
 		void relinkWhenStaticLibraryImplementationChanges() {
 			build.subproject("lib", project -> {
 				project.append(groovyDsl("""
