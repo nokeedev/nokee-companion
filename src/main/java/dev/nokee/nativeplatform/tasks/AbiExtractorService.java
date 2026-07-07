@@ -2,7 +2,6 @@ package dev.nokee.nativeplatform.tasks;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.nio.file.Path;
 
 /*private*/ abstract /*final*/ class AbiExtractorService {
 	private final CachingNativeLibraryAbiExtractor extractor;
@@ -13,7 +12,7 @@ import java.nio.file.Path;
 	}
 
 	// File or AbiModel
-	Object extract(File library, Path projectRoot) {
+	Object extract(File library) {
 		AbiModel entry = doExtract(library);
 		if (entry == null) {
 			return library;

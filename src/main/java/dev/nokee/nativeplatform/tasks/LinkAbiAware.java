@@ -3,7 +3,6 @@ package dev.nokee.nativeplatform.tasks;
 import org.gradle.api.Task;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileSystemLocation;
-import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
@@ -15,7 +14,6 @@ import org.gradle.api.tasks.Nested;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -63,11 +61,10 @@ interface LinkAbiAware extends Task {
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
 			getLinkLibInputs().set(getLibs().getElements().map(libsx -> {
-				Path root = getLayout().getProjectDirectory().getAsFile().toPath();
 				AbiExtractorService extractor = getAbiExtractor();
 				List<Object> result = new ArrayList<>();
 				for (FileSystemLocation lib : libsx) {
-					Object entry = extractor.extract(lib.getAsFile(), root);
+					Object entry = extractor.extract(lib.getAsFile());
 					result.add(entry);
 				}
 				return result;
@@ -79,7 +76,6 @@ interface LinkAbiAware extends Task {
 		@Internal
 		public abstract ConfigurableFileCollection getLibs();
 
-		@Inject protected abstract ProjectLayout getLayout();
 		@Inject protected abstract ObjectFactory getObjects();
 
 		private AbiExtractorService getAbiExtractor() {
