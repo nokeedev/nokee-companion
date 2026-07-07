@@ -1,8 +1,11 @@
 package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 
 import javax.annotation.Nullable;
+import javax.inject.Inject;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
@@ -115,7 +118,7 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
 	}
 
-	private static final class ImportLibraryAbiExtractor {
+	static final class ImportLibraryAbiExtractor {
 		// NameType=0 means IMPORT_ORDINAL (no symbol name in data); represented as "#<ordinal>"
 		private static final int IMPORT_ORDINAL = 0;
 
@@ -186,6 +189,21 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 
 			symbols.sort(Comparator.comparing(thiz -> thiz.getName().get()));
 			return objects.newInstance(SharedLibraryAbiModel.class, Optional.ofNullable(dllName), Collections.unmodifiableList(symbols));
+		}
+
+		abstract static /*final*/ class PeExportedSymbol implements ExportedSymbol {
+			@Inject
+			public PeExportedSymbol(String name, int ordinal) {
+				getName().set(name);
+				getOrdinal().set(ordinal);
+			}
+
+			@Override
+			@Input
+			public abstract Property<String> getName();
+
+			@Input
+			abstract Property<Integer> getOrdinal();
 		}
 	}
 }

@@ -1,8 +1,10 @@
 package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 
-import java.io.File;
+import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -162,5 +164,31 @@ final class ElfAbiExtractor {
 
 		result.sort(Comparator.comparing(thiz -> thiz.getName().get()));
 		return Collections.unmodifiableList(result);
+	}
+
+	abstract static /*final*/ class ElfExportedSymbol implements ExportedSymbol {
+		@Inject
+		public ElfExportedSymbol(String name, int binding, int type) {
+			getName().set(name);
+			getBinding().set(binding);
+			getType().set(type);
+		}
+
+		@Override
+		@Input
+		public abstract Property<String> getName();
+
+		@Input
+		abstract Property<Integer> getBinding();
+
+		@Input
+		abstract Property<Integer> getType();
+
+		@Override
+		public String toString() {
+			return "exported symbol { name: '" + getName().get() + "', binding=" + getBinding().get() +
+				", type=" + getType().get() +
+				'}';
+		}
 	}
 }

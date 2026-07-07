@@ -1,8 +1,11 @@
 package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 
 import javax.annotation.Nullable;
+import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -166,5 +169,25 @@ final class MachOAbiExtractor {
 	private static int asInt(byte[] b, int offset) {
 		return ((b[offset] & 0xFF) << 24) | ((b[offset + 1] & 0xFF) << 16)
 			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
+	}
+
+	abstract static /*final*/ class MachOExportedSymbol implements ExportedSymbol {
+		@Inject
+		public MachOExportedSymbol(String name, boolean weak) {
+			getName().set(name);
+			getWeak().set(weak);
+		}
+
+		@Override
+		@Input
+		public abstract Property<String> getName();
+
+		@Input
+		abstract Property<Boolean> getWeak();
+
+		@Override
+		public String toString() {
+			return (getWeak().get() ? "weak " : "") + "exported symbol { name: '" + getName().get() + "' }";
+		}
 	}
 }

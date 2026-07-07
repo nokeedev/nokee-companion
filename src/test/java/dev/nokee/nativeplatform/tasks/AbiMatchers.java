@@ -58,8 +58,8 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol sym) {
-				if (!(sym instanceof ElfExportedSymbol)) return false;
-				ElfExportedSymbol elf = (ElfExportedSymbol) sym;
+				if (!(sym instanceof ElfAbiExtractor.ElfExportedSymbol)) return false;
+				ElfAbiExtractor.ElfExportedSymbol elf = (ElfAbiExtractor.ElfExportedSymbol) sym;
 				return name.equals(elf.getName().get()) && elf.getBinding().get() == binding;
 			}
 
@@ -82,8 +82,8 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol sym) {
-				if (!(sym instanceof MachOExportedSymbol)) return false;
-				MachOExportedSymbol macho = (MachOExportedSymbol) sym;
+				if (!(sym instanceof MachOAbiExtractor.MachOExportedSymbol)) return false;
+				MachOAbiExtractor.MachOExportedSymbol macho = (MachOAbiExtractor.MachOExportedSymbol) sym;
 				return name.equals(macho.getName().get()) && macho.getWeak().get() == weak;
 			}
 
@@ -98,7 +98,7 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol sym) {
-				return sym instanceof PeExportedSymbol && name.equals(sym.getName().get());
+				return sym instanceof DefaultNativeLibraryAbiExtractor.ImportLibraryAbiExtractor.PeExportedSymbol && name.equals(sym.getName().get());
 			}
 
 			@Override
