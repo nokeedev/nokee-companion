@@ -3,6 +3,8 @@ package dev.nokee.companion.util;
 import dev.nokee.commons.gradle.tasks.options.SourceOptions;
 import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
+import dev.nokee.nativeplatform.tasks.LinkTask;
+import dev.nokee.nativeplatform.tasks.TaskSpecificProvider;
 import org.gradle.api.Action;
 import org.gradle.api.Task;
 import org.gradle.api.Transformer;
@@ -17,6 +19,7 @@ import org.gradle.nativeplatform.toolchain.VisualCpp;
 import org.gradle.process.CommandLineArgumentProvider;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +73,10 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 			((LinkSharedLibrary) task).getInstallName().convention(other.flatMap(this::toInstallName));
 			// WARNING: User must set LinkSharedLibrary#getImportLibrary()
 		}
+
+		if (task instanceof LinkTask) {
+			((LinkTask) task).getOptions().getLinkerArgumentProviders().addAll(other.flatMap(this::toLinkerArgumentProviders).orElse(emptyList()));
+		}
 	}
 
 	private static Transformer<Provider<List<String>>, AbstractLinkTask> withoutOverlinkingAvoidanceArgs(Transformer<Provider<List<String>>, AbstractLinkTask> mapper) {
@@ -94,6 +101,27 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 		} else {
 			return null;
 		}
+	}
+
+	private @Nullable Provider<List<CommandLineArgumentProvider>> toLinkerArgumentProviders(AbstractLinkTask task) {
+		if (task instanceof LinkTask) {
+			return ((LinkTask) task).getOptions().getLinkerArgumentProviders().map(withoutOwnerSpecificProviders());
+			// WARNING: User must add any TaskSpecificProvider
+		} else {
+			return null; // nothing to map
+		}
+	}
+
+	private static Transformer<List<CommandLineArgumentProvider>, List<CommandLineArgumentProvider>> withoutOwnerSpecificProviders() {
+		return argProviders -> {
+			List<CommandLineArgumentProvider> result = new ArrayList<>();
+			for (CommandLineArgumentProvider argProvider : argProviders) {
+				if (!(argProvider instanceof TaskSpecificProvider)) {
+					result.add(argProvider);
+				}
+			}
+			return result;
+		};
 	}
 
 	private void doExecute(AbstractNativeCompileTask task, Provider<? extends AbstractNativeCompileTask> other) {
@@ -167,7 +195,8 @@ public class CopyFromAction<T extends Task> implements Action<T> {
 
 	private @Nullable Provider<List<CommandLineArgumentProvider>> toCompilerArgumentProviders(AbstractNativeCompileTask task) {
 		if (task instanceof CppCompile) {
-			return ((CppCompile) task).getOptions().getCompilerArgumentProviders();
+			return ((CppCompile) task).getOptions().getCompilerArgumentProviders().map(withoutOwnerSpecificProviders());
+			// WARNING: User must add any TaskSpecificProvider
 		} else {
 			return null; // nothing to map
 		}
