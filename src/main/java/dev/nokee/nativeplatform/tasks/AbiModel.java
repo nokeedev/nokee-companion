@@ -1,4 +1,6 @@
 package dev.nokee.nativeplatform.tasks;
 
-interface AbiModel {
+import java.io.Serializable;
+
+interface AbiModel extends Serializable {
 }

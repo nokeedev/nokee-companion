@@ -1,11 +1,8 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.api.Project;
-import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -25,12 +22,10 @@ import static org.hamcrest.Matchers.*;
 @Disabled
 class ImportLibraryAbiExtractorIntegrationTests {
 	static DefaultNativeLibraryAbiExtractor extractor;
-	@TempDir static Path testDirectory;
 
 	@BeforeAll
 	static void setup() {
-		Project project = ProjectBuilder.builder().withProjectDir(testDirectory.toFile()).build();
-		extractor = new DefaultNativeLibraryAbiExtractor(project.getObjects());
+		extractor = new DefaultNativeLibraryAbiExtractor();
 	}
 
 	@Test

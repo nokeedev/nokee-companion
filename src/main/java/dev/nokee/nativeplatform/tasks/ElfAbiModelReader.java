@@ -1,17 +1,12 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.Property;
-import org.gradle.api.tasks.Input;
-
-import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.util.*;
 
-final class ElfAbiExtractor {
+final class ElfAbiModelReader implements AbiModelReader {
 	private static final int ET_DYN = 3;
 	private static final int SHT_DYNAMIC = 6;
 	private static final int SHT_DYNSYM = 11;
@@ -20,14 +15,18 @@ final class ElfAbiExtractor {
 	private static final int STB_GLOBAL = 1;
 	private static final int STB_WEAK = 2;
 	private static final int SHN_UNDEF = 0;
-	private final ObjectFactory objects;
+	private final FileChannel channel;
 
-	public ElfAbiExtractor(ObjectFactory objects) {
-		this.objects = objects;
+	ElfAbiModelReader(FileChannel channel) {
+		this.channel = channel;
 	}
 
-	public AbiModel extract(FileChannel channel) throws IOException {
+	@Override
+	public AbiModel read() throws IOException {
 		ByteBuffer ident = BinaryUtils.readAt(channel, 0, 16);
+		if (!(ident.get(0) == 0x7f && ident.get(1) == 0x45 && ident.get(2) == 0x4c && ident.get(3) == 0x46)) {
+			throw new IllegalArgumentException("not an ELF file");
+		}
 		boolean is64 = ident.get(4) == 2;
 		ByteOrder order = ident.get(5) == 1 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 
@@ -36,7 +35,7 @@ final class ElfAbiExtractor {
 
 		int eType = hdr.getShort(16) & 0xFFFF;
 		if (eType != ET_DYN) {
-			return null;
+			throw new NotASharedLibraryException("ELF file is not a shared library (e_type=" + eType + ")");
 		}
 
 		long shoff = is64 ? hdr.getLong(40) : (hdr.getInt(32) & 0xFFFFFFFFL);
@@ -44,7 +43,7 @@ final class ElfAbiExtractor {
 		int shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
 
 		if (shoff == 0 || shnum == 0 || shentsize == 0) {
-			return objects.newInstance(SharedLibraryAbiModel.class, Optional.empty(), Collections.emptyList());
+			return new SharedLibraryAbiModel(null, Collections.emptyList());
 		}
 
 		ByteBuffer shdrs = BinaryUtils.readAt(channel, shoff, shentsize * shnum);
@@ -105,7 +104,7 @@ final class ElfAbiExtractor {
 			symbols = extractSymbols(channel, order, is64, dynsymOff, dynsymSize, dynsymEntsize, dynstrOff, dynstrSize);
 		}
 
-		return objects.newInstance(SharedLibraryAbiModel.class, Optional.ofNullable(soname), symbols);
+		return new SharedLibraryAbiModel(soname, symbols);
 	}
 
 	private String extractSoname(FileChannel channel, ByteOrder order, boolean is64,
@@ -157,38 +156,56 @@ final class ElfAbiExtractor {
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
 				String name = BinaryUtils.readCString(strtab, stName);
 				if (!name.isEmpty()) {
-					result.add(objects.newInstance(ElfExportedSymbol.class, name, binding, type));
+					result.add(new ElfExportedSymbol(name, binding, type));
 				}
 			}
 		}
 
-		result.sort(Comparator.comparing(thiz -> thiz.getName().get()));
+		result.sort(Comparator.comparing(ExportedSymbol::getName));
 		return Collections.unmodifiableList(result);
 	}
 
-	abstract static /*final*/ class ElfExportedSymbol implements ExportedSymbol {
-		@Inject
-		public ElfExportedSymbol(String name, int binding, int type) {
-			getName().set(name);
-			getBinding().set(binding);
-			getType().set(type);
+	static final class ElfExportedSymbol implements ExportedSymbol {
+		private static final long serialVersionUID = 1L;
+		private final String name;
+		private final int binding;
+		private final int type;
+
+		ElfExportedSymbol(String name, int binding, int type) {
+			this.name = name;
+			this.binding = binding;
+			this.type = type;
 		}
 
 		@Override
-		@Input
-		public abstract Property<String> getName();
+		public String getName() {
+			return name;
+		}
 
-		@Input
-		abstract Property<Integer> getBinding();
+		int getBinding() {
+			return binding;
+		}
 
-		@Input
-		abstract Property<Integer> getType();
+		int getType() {
+			return type;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			ElfExportedSymbol that = (ElfExportedSymbol) o;
+			return binding == that.binding && type == that.type && name.equals(that.name);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(name, binding, type);
+		}
 
 		@Override
 		public String toString() {
-			return "exported symbol { name: '" + getName().get() + "', binding=" + getBinding().get() +
-				", type=" + getType().get() +
-				'}';
+			return "exported symbol { name: '" + name + "', binding=" + binding + ", type=" + type + '}';
 		}
 	}
 }

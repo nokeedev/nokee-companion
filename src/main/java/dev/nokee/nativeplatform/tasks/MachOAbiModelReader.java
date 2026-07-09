@@ -1,22 +1,17 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.Property;
-import org.gradle.api.tasks.Input;
-
-import javax.annotation.Nullable;
-import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.util.*;
 
-final class MachOAbiExtractor {
+final class MachOAbiModelReader implements AbiModelReader {
 	private static final int MH_MAGIC = 0xFEEDFACE;
 	private static final int MH_CIGAM = 0xCEFAEDFE;
 	private static final int MH_MAGIC_64 = 0xFEEDFACF;
 	private static final int MH_CIGAM_64 = 0xCFFAEDFE;
+	private static final int FAT_MAGIC = 0xCAFEBABE;
 
 	private static final int MH_DYLIB = 6;
 	private static final int MH_DYLIB_STUB = 9;
@@ -30,36 +25,46 @@ final class MachOAbiExtractor {
 	private static final int N_TYPE = 0x0e;
 	private static final int N_UNDF = 0x00;
 	private static final int N_WEAK_DEF = 0x0080;
-	private final ObjectFactory objects;
+	private final FileChannel channel;
 
-	public MachOAbiExtractor(ObjectFactory objects) {
-		this.objects = objects;
+	MachOAbiModelReader(FileChannel channel) {
+		this.channel = channel;
 	}
 
-	public @Nullable AbiModel extract(FileChannel channel, byte[] header) throws IOException {
+	@Override
+	public AbiModel read() throws IOException {
+		byte[] header = BinaryUtils.readBytes(channel, 0, 4);
 		int m = asInt(header, 0);
-		if (m == 0xCAFEBABE || m == Integer.reverseBytes(0xCAFEBABE)) {
-			return extractFat(channel);
+		if (!isMachOMagic(m)) {
+			throw new IllegalArgumentException("not a Mach-O file");
 		}
-		return extractSlice(channel, 0, header);
+		if (m == FAT_MAGIC || m == Integer.reverseBytes(FAT_MAGIC)) {
+			return extractFat();
+		}
+		return extractSlice(0, header);
 	}
 
-	private AbiModel extractFat(FileChannel channel) throws IOException {
+	private static boolean isMachOMagic(int m) {
+		return m == MH_MAGIC || m == MH_CIGAM || m == MH_MAGIC_64 || m == MH_CIGAM_64
+			|| m == FAT_MAGIC || m == Integer.reverseBytes(FAT_MAGIC);
+	}
+
+	private AbiModel extractFat() throws IOException {
 		ByteBuffer fatHdr = BinaryUtils.readAt(channel, 0, 8);
 		fatHdr.order(ByteOrder.BIG_ENDIAN); // fat binary is always big-endian
 		int nfatArch = fatHdr.getInt(4);
 		if (nfatArch == 0) {
-			return null;
+			throw new NotASharedLibraryException("Mach-O fat binary has no architectures");
 		}
 		// fat_arch[0]: cputype(4), cpusubtype(4), offset(4), size(4), align(4)
 		ByteBuffer arch0 = BinaryUtils.readAt(channel, 8, 20);
 		arch0.order(ByteOrder.BIG_ENDIAN);
 		long sliceOffset = arch0.getInt(8) & 0xFFFFFFFFL;
 		byte[] sliceHeader = BinaryUtils.readBytes(channel, sliceOffset, 4);
-		return extractSlice(channel, sliceOffset, sliceHeader);
+		return extractSlice(sliceOffset, sliceHeader);
 	}
 
-	private AbiModel extractSlice(FileChannel channel, long offset, byte[] header) throws IOException {
+	private AbiModel extractSlice(long offset, byte[] header) throws IOException {
 		int m = asInt(header, 0);
 		boolean is64;
 		ByteOrder order;
@@ -68,7 +73,7 @@ final class MachOAbiExtractor {
 			case MH_CIGAM:    is64 = false; order = ByteOrder.LITTLE_ENDIAN; break;
 			case MH_MAGIC_64: is64 = true;  order = ByteOrder.BIG_ENDIAN;    break;
 			case MH_CIGAM_64: is64 = true;  order = ByteOrder.LITTLE_ENDIAN; break;
-			default: return null;
+			default: throw new NotASharedLibraryException("unknown Mach-O slice magic");
 		}
 
 		int hdrSize = is64 ? 32 : 28;
@@ -77,7 +82,7 @@ final class MachOAbiExtractor {
 
 		int filetype = hdr.getInt(12);
 		if (filetype != MH_DYLIB && filetype != MH_DYLIB_STUB) {
-			return null;
+			throw new NotASharedLibraryException("Mach-O file is not a dylib (filetype=" + filetype + ")");
 		}
 
 		int ncmds = hdr.getInt(16);
@@ -130,7 +135,7 @@ final class MachOAbiExtractor {
 				hasDysymtab ? nextdefsym : nsyms);
 		}
 
-		return objects.newInstance(SharedLibraryAbiModel.class, Optional.ofNullable(installName), symbols);
+		return new SharedLibraryAbiModel(installName, symbols);
 	}
 
 	private List<ExportedSymbol> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
@@ -158,11 +163,11 @@ final class MachOAbiExtractor {
 
 			String name = BinaryUtils.readCString(strtab, strx);
 			if (!name.isEmpty()) {
-				result.add(objects.newInstance(MachOExportedSymbol.class, name, (nDesc & N_WEAK_DEF) != 0));
+				result.add(new MachOExportedSymbol(name, (nDesc & N_WEAK_DEF) != 0));
 			}
 		}
 
-		result.sort(Comparator.comparing(thiz -> thiz.getName().get()));
+		result.sort(Comparator.comparing(ExportedSymbol::getName));
 		return Collections.unmodifiableList(result);
 	}
 
@@ -171,23 +176,41 @@ final class MachOAbiExtractor {
 			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
 	}
 
-	abstract static /*final*/ class MachOExportedSymbol implements ExportedSymbol {
-		@Inject
-		public MachOExportedSymbol(String name, boolean weak) {
-			getName().set(name);
-			getWeak().set(weak);
+	static final class MachOExportedSymbol implements ExportedSymbol {
+		private static final long serialVersionUID = 1L;
+		private final String name;
+		private final boolean weak;
+
+		MachOExportedSymbol(String name, boolean weak) {
+			this.name = name;
+			this.weak = weak;
 		}
 
 		@Override
-		@Input
-		public abstract Property<String> getName();
+		public String getName() {
+			return name;
+		}
 
-		@Input
-		abstract Property<Boolean> getWeak();
+		boolean getWeak() {
+			return weak;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			MachOExportedSymbol that = (MachOExportedSymbol) o;
+			return weak == that.weak && name.equals(that.name);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(name, weak);
+		}
 
 		@Override
 		public String toString() {
-			return (getWeak().get() ? "weak " : "") + "exported symbol { name: '" + getName().get() + "' }";
+			return (weak ? "weak " : "") + "exported symbol { name: '" + name + "' }";
 		}
 	}
 }

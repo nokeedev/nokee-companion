@@ -1,30 +1,43 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.api.provider.ListProperty;
-import org.gradle.api.provider.Property;
-import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.Nested;
-import org.gradle.api.tasks.Optional;
-
-import javax.inject.Inject;
+import javax.annotation.Nullable;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
-abstract /*final*/ class SharedLibraryAbiModel implements AbiModel {
-	@Inject
-	public SharedLibraryAbiModel(java.util.Optional<String> soname, List<ExportedSymbol> exportedSymbols) {
-		getSoname().set(soname.orElse(null));
-		getExportedSymbols().set(exportedSymbols);
+final class SharedLibraryAbiModel implements AbiModel {
+	private static final long serialVersionUID = 1L;
+	private final String soname; // nullable
+	private final List<ExportedSymbol> exportedSymbols;
+
+	SharedLibraryAbiModel(@Nullable String soname, List<ExportedSymbol> exportedSymbols) {
+		this.soname = soname;
+		this.exportedSymbols = exportedSymbols;
 	}
 
-	@Input
-	@Optional
-	abstract Property<String> getSoname();
+	Optional<String> getSoname() {
+		return Optional.ofNullable(soname);
+	}
 
-	@Nested
-	abstract ListProperty<ExportedSymbol> getExportedSymbols();
+	List<ExportedSymbol> getExportedSymbols() {
+		return exportedSymbols;
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		SharedLibraryAbiModel that = (SharedLibraryAbiModel) o;
+		return Objects.equals(soname, that.soname) && exportedSymbols.equals(that.exportedSymbols);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(soname, exportedSymbols);
+	}
 
 	@Override
 	public String toString() {
-		return "shared lib " + getExportedSymbols().get();
+		return "shared lib " + exportedSymbols;
 	}
 }

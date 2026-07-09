@@ -1,7 +1,7 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.api.provider.Provider;
+import java.io.Serializable;
 
-interface ExportedSymbol {
-	Provider<String> getName();
+interface ExportedSymbol extends Serializable {
+	String getName();
 }

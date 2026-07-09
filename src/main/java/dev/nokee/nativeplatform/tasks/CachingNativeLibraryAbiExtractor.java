@@ -1,7 +1,5 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.api.model.ObjectFactory;
-
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.nio.file.Path;
@@ -11,9 +9,9 @@ abstract /*final*/ class CachingNativeLibraryAbiExtractor implements NativeLibra
 	private final DefaultNativeLibraryAbiExtractor extractor;
 
 	@Inject
-	public CachingNativeLibraryAbiExtractor(LinkAbiCache cache, ObjectFactory objects) {
+	public CachingNativeLibraryAbiExtractor(LinkAbiCache cache) {
 		this.cache = cache;
-		this.extractor = new DefaultNativeLibraryAbiExtractor(objects);
+		this.extractor = new DefaultNativeLibraryAbiExtractor();
 	}
 
 	public @Nullable AbiModel extract(Path library) {

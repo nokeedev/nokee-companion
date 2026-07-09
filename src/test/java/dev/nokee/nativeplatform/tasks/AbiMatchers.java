@@ -20,7 +20,7 @@ final class AbiMatchers {
 			@Override
 			protected boolean matchesSafely(AbiModel model) {
 				if (!(model instanceof SharedLibraryAbiModel)) return false;
-				return symbolsMatcher.matches(((SharedLibraryAbiModel) model).getExportedSymbols().get());
+				return symbolsMatcher.matches(((SharedLibraryAbiModel) model).getExportedSymbols());
 			}
 
 			@Override
@@ -33,7 +33,7 @@ final class AbiMatchers {
 				if (!(model instanceof SharedLibraryAbiModel)) {
 					description.appendText("was ").appendValue(model.getClass().getSimpleName());
 				} else {
-					List<? extends ExportedSymbol> symbols = ((SharedLibraryAbiModel) model).getExportedSymbols().get();
+					List<? extends ExportedSymbol> symbols = ((SharedLibraryAbiModel) model).getExportedSymbols();
 					description.appendText("exported symbols ");
 					symbolsMatcher.describeMismatch(symbols, description);
 				}
@@ -58,9 +58,9 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol sym) {
-				if (!(sym instanceof ElfAbiExtractor.ElfExportedSymbol)) return false;
-				ElfAbiExtractor.ElfExportedSymbol elf = (ElfAbiExtractor.ElfExportedSymbol) sym;
-				return name.equals(elf.getName().get()) && elf.getBinding().get() == binding;
+				if (!(sym instanceof ElfAbiModelReader.ElfExportedSymbol)) return false;
+				ElfAbiModelReader.ElfExportedSymbol elf = (ElfAbiModelReader.ElfExportedSymbol) sym;
+				return name.equals(elf.getName()) && elf.getBinding() == binding;
 			}
 
 			@Override
@@ -82,9 +82,9 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol sym) {
-				if (!(sym instanceof MachOAbiExtractor.MachOExportedSymbol)) return false;
-				MachOAbiExtractor.MachOExportedSymbol macho = (MachOAbiExtractor.MachOExportedSymbol) sym;
-				return name.equals(macho.getName().get()) && macho.getWeak().get() == weak;
+				if (!(sym instanceof MachOAbiModelReader.MachOExportedSymbol)) return false;
+				MachOAbiModelReader.MachOExportedSymbol macho = (MachOAbiModelReader.MachOExportedSymbol) sym;
+				return name.equals(macho.getName()) && macho.getWeak() == weak;
 			}
 
 			@Override
@@ -98,7 +98,7 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol sym) {
-				return sym instanceof DefaultNativeLibraryAbiExtractor.ImportLibraryAbiExtractor.PeExportedSymbol && name.equals(sym.getName().get());
+				return sym instanceof ImportLibraryAbiModelReader.PeExportedSymbol && name.equals(sym.getName());
 			}
 
 			@Override
