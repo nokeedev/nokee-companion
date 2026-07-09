@@ -20,7 +20,7 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 	@Inject
 	public LinkAbiCache() {}
 
-	public AbiModel find(Path path, Callable<AbiModel> mapper) {
+	public Object find(Path path, Callable<Object> mapper) {
 		return cache.computeIfAbsent(path.toFile(), MapEntry::new).get(mapper);
 	}
 
@@ -32,18 +32,18 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 			this.path = path;
 		}
 
-		synchronized AbiModel get(Callable<AbiModel> mapper) {
+		synchronized Object get(Callable<Object> mapper) {
 			try {
 				BasicFileAttributes attributes = Files.getFileAttributeView(path.toPath(), BasicFileAttributeView.class).readAttributes();
 
 				if (ref == null) {
-					AbiModel result = mapper.call();
+					Object result = mapper.call();
 					ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
 					return result;
 				}
 
 				if (attributes.size() == ref.size && attributes.lastModifiedTime().toMillis() == ref.modtime) {
-					AbiModel result = ref.get();
+					Object result = ref.get();
 					if (result == null) {
 						result = mapper.call();
 						ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
@@ -52,7 +52,7 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 					return result;
 				}
 
-				AbiModel result = mapper.call();
+				Object result = mapper.call();
 				ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
 				return result;
 			} catch (Exception e) {
@@ -61,11 +61,11 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 		}
 	}
 
-	private static final class CachedAbiEntry extends SoftReference<AbiModel> {
+	private static final class CachedAbiEntry extends SoftReference<Object> {
 		private final long size;
 		private final long modtime;
 
-		public CachedAbiEntry(long size, long modtime, AbiModel entry) {
+		public CachedAbiEntry(long size, long modtime, Object entry) {
 			super(entry);
 			this.size = size;
 			this.modtime = modtime;

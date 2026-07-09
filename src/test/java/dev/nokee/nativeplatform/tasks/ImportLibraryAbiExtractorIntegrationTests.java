@@ -1,10 +1,10 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -21,16 +21,15 @@ import static org.hamcrest.Matchers.*;
  */
 @Disabled
 class ImportLibraryAbiExtractorIntegrationTests {
-	static DefaultNativeLibraryAbiExtractor extractor;
-
-	@BeforeAll
-	static void setup() {
-		extractor = new DefaultNativeLibraryAbiExtractor();
+	private static AbiModel extract(Path path) throws IOException {
+		try (ImportLibraryAbiModelReader reader = new ImportLibraryAbiModelReader(FileChannel.open(path))) {
+			return reader.read();
+		}
 	}
 
 	@Test
 	void extractImportLibraryWithNamedExports() throws IOException {
-		AbiModel model = extractor.extract(fixture("named-exports/named.lib"));
+		AbiModel model = extract(fixture("named-exports/named.lib"));
 		assertThat(model, is(sharedLibrary(hasItems(
 			namedPeSymbol("compute"),
 			namedPeSymbol("greet"),
@@ -40,13 +39,13 @@ class ImportLibraryAbiExtractorIntegrationTests {
 
 	@Test
 	void extractImportLibraryWithNoExports() throws IOException {
-		AbiModel model = extractor.extract(fixture("no-exports/no_exports.lib"));
+		AbiModel model = extract(fixture("no-exports/no_exports.lib"));
 		assertThat(model, is(emptySharedLibrary()));
 	}
 
 	@Test
 	void extractImportLibraryWithOrdinalOnlyExports() throws IOException {
-		AbiModel model = extractor.extract(fixture("ordinal-only-exports/ordinal.lib"));
+		AbiModel model = extract(fixture("ordinal-only-exports/ordinal.lib"));
 		assertThat(model, is(sharedLibrary(hasItems(
 			ordinalOnlyPeSymbol(1),
 			ordinalOnlyPeSymbol(2)

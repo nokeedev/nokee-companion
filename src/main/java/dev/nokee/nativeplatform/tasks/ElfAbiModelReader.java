@@ -6,7 +6,7 @@ import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.util.*;
 
-final class ElfAbiModelReader implements AbiModelReader {
+final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int ET_DYN = 3;
 	private static final int SHT_DYNAMIC = 6;
 	private static final int SHT_DYNSYM = 11;
@@ -163,6 +163,11 @@ final class ElfAbiModelReader implements AbiModelReader {
 
 		result.sort(Comparator.comparing(ExportedSymbol::getName));
 		return Collections.unmodifiableList(result);
+	}
+
+	@Override
+	public void close() throws IOException {
+		channel.close();
 	}
 
 	static final class ElfExportedSymbol implements ExportedSymbol {

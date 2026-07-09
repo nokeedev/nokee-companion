@@ -7,7 +7,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-final class ImportLibraryAbiModelReader implements AbiModelReader {
+final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
 	// NameType=0 means IMPORT_ORDINAL (no symbol name in data); represented as "#<ordinal>"
 	private static final int IMPORT_ORDINAL = 0;
@@ -130,6 +130,11 @@ final class ImportLibraryAbiModelReader implements AbiModelReader {
 		} catch (NumberFormatException e) {
 			return -1;
 		}
+	}
+
+	@Override
+	public void close() throws IOException {
+		channel.close();
 	}
 
 	static final class PeExportedSymbol implements ExportedSymbol {

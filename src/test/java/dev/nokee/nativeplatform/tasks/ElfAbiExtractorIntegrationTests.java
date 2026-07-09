@@ -1,13 +1,14 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static dev.nokee.commons.hamcrest.gradle.ThrowableMatchers.throwsException;
 import static dev.nokee.nativeplatform.tasks.AbiMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -19,17 +20,16 @@ import static org.hamcrest.Matchers.*;
  * fixture directory's BUILD file for the commands to produce them.
  */
 class ElfAbiExtractorIntegrationTests {
-	static DefaultNativeLibraryAbiExtractor extractor;
-
-	@BeforeAll
-	static void setup() {
-		extractor = new DefaultNativeLibraryAbiExtractor();
+	private static AbiModel extract(Path path) throws IOException {
+		try (ElfAbiModelReader reader = new ElfAbiModelReader(FileChannel.open(path))) {
+			return reader.read();
+		}
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryWithNamedExports(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("named-exports/" + arch + "/libnamed.so"));
+		AbiModel model = extract(fixture("named-exports/" + arch + "/libnamed.so"));
 		assertThat(model, is(sharedLibrary(hasItems(
 			strongElfSymbol("compute"),
 			strongElfSymbol("greet"),
@@ -40,14 +40,14 @@ class ElfAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryWithNoExports(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("no-exports/" + arch + "/libno_exports.so"));
+		AbiModel model = extract(fixture("no-exports/" + arch + "/libno_exports.so"));
 		assertThat(model, is(emptySharedLibrary()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("weak-symbols/" + arch + "/libweak.so"));
+		AbiModel model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
 		assertThat(model, is(sharedLibrary(hasItems(
 			strongElfSymbol("strong_func"),
 			strongElfSymbol("strong_var"),
@@ -59,8 +59,7 @@ class ElfAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractStaticArchiveReturnsStaticLibraryModel(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("static-archive/" + arch + "/libstatic.a"));
-		assertThat(model, nullValue());
+		assertThat(() -> extract(fixture("static-archive/" + arch + "/libstatic.a")), throwsException(instanceOf(IllegalArgumentException.class)));
 	}
 
 	private static Path fixture(String relativePath) {

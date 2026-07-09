@@ -6,7 +6,7 @@ import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.util.*;
 
-final class MachOAbiModelReader implements AbiModelReader {
+final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int MH_MAGIC = 0xFEEDFACE;
 	private static final int MH_CIGAM = 0xCEFAEDFE;
 	private static final int MH_MAGIC_64 = 0xFEEDFACF;
@@ -174,6 +174,11 @@ final class MachOAbiModelReader implements AbiModelReader {
 	private static int asInt(byte[] b, int offset) {
 		return ((b[offset] & 0xFF) << 24) | ((b[offset + 1] & 0xFF) << 16)
 			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
+	}
+
+	@Override
+	public void close() throws IOException {
+		channel.close();
 	}
 
 	static final class MachOExportedSymbol implements ExportedSymbol {

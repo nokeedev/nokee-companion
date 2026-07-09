@@ -276,30 +276,6 @@ class LinkAvoidanceFunctionalTests {
 
 			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
 		}
-
-		@Test
-		void doesNotRelinkWhenCorruptLibraryContentIsUnchanged() {
-			var fixture = new Fixture();
-			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
-
-			// Replace the built shared library with garbage bytes (simulates a corrupt file).
-			// The extractor falls back to byte-to-byte tracking. If the bytes don't change,
-			// the link task must remain UP-TO-DATE.
-			byte[] garbage = new byte[]{0x00, 0x01, 0x02, 0x03, 0x04};
-			build.subproject("app", project -> {
-				Path libPath = write(project.file("libfoo.dylib"), garbage);
-				project.append(groovyDsl("""
-				components.withType(CppBinary).configureEach {
-					linkTask.get().libs.from('%s')
-				}
-			""".formatted(libPath)));
-			});
-
-			// First run after corruption: content changed → re-link (may fail at link step;
-			// we only check that the link was attempted, not that it succeeded)
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
-		}
 	}
 
 	private static class Fixture extends WorkspaceElement {

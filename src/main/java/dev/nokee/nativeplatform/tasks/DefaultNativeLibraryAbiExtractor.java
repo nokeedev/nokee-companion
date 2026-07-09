@@ -11,10 +11,10 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 	private static final byte[] ELF_MAGIC = {0x7f, 0x45, 0x4c, 0x46};
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
 
-	public @Nullable AbiModel extract(Path library) {
+	public Object extract(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 			if (channel.size() < 8) {
-				return null;
+				return library;
 			}
 			byte[] header = BinaryUtils.readBytes(channel, 0, 8);
 
@@ -26,12 +26,12 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			} else if (isArMagic(header)) {
 				reader = new ImportLibraryAbiModelReader(channel);
 			} else {
-				return null;
+				return library;
 			}
 
 			return reader.read();
 		} catch (NotASharedLibraryException e) {
-			return null;
+			return library;
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}

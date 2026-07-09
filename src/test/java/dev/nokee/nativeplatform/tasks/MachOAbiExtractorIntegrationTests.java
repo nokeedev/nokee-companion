@@ -1,13 +1,15 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.junit.jupiter.api.BeforeAll;
+import dev.nokee.commons.hamcrest.gradle.ThrowableMatchers;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static dev.nokee.commons.hamcrest.gradle.ThrowableMatchers.throwsException;
 import static dev.nokee.nativeplatform.tasks.AbiMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -19,17 +21,16 @@ import static org.hamcrest.Matchers.*;
  * fixture directory's BUILD file for the commands to produce them.
  */
 class MachOAbiExtractorIntegrationTests {
-	static DefaultNativeLibraryAbiExtractor extractor;
-
-	@BeforeAll
-	static void setup() {
-		extractor = new DefaultNativeLibraryAbiExtractor();
+	private static AbiModel extract(Path path) throws IOException {
+		try (MachOAbiModelReader reader = new MachOAbiModelReader(FileChannel.open(path))) {
+			return reader.read();
+		}
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibWithNamedExports(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
+		AbiModel model = extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
 		assertThat(model, is(sharedLibrary(hasItems(
 			strongMachOSymbol("_compute"),
 			strongMachOSymbol("_greet"),
@@ -40,14 +41,14 @@ class MachOAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibWithNoExports(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("no-exports/" + arch + "/libno_exports.dylib"));
+		AbiModel model = extract(fixture("no-exports/" + arch + "/libno_exports.dylib"));
 		assertThat(model, is(emptySharedLibrary()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
+		AbiModel model = extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
 		assertThat(model, is(sharedLibrary(hasItems(
 			strongMachOSymbol("_strong_func"),
 			strongMachOSymbol("_strong_var"),
@@ -59,8 +60,7 @@ class MachOAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractStaticArchiveReturnsStaticLibraryModel(String arch) throws IOException {
-		AbiModel model = extractor.extract(fixture("static-archive/" + arch + "/libstatic.a"));
-		assertThat(model, nullValue());
+		assertThat(() -> extract(fixture("static-archive/" + arch + "/libstatic.a")), throwsException(instanceOf(IllegalArgumentException.class)));
 	}
 
 	private static Path fixture(String relativePath) {
