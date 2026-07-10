@@ -13,19 +13,6 @@ import java.io.File;
 
 	// File or AbiModel
 	Object extract(File library) {
-		Object entry = doExtract(library);
-		if (entry == null) {
-			return library;
-		} else {
-			return entry;
-		}
-	}
-
-	private Object doExtract(File library) {
-		try {
-			return extractor.extract(library.toPath());
-		} catch (Exception ignored) {
-			return null;
-		}
+		return extractor.extract(library.toPath());
 	}
 }
