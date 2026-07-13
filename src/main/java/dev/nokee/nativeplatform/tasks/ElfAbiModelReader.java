@@ -151,12 +151,11 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 			}
 
 			int binding = stInfo >> 4;
-			int type = stInfo & 0xF;
 
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
 				String name = BinaryUtils.readCString(strtab, stName);
 				if (!name.isEmpty()) {
-					result.add(new ElfExportedSymbol(name, binding, type));
+					result.add(new ElfExportedSymbol(name, binding));
 				}
 			}
 		}
@@ -174,12 +173,10 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 		private static final long serialVersionUID = 1L;
 		private final String name;
 		private final int binding;
-		private final int type;
 
-		ElfExportedSymbol(String name, int binding, int type) {
+		ElfExportedSymbol(String name, int binding) {
 			this.name = name;
 			this.binding = binding;
-			this.type = type;
 		}
 
 		@Override
@@ -191,26 +188,22 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 			return binding;
 		}
 
-		int getType() {
-			return type;
-		}
-
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ElfExportedSymbol that = (ElfExportedSymbol) o;
-			return binding == that.binding && type == that.type && name.equals(that.name);
+			return binding == that.binding && name.equals(that.name);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(name, binding, type);
+			return Objects.hash(name, binding);
 		}
 
 		@Override
 		public String toString() {
-			return "exported symbol { name: '" + name + "', binding=" + binding + ", type=" + type + '}';
+			return "exported symbol { name: '" + name + "', binding=" + binding + '}';
 		}
 	}
 }
