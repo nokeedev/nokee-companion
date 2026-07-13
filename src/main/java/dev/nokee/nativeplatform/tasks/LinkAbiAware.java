@@ -6,6 +6,7 @@ import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
@@ -15,7 +16,9 @@ import org.gradle.api.tasks.Nested;
 import javax.inject.Inject;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -29,6 +32,7 @@ interface LinkAbiAware extends Task {
 			ObjectFactory objects = getProject().getObjects();
 			LinkAbiExtension extension = objects.newInstance(LinkAbiExtension.class);
 			extension.getExtractor().set(getProject().getGradle().getSharedServices().registerIfAbsent("link-abi-cache", LinkAbiCache.class).map(it -> objects.newInstance(CachingNativeLibraryAbiExtractor.class, it)));
+			getInputs().property("linkAbi.libraryAbiModels", extension.getLibraryAbiModelsProps());
 			getExt_linkAbi().set(extension);
 		}
 
@@ -85,8 +89,26 @@ interface LinkAbiAware extends Task {
 		@Internal
 		protected abstract SetProperty<Object> getLinkLibInputs();
 
-		@Input
+		@Internal
 		protected abstract ListProperty<AbiModel> getLibraryAbiModels();
+
+		@Internal
+		Provider<Map<String, ?>> getLibraryAbiModelsProps() {
+			return getLibraryAbiModels().map(values -> {
+				Map<String, Object> result = new LinkedHashMap<>();
+				int i = 0;
+				for (AbiModel value : values) {
+					if (value instanceof SharedLibraryAbiModel) {
+						result.put("$" + i + ".soname", ((SharedLibraryAbiModel) value).getSoname());
+						result.put("$" + i + ".exportedSymbols", ((SharedLibraryAbiModel) value).getExportedSymbols());
+					} else {
+						throw new RuntimeException();
+					}
+					i++;
+				}
+				return result;
+			});
+		}
 
 		@InputFiles
 		protected abstract ConfigurableFileCollection getLibraryFiles();

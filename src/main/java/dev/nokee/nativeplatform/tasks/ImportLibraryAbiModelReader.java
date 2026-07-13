@@ -1,5 +1,10 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.internal.hash.HashCode;
+import org.gradle.internal.hash.Hasher;
+import org.gradle.internal.hash.Hashing;
+import org.gradle.internal.hash.PrimitiveHasher;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -55,7 +60,7 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 	private AbiModel parse() throws IOException {
 		long offset = 8; // skip !<arch>\n
 		String dllName = null;
-		List<ExportedSymbol> symbols = new ArrayList<>();
+		Set<HashCode> symbols = new LinkedHashSet<>();
 
 		while (offset + 60 <= channel.size()) {
 			byte[] hdrBytes = BinaryUtils.readBytes(channel, offset, 60);
@@ -90,23 +95,34 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 				// data = dll_name\0 (no symbol name)
 				String dll = BinaryUtils.readCString(strData, 0);
 				if (dllName == null && !dll.isEmpty()) dllName = dll;
-				symbols.add(new PeExportedSymbol("#" + ordinalOrHint, ordinalOrHint));
+				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
+				hasher.putInt(ordinalOrHint);
+				symbols.add(hasher.hash());
 			} else {
+				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 				// data = symbol_name\0dll_name\0
-				String symName = BinaryUtils.readCString(strData, 0);
-				int dllStart = symName.length() + 1;
+				int symNameLength = BinaryUtils.hashCString(hasher, strData, 0);
+				int dllStart = symNameLength + 1;
 				if (dllStart < strData.limit()) {
 					String dll = BinaryUtils.readCString(strData, dllStart);
 					if (dllName == null && !dll.isEmpty()) dllName = dll;
 				}
-				if (!symName.isEmpty()) {
-					symbols.add(new PeExportedSymbol(symName, ordinalOrHint));
+				if (symNameLength > 0) {
+					hasher.putInt(ordinalOrHint);
+					symbols.add(hasher.hash());
 				}
 			}
 		}
 
-		symbols.sort(Comparator.comparing(ExportedSymbol::getName));
-		return new SharedLibraryAbiModel(dllName, Collections.unmodifiableList(symbols));
+		return new SharedLibraryAbiModel(dllName, Collections.unmodifiableSet(symbols));
+	}
+
+	// Hashes the attributes of an exported symbol that affect link compatibility: name and ordinal.
+	private static HashCode hashSymbol(String name, int ordinal) {
+		Hasher hasher = Hashing.newHasher();
+		hasher.putString(name);
+		hasher.putInt(ordinal);
+		return hasher.hash();
 	}
 
 	private static boolean isArMagic(byte[] h) {
@@ -135,43 +151,5 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 	@Override
 	public void close() throws IOException {
 		channel.close();
-	}
-
-	static final class PeExportedSymbol implements ExportedSymbol {
-		private static final long serialVersionUID = 1L;
-		private final String name;
-		private final int ordinal;
-
-		PeExportedSymbol(String name, int ordinal) {
-			this.name = name;
-			this.ordinal = ordinal;
-		}
-
-		@Override
-		public String getName() {
-			return name;
-		}
-
-		int getOrdinal() {
-			return ordinal;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			PeExportedSymbol that = (PeExportedSymbol) o;
-			return ordinal == that.ordinal && name.equals(that.name);
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hash(name, ordinal);
-		}
-
-		@Override
-		public String toString() {
-			return "exported symbol { name: '" + name + "', ordinal=" + ordinal + '}';
-		}
 	}
 }

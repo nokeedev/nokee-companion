@@ -1,5 +1,7 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.internal.hash.PrimitiveHasher;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -40,5 +42,15 @@ final class BinaryUtils {
 			length++;
 		}
 		return new String(b, offset, length);
+	}
+
+	static int hashCString(PrimitiveHasher hasher, ByteBuffer buf, int offset) {
+		byte[] b = buf.array();
+		int length = 0;
+		for (int i = offset; i < buf.limit() && b[i] != 0; ++i) {
+			length++;
+		}
+		hasher.putBytes(b, offset, length);
+		return length;
 	}
 }

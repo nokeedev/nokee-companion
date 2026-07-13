@@ -1,10 +1,16 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.internal.hash.HashCode;
+import org.gradle.internal.hash.Hashing;
+import org.gradle.internal.hash.PrimitiveHasher;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.util.*;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int MH_MAGIC = 0xFEEDFACE;
@@ -128,7 +134,7 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 			lcOffset += cmdsize;
 		}
 
-		List<ExportedSymbol> symbols = Collections.emptyList();
+		Set<HashCode> symbols = Collections.emptySet();
 		if (symoff >= 0 && stroff >= 0 && nsyms > 0) {
 			symbols = extractSymbols(channel, order, is64, symoff, nsyms, stroff, strsize,
 				hasDysymtab ? iextdefsym : 0,
@@ -138,7 +144,7 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 		return new SharedLibraryAbiModel(installName, symbols);
 	}
 
-	private List<ExportedSymbol> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
+	private Set<HashCode> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
 		long symoff, int nsyms, long stroff, int strsize,
 		int iextdefsym, int nextdefsym) throws IOException {
 		int nlistSize = is64 ? 16 : 12;
@@ -146,7 +152,7 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 		int endSym = Math.min(iextdefsym + nextdefsym, nsyms);
 
 		ByteBuffer strtab = BinaryUtils.readAt(channel, stroff, strsize);
-		List<ExportedSymbol> result = new ArrayList<>();
+		Set<HashCode> result = new LinkedHashSet<>();
 
 		// Reuse a single nlist-sized buffer across all symbols instead of allocating one per entry.
 		ByteBuffer sym = ByteBuffer.allocate(nlistSize);
@@ -161,14 +167,15 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 			if ((nType & N_EXT) == 0) continue;
 			if ((nType & N_TYPE) == N_UNDF) continue;
 
-			String name = BinaryUtils.readCString(strtab, strx);
-			if (!name.isEmpty()) {
-				result.add(new MachOExportedSymbol(name, (nDesc & N_WEAK_DEF) != 0));
+			PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
+			int length = BinaryUtils.hashCString(hasher, strtab, strx);
+			if (length > 0) {
+				hasher.putBoolean((nDesc & N_WEAK_DEF) != 0);
+				result.add(hasher.hash());
 			}
 		}
 
-		result.sort(Comparator.comparing(ExportedSymbol::getName));
-		return Collections.unmodifiableList(result);
+		return Collections.unmodifiableSet(result);
 	}
 
 	private static int asInt(byte[] b, int offset) {
@@ -179,43 +186,5 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 	@Override
 	public void close() throws IOException {
 		channel.close();
-	}
-
-	static final class MachOExportedSymbol implements ExportedSymbol {
-		private static final long serialVersionUID = 1L;
-		private final String name;
-		private final boolean weak;
-
-		MachOExportedSymbol(String name, boolean weak) {
-			this.name = name;
-			this.weak = weak;
-		}
-
-		@Override
-		public String getName() {
-			return name;
-		}
-
-		boolean getWeak() {
-			return weak;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			MachOExportedSymbol that = (MachOExportedSymbol) o;
-			return weak == that.weak && name.equals(that.name);
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hash(name, weak);
-		}
-
-		@Override
-		public String toString() {
-			return (weak ? "weak " : "") + "exported symbol { name: '" + name + "' }";
-		}
 	}
 }

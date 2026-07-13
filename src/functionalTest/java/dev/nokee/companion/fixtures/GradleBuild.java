@@ -9,12 +9,13 @@ import dev.gradleplugins.buildscript.syntax.Syntax;
 import org.gradle.api.Action;
 import org.junit.jupiter.api.function.ThrowingConsumer;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.function.Consumer;
 
 public class GradleBuild {
@@ -65,6 +66,45 @@ public class GradleBuild {
 			return new GradleBuild(Files.createDirectories(location));
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
+		}
+	}
+
+	public GradleBuild properties(Consumer<? super GradleProperties> action) {
+		action.accept(GradleProperties.inDirectory(location));
+		return this;
+	}
+
+	public static final class GradleProperties {
+		private final Path location;
+
+		public GradleProperties(Path location) {
+			this.location = location;
+		}
+
+		public static GradleProperties inDirectory(Path location) {
+			return new GradleProperties(location.resolve("gradle.properties"));
+		}
+
+		public GradleProperties put(String key, Object value) {
+			Properties properties = new Properties();
+
+			if (Files.exists(location)) {
+				try (Reader reader = Files.newBufferedReader(location)) {
+					properties.load(reader);
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
+			}
+
+			properties.put(key, value.toString());
+
+			try (Writer writer = Files.newBufferedWriter(location, StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+				properties.store(writer, null);
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+
+			return this;
 		}
 	}
 

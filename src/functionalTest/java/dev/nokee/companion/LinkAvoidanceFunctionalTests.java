@@ -36,6 +36,9 @@ class LinkAvoidanceFunctionalTests {
 		build = GradleBuild.inDirectory(testDirectory);
 		runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 
+		build.properties(it -> {
+			it.put("org.gradle.configuration-cache", true);
+		});
 		build.subproject("lib", project -> {
 			project.plugins(it -> {
 				it.id("cpp-library");

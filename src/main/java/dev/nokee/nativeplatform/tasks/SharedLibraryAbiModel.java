@@ -1,25 +1,32 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.Optional;
+import org.gradle.internal.hash.HashCode;
+
 import javax.annotation.Nullable;
-import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.Set;
 
 final class SharedLibraryAbiModel implements AbiModel {
 	private static final long serialVersionUID = 1L;
 	private final String soname; // nullable
-	private final List<ExportedSymbol> exportedSymbols;
+	private final Set<HashCode> exportedSymbols;
 
-	SharedLibraryAbiModel(@Nullable String soname, List<ExportedSymbol> exportedSymbols) {
+	SharedLibraryAbiModel(@Nullable String soname, Set<HashCode> exportedSymbols) {
 		this.soname = soname;
 		this.exportedSymbols = exportedSymbols;
 	}
 
-	Optional<String> getSoname() {
-		return Optional.ofNullable(soname);
+	@Input
+	@Nullable
+	@Optional
+	String getSoname() {
+		return soname;
 	}
 
-	List<ExportedSymbol> getExportedSymbols() {
+	@Input
+	Set<HashCode> getExportedSymbols() {
 		return exportedSymbols;
 	}
 

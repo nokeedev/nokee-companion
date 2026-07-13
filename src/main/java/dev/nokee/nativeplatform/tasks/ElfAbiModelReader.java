@@ -1,10 +1,16 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.internal.hash.HashCode;
+import org.gradle.internal.hash.Hashing;
+import org.gradle.internal.hash.PrimitiveHasher;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.util.*;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int ET_DYN = 3;
@@ -43,7 +49,7 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 		int shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
 
 		if (shoff == 0 || shnum == 0 || shentsize == 0) {
-			return new SharedLibraryAbiModel(null, Collections.emptyList());
+			return new SharedLibraryAbiModel(null, Collections.emptySet());
 		}
 
 		ByteBuffer shdrs = BinaryUtils.readAt(channel, shoff, shentsize * shnum);
@@ -99,7 +105,7 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 			soname = extractSoname(channel, order, is64, dynamicOff, dynamicSize, dynstrOff, dynstrSize);
 		}
 
-		List<ExportedSymbol> symbols = Collections.emptyList();
+		Set<HashCode> symbols = Collections.emptySet();
 		if (dynsymOff >= 0 && dynstrOff >= 0 && dynsymEntsize > 0) {
 			symbols = extractSymbols(channel, order, is64, dynsymOff, dynsymSize, dynsymEntsize, dynstrOff, dynstrSize);
 		}
@@ -127,14 +133,14 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 		return null;
 	}
 
-	private List<ExportedSymbol> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
+	private Set<HashCode> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
 		long symOff, long symSize, long symEntsize, long strOff, long strSize) throws IOException {
 		ByteBuffer syms = BinaryUtils.readAt(channel, symOff, (int) symSize);
 		syms.order(order);
 		ByteBuffer strtab = BinaryUtils.readAt(channel, strOff, (int) strSize);
 
 		int count = (int) (symSize / symEntsize);
-		List<ExportedSymbol> result = new ArrayList<>();
+		Set<HashCode> result = new LinkedHashSet<>();
 
 		for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
 			int base = (int) (i * symEntsize);
@@ -153,57 +159,20 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 			int binding = stInfo >> 4;
 
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
-				String name = BinaryUtils.readCString(strtab, stName);
-				if (!name.isEmpty()) {
-					result.add(new ElfExportedSymbol(name, binding));
+				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
+				int length = BinaryUtils.hashCString(hasher, strtab, stName);
+				if (length > 0) {
+					hasher.putInt(binding);
+					result.add(hasher.hash());
 				}
 			}
 		}
 
-		result.sort(Comparator.comparing(ExportedSymbol::getName));
-		return Collections.unmodifiableList(result);
+		return Collections.unmodifiableSet(result);
 	}
 
 	@Override
 	public void close() throws IOException {
 		channel.close();
-	}
-
-	static final class ElfExportedSymbol implements ExportedSymbol {
-		private static final long serialVersionUID = 1L;
-		private final String name;
-		private final int binding;
-
-		ElfExportedSymbol(String name, int binding) {
-			this.name = name;
-			this.binding = binding;
-		}
-
-		@Override
-		public String getName() {
-			return name;
-		}
-
-		int getBinding() {
-			return binding;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			ElfExportedSymbol that = (ElfExportedSymbol) o;
-			return binding == that.binding && name.equals(that.name);
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hash(name, binding);
-		}
-
-		@Override
-		public String toString() {
-			return "exported symbol { name: '" + name + "', binding=" + binding + '}';
-		}
 	}
 }
