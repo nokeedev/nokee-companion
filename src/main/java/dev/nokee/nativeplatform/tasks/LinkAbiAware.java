@@ -5,6 +5,8 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
+import org.gradle.api.reflect.TypeOf;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
@@ -25,7 +27,6 @@ interface LinkAbiAware extends Task {
 			ObjectFactory objects = getProject().getObjects();
 			LinkAbiExtension extension = objects.newInstance(LinkAbiExtension.class);
 			extension.getExtractor().set(getProject().getGradle().getSharedServices().registerIfAbsent("link-abi-cache", LinkAbiCache.class).map(it -> objects.newInstance(CachingNativeLibraryAbiExtractor.class, it)));
-			getInputs().property("linkAbi.libraryAbiModels", extension.getLibraryAbiModelsProps());
 			getExt_linkAbi().set(extension);
 		}
 
@@ -37,13 +38,13 @@ interface LinkAbiAware extends Task {
 		@Internal
 		protected abstract Property<CachingNativeLibraryAbiExtractor> getExtractor();
 
-		private MapProperty<String, Object> libraryAbiModelsProps;
+		private SetProperty<Map<String, Object>> libraryAbiModelsProps;
 		private ListProperty<AbiBinaryHasher.AbiBinaryHashCode> libraryAbiModels;
 		private SetProperty<Object> linkLibInputs;
 
 		@Inject
 		public LinkAbiExtension(ObjectFactory objects) {
-			libraryAbiModelsProps = objects.mapProperty(String.class, Object.class);
+			libraryAbiModelsProps = objects.setProperty(new TypeOf<Map<String, Object>>() {}.getConcreteClass());
 			libraryAbiModels = objects.listProperty(AbiBinaryHasher.AbiBinaryHashCode.class);
 			linkLibInputs = objects.setProperty(Object.class);
 
@@ -78,19 +79,15 @@ interface LinkAbiAware extends Task {
 			getLinkLibInputs().disallowChanges();
 
 			getLibraryAbiModelsProps().set(getLibraryAbiModels().map(values -> {
-				Map<String, Object> result = new LinkedHashMap<>();
-				int i = 0;
+				final Set<Map<String, Object>> result = new LinkedHashSet<>();
 				for (AbiBinaryHasher.AbiBinaryHashCode value : values) {
-					if (value instanceof SharedLibraryAbiModel) {
-						String soname = ((SharedLibraryAbiModel) value).getSoname();
-						if (soname == null) {
-							result.put("$" + i + ".soname", soname);
-						}
-						result.put("$" + i + ".exportedSymbols", ((SharedLibraryAbiModel) value).getExportedSymbols());
+					if (value instanceof Map) {
+						@SuppressWarnings("unchecked")
+						final Map<String, Object> v = (Map<String, Object>) value;
+						result.add(v);
 					} else {
 						throw new RuntimeException();
 					}
-					i++;
 				}
 				return result;
 			}));
@@ -117,8 +114,8 @@ interface LinkAbiAware extends Task {
 			return libraryAbiModels;
 		}
 
-		@Internal
-		MapProperty<String, Object> getLibraryAbiModelsProps() {
+		@Input
+		SetProperty<Map<String, Object>> getLibraryAbiModelsProps() {
 			return libraryAbiModelsProps;
 		}
 

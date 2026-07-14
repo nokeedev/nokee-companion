@@ -32,8 +32,7 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<>() {
 			@Override
 			protected boolean matchesSafely(AbiBinaryHasher.AbiBinaryHashCode model) {
-				if (!(model instanceof SharedLibraryAbiModel)) return false;
-				return symbolsMatcher.matches(((SharedLibraryAbiModel) model).getExportedSymbols());
+				return symbolsMatcher.matches(model.getExportedSymbols());
 			}
 
 			@Override
@@ -43,12 +42,8 @@ final class AbiMatchers {
 
 			@Override
 			protected void describeMismatchSafely(AbiBinaryHasher.AbiBinaryHashCode model, Description description) {
-				if (!(model instanceof SharedLibraryAbiModel)) {
-					description.appendText("was ").appendValue(model.getClass().getSimpleName());
-				} else {
-					description.appendText("exported symbols ");
-					symbolsMatcher.describeMismatch(((SharedLibraryAbiModel) model).getExportedSymbols(), description);
-				}
+				description.appendText("exported symbols ");
+				symbolsMatcher.describeMismatch(model.getExportedSymbols(), description);
 			}
 		};
 	}

@@ -3,11 +3,15 @@ package dev.nokee.nativeplatform.tasks;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.hash.PrimitiveHasher;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
+import java.util.AbstractMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 final class ElfBinaryHasher implements AbiBinaryHasher {
 	private static final int ET_DYN = 3;
@@ -41,7 +45,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		int shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
 
 		if (shoff == 0 || shnum == 0 || shentsize == 0) {
-			return new SharedLibraryAbiModel(null, null);
+			return new ElfHashCode(null, null);
 		}
 
 		ByteBuffer shdrs = BinaryUtils.readAt(channel, shoff, shentsize * shnum);
@@ -102,7 +106,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			symbols = extractSymbols(channel, order, is64, dynsymOff, dynsymSize, dynsymEntsize, dynstrOff, dynstrSize);
 		}
 
-		return new SharedLibraryAbiModel(soname, symbols);
+		return new ElfHashCode(soname, symbols);
 	}
 
 	private String extractSoname(FileChannel channel, ByteOrder order, boolean is64,
@@ -164,5 +168,24 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			return hasher.hash();
 		}
 		return null;
+	}
+
+	private static final class ElfHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
+		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
+
+		public ElfHashCode(String soname, HashCode symbols) {
+			entries.add(new SimpleEntry<>("soname", soname));
+			entries.add(new SimpleEntry<>("symbols", symbols));
+		}
+
+		@Override
+		public @NotNull Set<Entry<String, Object>> entrySet() {
+			return entries;
+		}
+
+		@Override
+		public HashCode getExportedSymbols() {
+			return (HashCode) get("symbols");
+		}
 	}
 }

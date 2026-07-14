@@ -1,5 +1,7 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.internal.hash.HashCode;
+
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 
@@ -13,5 +15,7 @@ import java.nio.channels.FileChannel;
 interface AbiBinaryHasher {
 	AbiBinaryHashCode hash(FileChannel channel) throws IOException;
 
-	interface AbiBinaryHashCode {}
+	interface AbiBinaryHashCode {
+		HashCode getExportedSymbols();
+	}
 }

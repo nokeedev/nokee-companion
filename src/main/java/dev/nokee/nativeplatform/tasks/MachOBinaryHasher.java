@@ -3,11 +3,15 @@ package dev.nokee.nativeplatform.tasks;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.hash.PrimitiveHasher;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
+import java.util.AbstractMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 final class MachOBinaryHasher implements AbiBinaryHasher {
 	private static final int MH_MAGIC = 0xFEEDFACE;
@@ -133,7 +137,7 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 				hasDysymtab ? nextdefsym : nsyms);
 		}
 
-		return new SharedLibraryAbiModel(installName, symbols);
+		return new MachOHashCode(installName, symbols);
 	}
 
 	private HashCode hashSymbols(FileChannel channel, ByteOrder order, boolean is64,
@@ -175,5 +179,24 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 	private static int asInt(byte[] b, int offset) {
 		return ((b[offset] & 0xFF) << 24) | ((b[offset + 1] & 0xFF) << 16)
 			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
+	}
+
+	private static final class MachOHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
+		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
+
+		public MachOHashCode(String installName, HashCode symbols) {
+			entries.add(new SimpleEntry<>("installName", installName));
+			entries.add(new SimpleEntry<>("symbols", symbols));
+		}
+
+		@Override
+		public @NotNull Set<Entry<String, Object>> entrySet() {
+			return entries;
+		}
+
+		@Override
+		public HashCode getExportedSymbols() {
+			return (HashCode) get("symbols");
+		}
 	}
 }

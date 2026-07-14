@@ -3,12 +3,16 @@ package dev.nokee.nativeplatform.tasks;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.hash.PrimitiveHasher;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.AbstractMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
@@ -103,7 +107,7 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 			}
 		}
 
-		return new SharedLibraryAbiModel(dllName, symbols);
+		return new PEHashCode(dllName, symbols);
 	}
 
 	private static boolean isArMagic(byte[] h) {
@@ -126,6 +130,25 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 			return Long.parseLong(sizeStr);
 		} catch (NumberFormatException e) {
 			return -1;
+		}
+	}
+
+	private static final class PEHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
+		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
+
+		public PEHashCode(String dllName, HashCode symbols) {
+			entries.add(new SimpleEntry<>("dllName", dllName));
+			entries.add(new SimpleEntry<>("symbols", symbols));
+		}
+
+		@Override
+		public @NotNull Set<Entry<String, Object>> entrySet() {
+			return entries;
+		}
+
+		@Override
+		public HashCode getExportedSymbols() {
+			return (HashCode) get("symbols");
 		}
 	}
 }
