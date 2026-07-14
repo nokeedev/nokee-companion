@@ -21,9 +21,11 @@ import static org.hamcrest.Matchers.*;
  * fixture directory's BUILD file for the commands to produce them.
  */
 class MachOAbiExtractorIntegrationTests {
+	private static final MachOAbiModelReader reader = new MachOAbiModelReader();
+
 	private static AbiModel extract(Path path) throws IOException {
-		try (MachOAbiModelReader reader = new MachOAbiModelReader(FileChannel.open(path))) {
-			return reader.read();
+		try (FileChannel channel = FileChannel.open(path)) {
+			return reader.hash(channel);
 		}
 	}
 

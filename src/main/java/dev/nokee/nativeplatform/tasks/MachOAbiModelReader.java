@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 
-final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
+final class MachOAbiModelReader implements AbiModelReader {
 	private static final int MH_MAGIC = 0xFEEDFACE;
 	private static final int MH_CIGAM = 0xCEFAEDFE;
 	private static final int MH_MAGIC_64 = 0xFEEDFACF;
@@ -28,23 +28,18 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int N_TYPE = 0x0e;
 	private static final int N_UNDF = 0x00;
 	private static final int N_WEAK_DEF = 0x0080;
-	private final FileChannel channel;
-
-	MachOAbiModelReader(FileChannel channel) {
-		this.channel = channel;
-	}
 
 	@Override
-	public AbiModel read() throws IOException {
+	public AbiModel hash(FileChannel channel) throws IOException {
 		byte[] header = BinaryUtils.readBytes(channel, 0, 4);
 		int m = asInt(header, 0);
 		if (!isMachOMagic(m)) {
 			throw new IllegalArgumentException("not a Mach-O file");
 		}
 		if (m == FAT_MAGIC || m == Integer.reverseBytes(FAT_MAGIC)) {
-			return extractFat();
+			return extractFat(channel);
 		}
-		return extractSlice(0, header);
+		return extractSlice(channel, 0, header);
 	}
 
 	private static boolean isMachOMagic(int m) {
@@ -52,7 +47,7 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 			|| m == FAT_MAGIC || m == Integer.reverseBytes(FAT_MAGIC);
 	}
 
-	private AbiModel extractFat() throws IOException {
+	private AbiModel extractFat(FileChannel channel) throws IOException {
 		ByteBuffer fatHdr = BinaryUtils.readAt(channel, 0, 8);
 		fatHdr.order(ByteOrder.BIG_ENDIAN); // fat binary is always big-endian
 		int nfatArch = fatHdr.getInt(4);
@@ -64,10 +59,10 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 		arch0.order(ByteOrder.BIG_ENDIAN);
 		long sliceOffset = arch0.getInt(8) & 0xFFFFFFFFL;
 		byte[] sliceHeader = BinaryUtils.readBytes(channel, sliceOffset, 4);
-		return extractSlice(sliceOffset, sliceHeader);
+		return extractSlice(channel, sliceOffset, sliceHeader);
 	}
 
-	private AbiModel extractSlice(long offset, byte[] header) throws IOException {
+	private AbiModel extractSlice(FileChannel channel, long offset, byte[] header) throws IOException {
 		int m = asInt(header, 0);
 		boolean is64;
 		ByteOrder order;
@@ -180,10 +175,5 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static int asInt(byte[] b, int offset) {
 		return ((b[offset] & 0xFF) << 24) | ((b[offset + 1] & 0xFF) << 16)
 			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
-	}
-
-	@Override
-	public void close() throws IOException {
-		channel.close();
 	}
 }

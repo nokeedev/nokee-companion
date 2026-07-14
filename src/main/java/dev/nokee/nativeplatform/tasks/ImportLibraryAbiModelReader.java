@@ -10,30 +10,24 @@ import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 
-final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable {
+final class ImportLibraryAbiModelReader implements AbiModelReader {
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
 	// NameType=0 means IMPORT_ORDINAL (no symbol name in data); represented as "#<ordinal>"
 	private static final int IMPORT_ORDINAL = 0;
 
-	private final FileChannel channel;
-
-	ImportLibraryAbiModelReader(FileChannel channel) {
-		this.channel = channel;
-	}
-
 	@Override
-	public AbiModel read() throws IOException {
+	public AbiModel hash(FileChannel channel) throws IOException {
 		byte[] magic = BinaryUtils.readBytes(channel, 0, 8);
 		if (!isArMagic(magic)) {
 			throw new IllegalArgumentException("not an ar archive");
 		}
-		if (!isWindowsImportLibrary()) {
+		if (!isWindowsImportLibrary(channel)) {
 			throw new NotASharedLibraryException("ar archive is not a Windows import library");
 		}
-		return parse();
+		return parse(channel);
 	}
 
-	private boolean isWindowsImportLibrary() throws IOException {
+	private boolean isWindowsImportLibrary(FileChannel channel) throws IOException {
 		long offset = 8; // skip !<arch>\n
 		while (offset + 60 <= channel.size()) {
 			byte[] hdrBytes = BinaryUtils.readBytes(channel, offset, 60);
@@ -55,7 +49,7 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 		return false;
 	}
 
-	private AbiModel parse() throws IOException {
+	private AbiModel parse(FileChannel channel) throws IOException {
 		long offset = 8; // skip !<arch>\n
 		String dllName = null;
 		HashCode symbols = null;
@@ -133,10 +127,5 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 		} catch (NumberFormatException e) {
 			return -1;
 		}
-	}
-
-	@Override
-	public void close() throws IOException {
-		channel.close();
 	}
 }

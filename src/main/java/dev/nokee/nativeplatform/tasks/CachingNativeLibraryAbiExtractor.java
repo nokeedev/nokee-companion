@@ -14,7 +14,7 @@ abstract /*final*/ class CachingNativeLibraryAbiExtractor implements NativeLibra
 		this.extractor = new DefaultNativeLibraryAbiExtractor();
 	}
 
-	public Object extract(Path library) {
-		return cache.find(library, () -> extractor.extract(library));
+	public Object hash(Path library) {
+		return cache.find(library, () -> extractor.hash(library));
 	}
 }

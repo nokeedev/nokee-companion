@@ -4,5 +4,5 @@ import javax.annotation.Nullable;
 import java.nio.file.Path;
 
 interface NativeLibraryAbiExtractor {
-	Object extract(Path library);
+	Object hash(Path library);
 }

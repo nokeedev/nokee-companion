@@ -70,7 +70,7 @@ interface LinkAbiAware extends Task {
 				AbiExtractorService extractor = getAbiExtractor();
 				List<Object> result = new ArrayList<>();
 				for (FileSystemLocation lib : libsx) {
-					Object entry = extractor.extract(lib.getAsFile());
+					Object entry = extractor.hash(lib.getAsFile());
 					result.add(entry);
 				}
 				return result;

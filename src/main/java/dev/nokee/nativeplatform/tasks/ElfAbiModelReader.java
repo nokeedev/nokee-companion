@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 
-final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
+final class ElfAbiModelReader implements AbiModelReader {
 	private static final int ET_DYN = 3;
 	private static final int SHT_DYNAMIC = 6;
 	private static final int SHT_DYNSYM = 11;
@@ -18,14 +18,9 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int STB_GLOBAL = 1;
 	private static final int STB_WEAK = 2;
 	private static final int SHN_UNDEF = 0;
-	private final FileChannel channel;
-
-	ElfAbiModelReader(FileChannel channel) {
-		this.channel = channel;
-	}
 
 	@Override
-	public AbiModel read() throws IOException {
+	public AbiModel hash(FileChannel channel) throws IOException {
 		ByteBuffer ident = BinaryUtils.readAt(channel, 0, 16);
 		if (!(ident.get(0) == 0x7f && ident.get(1) == 0x45 && ident.get(2) == 0x4c && ident.get(3) == 0x46)) {
 			throw new IllegalArgumentException("not an ELF file");
@@ -169,10 +164,5 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 			return hasher.hash();
 		}
 		return null;
-	}
-
-	@Override
-	public void close() throws IOException {
-		channel.close();
 	}
 }

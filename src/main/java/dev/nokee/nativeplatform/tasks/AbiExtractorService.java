@@ -12,7 +12,7 @@ import java.io.File;
 	}
 
 	// File or AbiModel
-	Object extract(File library) {
-		return extractor.extract(library.toPath());
+	Object hash(File library) {
+		return extractor.hash(library.toPath());
 	}
 }

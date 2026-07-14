@@ -20,9 +20,11 @@ import static org.hamcrest.Matchers.*;
  * fixture directory's BUILD file for the commands to produce them.
  */
 class ElfAbiExtractorIntegrationTests {
+	private static final ElfAbiModelReader reader = new ElfAbiModelReader();
+
 	private static AbiModel extract(Path path) throws IOException {
-		try (ElfAbiModelReader reader = new ElfAbiModelReader(FileChannel.open(path))) {
-			return reader.read();
+		try (FileChannel channel = FileChannel.open(path)) {
+			return reader.hash(channel);
 		}
 	}
 

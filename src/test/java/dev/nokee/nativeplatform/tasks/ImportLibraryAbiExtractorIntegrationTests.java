@@ -21,9 +21,11 @@ import static org.hamcrest.Matchers.*;
  */
 @Disabled
 class ImportLibraryAbiExtractorIntegrationTests {
+	private static final ImportLibraryAbiModelReader reader = new ImportLibraryAbiModelReader();
+
 	private static AbiModel extract(Path path) throws IOException {
-		try (ImportLibraryAbiModelReader reader = new ImportLibraryAbiModelReader(FileChannel.open(path))) {
-			return reader.read();
+		try (FileChannel channel = FileChannel.open(path)) {
+			return reader.hash(channel);
 		}
 	}
 
