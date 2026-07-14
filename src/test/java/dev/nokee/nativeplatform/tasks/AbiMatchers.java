@@ -8,10 +8,10 @@ import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 
+import java.util.Arrays;
 import java.util.Collection;
 
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 
 /**
  * Matchers over the ABI model. The model exposes each exported symbol only as an opaque
@@ -24,8 +24,14 @@ final class AbiMatchers {
 
 	private AbiMatchers() {}
 
-	static Matcher<AbiModel> sharedLibrary(Matcher<? super Collection<HashCode>> symbolsMatcher) {
-		return new TypeSafeMatcher<AbiModel>() {
+	static Matcher<AbiModel> sharedLibrary(HashFunction... hashes) {
+		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
+		Arrays.stream(hashes).forEach(it -> it.append(hasher));
+		return sharedLibrary(equalTo(hasher.hash()));
+	}
+
+	static Matcher<AbiModel> sharedLibrary(Matcher<? super HashCode> symbolsMatcher) {
+		return new TypeSafeMatcher<>() {
 			@Override
 			protected boolean matchesSafely(AbiModel model) {
 				if (!(model instanceof SharedLibraryAbiModel)) return false;
@@ -50,46 +56,48 @@ final class AbiMatchers {
 	}
 
 	static Matcher<AbiModel> emptySharedLibrary() {
-		return sharedLibrary(empty());
+		return sharedLibrary(nullValue());
 	}
 
-	static Matcher<HashCode> strongElfSymbol(String name) {
-		return equalTo(elfSymbolHash(name, STB_GLOBAL));
+	static HashFunction strongElfSymbol(String name) {
+		return elfSymbolHash(name, STB_GLOBAL);
 	}
 
-	static Matcher<HashCode> weakElfSymbol(String name) {
-		return equalTo(elfSymbolHash(name, STB_WEAK));
+	static HashFunction weakElfSymbol(String name) {
+		return elfSymbolHash(name, STB_WEAK);
 	}
 
-	private static HashCode elfSymbolHash(String name, int binding) {
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-		hasher.putString(name);
-		hasher.putInt(binding);
-		return hasher.hash();
+	private static HashFunction elfSymbolHash(String name, int binding) {
+		return hasher -> {
+			hasher.putString(name);
+			hasher.putInt(binding);
+		};
 	}
 
-	static Matcher<HashCode> strongMachOSymbol(String name) {
-		return equalTo(machOSymbolHash(name, false));
+	static HashFunction strongMachOSymbol(String name) {
+		return machOSymbolHash(name, false);
 	}
 
-	static Matcher<HashCode> weakMachOSymbol(String name) {
-		return equalTo(machOSymbolHash(name, true));
+	static HashFunction weakMachOSymbol(String name) {
+		return machOSymbolHash(name, true);
 	}
 
-	private static HashCode machOSymbolHash(String name, boolean weak) {
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-		hasher.putString(name);
-		hasher.putBoolean(weak);
-		return hasher.hash();
+	private static HashFunction machOSymbolHash(String name, boolean weak) {
+		return hasher -> {
+			hasher.putString(name);
+			hasher.putBoolean(weak);
+		};
 	}
 
-	static Matcher<HashCode> namedPeSymbol(String name) {
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-		hasher.putString(name);
-		return equalTo(hasher.hash());
+	static HashFunction namedPeSymbol(String name) {
+		return hasher -> hasher.putString(name);
 	}
 
-	static Matcher<HashCode> ordinalOnlyPeSymbol(int ordinal) {
+	static HashFunction ordinalOnlyPeSymbol(int ordinal) {
 		return namedPeSymbol("#" + ordinal);
+	}
+
+	interface HashFunction {
+		void append(PrimitiveHasher hasher);
 	}
 }

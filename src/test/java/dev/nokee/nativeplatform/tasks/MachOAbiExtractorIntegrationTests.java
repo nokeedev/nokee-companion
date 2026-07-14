@@ -31,11 +31,11 @@ class MachOAbiExtractorIntegrationTests {
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibWithNamedExports(String arch) throws IOException {
 		AbiModel model = extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
-		assertThat(model, is(sharedLibrary(hasItems(
+		assertThat(model, is(sharedLibrary(
 			strongMachOSymbol("_compute"),
 			strongMachOSymbol("_greet"),
 			strongMachOSymbol("_value")
-		))));
+		)));
 	}
 
 	@ParameterizedTest
@@ -49,12 +49,12 @@ class MachOAbiExtractorIntegrationTests {
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
 		AbiModel model = extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
-		assertThat(model, is(sharedLibrary(hasItems(
+		assertThat(model, is(sharedLibrary(
 			strongMachOSymbol("_strong_func"),
 			strongMachOSymbol("_strong_var"),
 			weakMachOSymbol("_weak_func"),
 			weakMachOSymbol("_weak_var")
-		))));
+		)));
 	}
 
 	@ParameterizedTest

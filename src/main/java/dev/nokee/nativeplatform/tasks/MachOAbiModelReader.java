@@ -8,9 +8,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int MH_MAGIC = 0xFEEDFACE;
@@ -134,9 +131,9 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 			lcOffset += cmdsize;
 		}
 
-		Set<HashCode> symbols = Collections.emptySet();
+		HashCode symbols = null;
 		if (symoff >= 0 && stroff >= 0 && nsyms > 0) {
-			symbols = extractSymbols(channel, order, is64, symoff, nsyms, stroff, strsize,
+			symbols = hashSymbols(channel, order, is64, symoff, nsyms, stroff, strsize,
 				hasDysymtab ? iextdefsym : 0,
 				hasDysymtab ? nextdefsym : nsyms);
 		}
@@ -144,15 +141,16 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 		return new SharedLibraryAbiModel(installName, symbols);
 	}
 
-	private Set<HashCode> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
+	private HashCode hashSymbols(FileChannel channel, ByteOrder order, boolean is64,
 		long symoff, int nsyms, long stroff, int strsize,
 		int iextdefsym, int nextdefsym) throws IOException {
+		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
+
 		int nlistSize = is64 ? 16 : 12;
 		int startSym = iextdefsym;
 		int endSym = Math.min(iextdefsym + nextdefsym, nsyms);
 
 		ByteBuffer strtab = BinaryUtils.readAt(channel, stroff, strsize);
-		Set<HashCode> result = new LinkedHashSet<>();
 
 		// Reuse a single nlist-sized buffer across all symbols instead of allocating one per entry.
 		ByteBuffer sym = ByteBuffer.allocate(nlistSize);
@@ -167,15 +165,16 @@ final class MachOAbiModelReader implements AbiModelReader, AutoCloseable {
 			if ((nType & N_EXT) == 0) continue;
 			if ((nType & N_TYPE) == N_UNDF) continue;
 
-			PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 			int length = BinaryUtils.hashCString(hasher, strtab, strx);
 			if (length > 0) {
 				hasher.putBoolean((nDesc & N_WEAK_DEF) != 0);
-				result.add(hasher.hash());
 			}
 		}
 
-		return Collections.unmodifiableSet(result);
+		if ((endSym - startSym) > 0) {
+			return hasher.hash();
+		}
+		return null;
 	}
 
 	private static int asInt(byte[] b, int offset) {

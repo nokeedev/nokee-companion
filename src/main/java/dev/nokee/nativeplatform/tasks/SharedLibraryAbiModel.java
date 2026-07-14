@@ -6,14 +6,13 @@ import org.gradle.internal.hash.HashCode;
 
 import javax.annotation.Nullable;
 import java.util.Objects;
-import java.util.Set;
 
 final class SharedLibraryAbiModel implements AbiModel {
 	private static final long serialVersionUID = 1L;
 	private final String soname; // nullable
-	private final Set<HashCode> exportedSymbols;
+	private final HashCode exportedSymbols;
 
-	SharedLibraryAbiModel(@Nullable String soname, Set<HashCode> exportedSymbols) {
+	SharedLibraryAbiModel(@Nullable String soname, @Nullable HashCode exportedSymbols) {
 		this.soname = soname;
 		this.exportedSymbols = exportedSymbols;
 	}
@@ -26,7 +25,9 @@ final class SharedLibraryAbiModel implements AbiModel {
 	}
 
 	@Input
-	Set<HashCode> getExportedSymbols() {
+	@Nullable
+	@Optional
+	HashCode getExportedSymbols() {
 		return exportedSymbols;
 	}
 

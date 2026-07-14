@@ -1,5 +1,7 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.internal.hash.HashCode;
+
 import java.io.IOException;
 
 /**

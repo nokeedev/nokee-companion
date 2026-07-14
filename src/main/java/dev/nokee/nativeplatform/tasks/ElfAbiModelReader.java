@@ -8,9 +8,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final int ET_DYN = 3;
@@ -49,7 +46,7 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 		int shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
 
 		if (shoff == 0 || shnum == 0 || shentsize == 0) {
-			return new SharedLibraryAbiModel(null, Collections.emptySet());
+			return new SharedLibraryAbiModel(null, null);
 		}
 
 		ByteBuffer shdrs = BinaryUtils.readAt(channel, shoff, shentsize * shnum);
@@ -105,7 +102,7 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 			soname = extractSoname(channel, order, is64, dynamicOff, dynamicSize, dynstrOff, dynstrSize);
 		}
 
-		Set<HashCode> symbols = Collections.emptySet();
+		HashCode symbols = null;
 		if (dynsymOff >= 0 && dynstrOff >= 0 && dynsymEntsize > 0) {
 			symbols = extractSymbols(channel, order, is64, dynsymOff, dynsymSize, dynsymEntsize, dynstrOff, dynstrSize);
 		}
@@ -133,14 +130,14 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 		return null;
 	}
 
-	private Set<HashCode> extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
+	private HashCode extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
 		long symOff, long symSize, long symEntsize, long strOff, long strSize) throws IOException {
+		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 		ByteBuffer syms = BinaryUtils.readAt(channel, symOff, (int) symSize);
 		syms.order(order);
 		ByteBuffer strtab = BinaryUtils.readAt(channel, strOff, (int) strSize);
 
 		int count = (int) (symSize / symEntsize);
-		Set<HashCode> result = new LinkedHashSet<>();
 
 		for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
 			int base = (int) (i * symEntsize);
@@ -159,16 +156,17 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 			int binding = stInfo >> 4;
 
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
-				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 				int length = BinaryUtils.hashCString(hasher, strtab, stName);
 				if (length > 0) {
 					hasher.putInt(binding);
-					result.add(hasher.hash());
 				}
 			}
 		}
 
-		return Collections.unmodifiableSet(result);
+		if (count > 0) {
+			return hasher.hash();
+		}
+		return null;
 	}
 
 	@Override

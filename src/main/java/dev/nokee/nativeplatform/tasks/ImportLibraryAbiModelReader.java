@@ -1,7 +1,6 @@
 package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.internal.hash.HashCode;
-import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.hash.PrimitiveHasher;
 
@@ -10,7 +9,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
 
 final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable {
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
@@ -60,7 +58,8 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 	private AbiModel parse() throws IOException {
 		long offset = 8; // skip !<arch>\n
 		String dllName = null;
-		Set<HashCode> symbols = new LinkedHashSet<>();
+		HashCode symbols = null;
+		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 
 		while (offset + 60 <= channel.size()) {
 			byte[] hdrBytes = BinaryUtils.readBytes(channel, offset, 60);
@@ -95,11 +94,8 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 				// data = dll_name\0 (no symbol name)
 				String dll = BinaryUtils.readCString(strData, 0);
 				if (dllName == null && !dll.isEmpty()) dllName = dll;
-				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 				hasher.putInt(ordinalOrHint);
-				symbols.add(hasher.hash());
 			} else {
-				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 				// data = symbol_name\0dll_name\0
 				int symNameLength = BinaryUtils.hashCString(hasher, strData, 0);
 				int dllStart = symNameLength + 1;
@@ -109,20 +105,11 @@ final class ImportLibraryAbiModelReader implements AbiModelReader, AutoCloseable
 				}
 				if (symNameLength > 0) {
 					hasher.putInt(ordinalOrHint);
-					symbols.add(hasher.hash());
 				}
 			}
 		}
 
-		return new SharedLibraryAbiModel(dllName, Collections.unmodifiableSet(symbols));
-	}
-
-	// Hashes the attributes of an exported symbol that affect link compatibility: name and ordinal.
-	private static HashCode hashSymbol(String name, int ordinal) {
-		Hasher hasher = Hashing.newHasher();
-		hasher.putString(name);
-		hasher.putInt(ordinal);
-		return hasher.hash();
+		return new SharedLibraryAbiModel(dllName, symbols);
 	}
 
 	private static boolean isArMagic(byte[] h) {

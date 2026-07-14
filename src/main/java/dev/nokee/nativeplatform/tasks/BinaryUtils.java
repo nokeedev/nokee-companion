@@ -50,7 +50,9 @@ final class BinaryUtils {
 		for (int i = offset; i < buf.limit() && b[i] != 0; ++i) {
 			length++;
 		}
-		hasher.putBytes(b, offset, length);
+		if (length > 0) {
+			hasher.putBytes(b, offset, length);
+		}
 		return length;
 	}
 }
