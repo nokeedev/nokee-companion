@@ -4,10 +4,7 @@ import org.gradle.api.Task;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.ListProperty;
-import org.gradle.api.provider.Property;
-import org.gradle.api.provider.Provider;
-import org.gradle.api.provider.SetProperty;
+import org.gradle.api.provider.*;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
@@ -15,10 +12,7 @@ import org.gradle.api.tasks.Nested;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -44,8 +38,16 @@ interface LinkAbiAware extends Task {
 		@Internal
 		protected abstract Property<CachingNativeLibraryAbiExtractor> getExtractor();
 
+		private MapProperty<String, Object> libraryAbiModelsProps;
+		private ListProperty<AbiModel> libraryAbiModels;
+		private SetProperty<Object> linkLibInputs;
+
 		@Inject
-		public LinkAbiExtension() {
+		public LinkAbiExtension(ObjectFactory objects) {
+			libraryAbiModelsProps = objects.mapProperty(String.class, Object.class);
+			libraryAbiModels = objects.listProperty(AbiModel.class);
+			linkLibInputs = objects.setProperty(Object.class);
+
 			getLibraryFiles().from(getLinkLibInputs().map(it -> {
 				return it.stream().flatMap(t -> {
 					if (t instanceof File) {
@@ -75,6 +77,26 @@ interface LinkAbiAware extends Task {
 			}));
 			getLinkLibInputs().finalizeValueOnRead(); // ensure one resolution per snapshot
 			getLinkLibInputs().disallowChanges();
+
+			getLibraryAbiModelsProps().set(getLibraryAbiModels().map(values -> {
+				Map<String, Object> result = new LinkedHashMap<>();
+				int i = 0;
+				for (AbiModel value : values) {
+					if (value instanceof SharedLibraryAbiModel) {
+						String soname = ((SharedLibraryAbiModel) value).getSoname();
+						if (soname == null) {
+							result.put("$" + i + ".soname", soname);
+						}
+						result.put("$" + i + ".exportedSymbols", ((SharedLibraryAbiModel) value).getExportedSymbols());
+					} else {
+						throw new RuntimeException();
+					}
+					i++;
+				}
+				return result;
+			}));
+			getLibraryAbiModelsProps().finalizeValueOnRead();
+			getLibraryAbiModelsProps().disallowChanges();
 		}
 
 		@Internal
@@ -87,30 +109,27 @@ interface LinkAbiAware extends Task {
 		}
 
 		@Internal
-		protected abstract SetProperty<Object> getLinkLibInputs();
+		protected SetProperty<Object> getLinkLibInputs() {
+			return linkLibInputs;
+		}
 
 		@Internal
-		protected abstract ListProperty<AbiModel> getLibraryAbiModels();
+		protected ListProperty<AbiModel> getLibraryAbiModels() {
+			return libraryAbiModels;
+		}
 
 		@Internal
-		Provider<Map<String, ?>> getLibraryAbiModelsProps() {
-			return getLibraryAbiModels().map(values -> {
-				Map<String, Object> result = new LinkedHashMap<>();
-				int i = 0;
-				for (AbiModel value : values) {
-					if (value instanceof SharedLibraryAbiModel) {
-						result.put("$" + i + ".soname", ((SharedLibraryAbiModel) value).getSoname());
-						result.put("$" + i + ".exportedSymbols", ((SharedLibraryAbiModel) value).getExportedSymbols());
-					} else {
-						throw new RuntimeException();
-					}
-					i++;
-				}
-				return result;
-			});
+		MapProperty<String, Object> getLibraryAbiModelsProps() {
+			return libraryAbiModelsProps;
 		}
 
 		@InputFiles
 		protected abstract ConfigurableFileCollection getLibraryFiles();
+
+		void close() {
+			linkLibInputs = null;
+			libraryAbiModels = null;
+			libraryAbiModelsProps = null;
+		}
 	}
 }

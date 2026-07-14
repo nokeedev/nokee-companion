@@ -54,4 +54,10 @@ import java.util.Collections;
 		}
 		return result;
 	}
+
+	@Override
+	protected void link() {
+		super.link();
+		getLinkAbi().close();
+	}
 }
