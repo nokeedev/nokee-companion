@@ -5,6 +5,7 @@ import dev.nokee.elements.core.*;
 import dev.nokee.elements.nativebase.NativeElement;
 import dev.nokee.elements.nativebase.NativeLibraryElement;
 import org.apache.commons.lang3.SystemUtils;
+import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -12,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
@@ -23,6 +26,7 @@ import static dev.nokee.elements.core.ProjectElement.ofMain;
 import static dev.nokee.elements.nativebase.NativeLibraryElement.ofPublicHeaders;
 import static dev.nokee.elements.nativebase.NativeSourceElement.ofSources;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -252,7 +256,7 @@ class LinkAvoidanceFunctionalTests {
 				project.append(groovyDsl("""
 					afterEvaluate {
 						tasks.withType(LinkSharedLibrary).configureEach {
-							linkedFile = layout.buildDirectory.file(linkedFile.get().asFile.name) // safe-ish as we are just building one varia
+							linkedFile = layout.buildDirectory.file(linkedFile.get().asFile.name) // safe-ish as we are just building one variant
 						}
 					}
 				"""));
@@ -279,6 +283,50 @@ class LinkAvoidanceFunctionalTests {
 
 			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
 		}
+
+		@Test
+		void realizeTaskLibraryOnlyDuringExecutionPhase() {
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.subproject("other-lib", project -> {
+				write(project.file("src/main/cpp/foo.cpp"), "int foo_bar() { return 42; }");
+				project.plugins(it -> it.id("cpp-library"));
+			});
+			runner.withArguments(":other-lib:assemble").build();
+
+			build.subproject("app", project -> {
+				project.append(groovyDsl("""
+					components.withType(CppBinary).configureEach {
+						linkTask.get().libs.from(providers.gradleProperty('additional-lib').orElse([]).map {
+							println('resolving additional-lib: ' + it)
+							return it
+						})
+					}
+				"""));
+			});
+
+			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+
+			BuildResult result = runner.withArguments(":app:assemble", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")).run();
+			assertThat(result, tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(dev.gradleplugins.runnerkit.BuildResult.from(result.getOutput()).task(":app:linkDebug").getOutput(), containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib"));
+		}
+	}
+
+	private String sharedLib(String path) {
+		Path sharedLib = build.getLocation().resolve(path);
+		Path searchDir = sharedLib.getParent();
+		String fileName = sharedLib.getFileName().toString();
+		try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(searchDir)) {
+			for (Path dir : dirStream) {
+				if (dir.getFileName().toString().startsWith(fileName)) {
+					return build.getLocation().relativize(dir).toString();
+				}
+			}
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		throw new RuntimeException();
 	}
 
 	private static class Fixture extends WorkspaceElement {

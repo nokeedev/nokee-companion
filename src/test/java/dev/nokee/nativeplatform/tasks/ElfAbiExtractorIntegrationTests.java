@@ -49,10 +49,10 @@ class ElfAbiExtractorIntegrationTests {
 	void extractSharedLibraryDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
 		AbiModel model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
 		assertThat(model, is(sharedLibrary(
-			strongElfSymbol("strong_func"),
+			weakElfSymbol("weak_var"),
 			strongElfSymbol("strong_var"),
-			weakElfSymbol("weak_func"),
-			weakElfSymbol("weak_var")
+			strongElfSymbol("strong_func"),
+			weakElfSymbol("weak_func")
 		)));
 	}
 

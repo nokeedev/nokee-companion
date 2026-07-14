@@ -139,6 +139,7 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 
 		int count = (int) (symSize / symEntsize);
 
+		int size = 0;
 		for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
 			int base = (int) (i * symEntsize);
 			int stName, stInfo, stShndx;
@@ -159,11 +160,12 @@ final class ElfAbiModelReader implements AbiModelReader, AutoCloseable {
 				int length = BinaryUtils.hashCString(hasher, strtab, stName);
 				if (length > 0) {
 					hasher.putInt(binding);
+					size++;
 				}
 			}
 		}
 
-		if (count > 0) {
+		if (size > 0) {
 			return hasher.hash();
 		}
 		return null;
