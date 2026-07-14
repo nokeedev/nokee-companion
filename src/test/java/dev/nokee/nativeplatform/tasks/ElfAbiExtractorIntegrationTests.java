@@ -20,9 +20,9 @@ import static org.hamcrest.Matchers.*;
  * fixture directory's BUILD file for the commands to produce them.
  */
 class ElfAbiExtractorIntegrationTests {
-	private static final ElfAbiModelReader reader = new ElfAbiModelReader();
+	private static final ElfBinaryHasher reader = new ElfBinaryHasher();
 
-	private static AbiModel extract(Path path) throws IOException {
+	private static AbiBinaryHasher.AbiBinaryHashCode extract(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
 			return reader.hash(channel);
 		}
@@ -31,7 +31,7 @@ class ElfAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryWithNamedExports(String arch) throws IOException {
-		AbiModel model = extract(fixture("named-exports/" + arch + "/libnamed.so"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("named-exports/" + arch + "/libnamed.so"));
 		assertThat(model, is(sharedLibrary(
 			strongElfSymbol("greet"),
 			strongElfSymbol("value"),
@@ -42,14 +42,14 @@ class ElfAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryWithNoExports(String arch) throws IOException {
-		AbiModel model = extract(fixture("no-exports/" + arch + "/libno_exports.so"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("no-exports/" + arch + "/libno_exports.so"));
 		assertThat(model, is(emptySharedLibrary()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		AbiModel model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
 		assertThat(model, is(sharedLibrary(
 			weakElfSymbol("weak_var"),
 			strongElfSymbol("strong_var"),

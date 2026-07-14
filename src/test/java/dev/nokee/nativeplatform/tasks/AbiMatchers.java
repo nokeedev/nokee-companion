@@ -1,7 +1,6 @@
 package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.internal.hash.HashCode;
-import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.hash.PrimitiveHasher;
 import org.hamcrest.Description;
@@ -9,7 +8,6 @@ import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 
 import java.util.Arrays;
-import java.util.Collection;
 
 import static org.hamcrest.Matchers.*;
 
@@ -24,16 +22,16 @@ final class AbiMatchers {
 
 	private AbiMatchers() {}
 
-	static Matcher<AbiModel> sharedLibrary(HashFunction... hashes) {
+	static Matcher<AbiBinaryHasher.AbiBinaryHashCode> sharedLibrary(HashFunction... hashes) {
 		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 		Arrays.stream(hashes).forEach(it -> it.append(hasher));
 		return sharedLibrary(equalTo(hasher.hash()));
 	}
 
-	static Matcher<AbiModel> sharedLibrary(Matcher<? super HashCode> symbolsMatcher) {
+	static Matcher<AbiBinaryHasher.AbiBinaryHashCode> sharedLibrary(Matcher<? super HashCode> symbolsMatcher) {
 		return new TypeSafeMatcher<>() {
 			@Override
-			protected boolean matchesSafely(AbiModel model) {
+			protected boolean matchesSafely(AbiBinaryHasher.AbiBinaryHashCode model) {
 				if (!(model instanceof SharedLibraryAbiModel)) return false;
 				return symbolsMatcher.matches(((SharedLibraryAbiModel) model).getExportedSymbols());
 			}
@@ -44,7 +42,7 @@ final class AbiMatchers {
 			}
 
 			@Override
-			protected void describeMismatchSafely(AbiModel model, Description description) {
+			protected void describeMismatchSafely(AbiBinaryHasher.AbiBinaryHashCode model, Description description) {
 				if (!(model instanceof SharedLibraryAbiModel)) {
 					description.appendText("was ").appendValue(model.getClass().getSimpleName());
 				} else {
@@ -55,7 +53,7 @@ final class AbiMatchers {
 		};
 	}
 
-	static Matcher<AbiModel> emptySharedLibrary() {
+	static Matcher<AbiBinaryHasher.AbiBinaryHashCode> emptySharedLibrary() {
 		return sharedLibrary(nullValue());
 	}
 

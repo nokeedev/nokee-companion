@@ -1,6 +1,5 @@
 package dev.nokee.nativeplatform.tasks;
 
-import dev.nokee.commons.hamcrest.gradle.ThrowableMatchers;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -21,9 +20,9 @@ import static org.hamcrest.Matchers.*;
  * fixture directory's BUILD file for the commands to produce them.
  */
 class MachOAbiExtractorIntegrationTests {
-	private static final MachOAbiModelReader reader = new MachOAbiModelReader();
+	private static final MachOBinaryHasher reader = new MachOBinaryHasher();
 
-	private static AbiModel extract(Path path) throws IOException {
+	private static AbiBinaryHasher.AbiBinaryHashCode extract(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
 			return reader.hash(channel);
 		}
@@ -32,7 +31,7 @@ class MachOAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibWithNamedExports(String arch) throws IOException {
-		AbiModel model = extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
 		assertThat(model, is(sharedLibrary(
 			strongMachOSymbol("_compute"),
 			strongMachOSymbol("_greet"),
@@ -43,14 +42,14 @@ class MachOAbiExtractorIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibWithNoExports(String arch) throws IOException {
-		AbiModel model = extract(fixture("no-exports/" + arch + "/libno_exports.dylib"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("no-exports/" + arch + "/libno_exports.dylib"));
 		assertThat(model, is(emptySharedLibrary()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		AbiModel model = extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
 		assertThat(model, is(sharedLibrary(
 			strongMachOSymbol("_strong_func"),
 			strongMachOSymbol("_strong_var"),

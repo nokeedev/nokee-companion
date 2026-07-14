@@ -5,7 +5,6 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
-import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
@@ -39,13 +38,13 @@ interface LinkAbiAware extends Task {
 		protected abstract Property<CachingNativeLibraryAbiExtractor> getExtractor();
 
 		private MapProperty<String, Object> libraryAbiModelsProps;
-		private ListProperty<AbiModel> libraryAbiModels;
+		private ListProperty<AbiBinaryHasher.AbiBinaryHashCode> libraryAbiModels;
 		private SetProperty<Object> linkLibInputs;
 
 		@Inject
 		public LinkAbiExtension(ObjectFactory objects) {
 			libraryAbiModelsProps = objects.mapProperty(String.class, Object.class);
-			libraryAbiModels = objects.listProperty(AbiModel.class);
+			libraryAbiModels = objects.listProperty(AbiBinaryHasher.AbiBinaryHashCode.class);
 			linkLibInputs = objects.setProperty(Object.class);
 
 			getLibraryFiles().from(getLinkLibInputs().map(it -> {
@@ -58,8 +57,8 @@ interface LinkAbiAware extends Task {
 			}));
 			getLibraryAbiModels().set(getLinkLibInputs().map(it -> {
 				return it.stream().flatMap(t -> {
-					if (t instanceof AbiModel) {
-						return Stream.of((AbiModel) t);
+					if (t instanceof AbiBinaryHasher.AbiBinaryHashCode) {
+						return Stream.of((AbiBinaryHasher.AbiBinaryHashCode) t);
 					}
 					return Stream.empty();
 				}).collect(Collectors.toList());
@@ -81,7 +80,7 @@ interface LinkAbiAware extends Task {
 			getLibraryAbiModelsProps().set(getLibraryAbiModels().map(values -> {
 				Map<String, Object> result = new LinkedHashMap<>();
 				int i = 0;
-				for (AbiModel value : values) {
+				for (AbiBinaryHasher.AbiBinaryHashCode value : values) {
 					if (value instanceof SharedLibraryAbiModel) {
 						String soname = ((SharedLibraryAbiModel) value).getSoname();
 						if (soname == null) {
@@ -114,7 +113,7 @@ interface LinkAbiAware extends Task {
 		}
 
 		@Internal
-		protected ListProperty<AbiModel> getLibraryAbiModels() {
+		protected ListProperty<AbiBinaryHasher.AbiBinaryHashCode> getLibraryAbiModels() {
 			return libraryAbiModels;
 		}
 

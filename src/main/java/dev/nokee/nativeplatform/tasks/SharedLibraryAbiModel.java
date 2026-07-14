@@ -7,7 +7,7 @@ import org.gradle.internal.hash.HashCode;
 import javax.annotation.Nullable;
 import java.util.Objects;
 
-final class SharedLibraryAbiModel implements AbiModel {
+final class SharedLibraryAbiModel implements AbiBinaryHasher.AbiBinaryHashCode {
 	private static final long serialVersionUID = 1L;
 	private final String soname; // nullable
 	private final HashCode exportedSymbols;

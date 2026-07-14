@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 
-final class MachOAbiModelReader implements AbiModelReader {
+final class MachOBinaryHasher implements AbiBinaryHasher {
 	private static final int MH_MAGIC = 0xFEEDFACE;
 	private static final int MH_CIGAM = 0xCEFAEDFE;
 	private static final int MH_MAGIC_64 = 0xFEEDFACF;
@@ -30,7 +30,7 @@ final class MachOAbiModelReader implements AbiModelReader {
 	private static final int N_WEAK_DEF = 0x0080;
 
 	@Override
-	public AbiModel hash(FileChannel channel) throws IOException {
+	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
 		byte[] header = BinaryUtils.readBytes(channel, 0, 4);
 		int m = asInt(header, 0);
 		if (!isMachOMagic(m)) {
@@ -47,7 +47,7 @@ final class MachOAbiModelReader implements AbiModelReader {
 			|| m == FAT_MAGIC || m == Integer.reverseBytes(FAT_MAGIC);
 	}
 
-	private AbiModel extractFat(FileChannel channel) throws IOException {
+	private AbiBinaryHashCode extractFat(FileChannel channel) throws IOException {
 		ByteBuffer fatHdr = BinaryUtils.readAt(channel, 0, 8);
 		fatHdr.order(ByteOrder.BIG_ENDIAN); // fat binary is always big-endian
 		int nfatArch = fatHdr.getInt(4);
@@ -62,7 +62,7 @@ final class MachOAbiModelReader implements AbiModelReader {
 		return extractSlice(channel, sliceOffset, sliceHeader);
 	}
 
-	private AbiModel extractSlice(FileChannel channel, long offset, byte[] header) throws IOException {
+	private AbiBinaryHashCode extractSlice(FileChannel channel, long offset, byte[] header) throws IOException {
 		int m = asInt(header, 0);
 		boolean is64;
 		ByteOrder order;

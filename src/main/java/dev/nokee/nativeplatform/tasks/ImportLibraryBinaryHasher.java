@@ -10,13 +10,13 @@ import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 
-final class ImportLibraryAbiModelReader implements AbiModelReader {
+final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
 	// NameType=0 means IMPORT_ORDINAL (no symbol name in data); represented as "#<ordinal>"
 	private static final int IMPORT_ORDINAL = 0;
 
 	@Override
-	public AbiModel hash(FileChannel channel) throws IOException {
+	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
 		byte[] magic = BinaryUtils.readBytes(channel, 0, 8);
 		if (!isArMagic(magic)) {
 			throw new IllegalArgumentException("not an ar archive");
@@ -49,7 +49,7 @@ final class ImportLibraryAbiModelReader implements AbiModelReader {
 		return false;
 	}
 
-	private AbiModel parse(FileChannel channel) throws IOException {
+	private AbiBinaryHashCode parse(FileChannel channel) throws IOException {
 		long offset = 8; // skip !<arch>\n
 		String dllName = null;
 		HashCode symbols = null;

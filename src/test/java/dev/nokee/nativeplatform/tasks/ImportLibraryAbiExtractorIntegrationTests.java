@@ -21,9 +21,9 @@ import static org.hamcrest.Matchers.*;
  */
 @Disabled
 class ImportLibraryAbiExtractorIntegrationTests {
-	private static final ImportLibraryAbiModelReader reader = new ImportLibraryAbiModelReader();
+	private static final ImportLibraryBinaryHasher reader = new ImportLibraryBinaryHasher();
 
-	private static AbiModel extract(Path path) throws IOException {
+	private static AbiBinaryHasher.AbiBinaryHashCode extract(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
 			return reader.hash(channel);
 		}
@@ -31,7 +31,7 @@ class ImportLibraryAbiExtractorIntegrationTests {
 
 	@Test
 	void extractImportLibraryWithNamedExports() throws IOException {
-		AbiModel model = extract(fixture("named-exports/named.lib"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("named-exports/named.lib"));
 		assertThat(model, is(sharedLibrary(
 			namedPeSymbol("compute"),
 			namedPeSymbol("greet"),
@@ -41,13 +41,13 @@ class ImportLibraryAbiExtractorIntegrationTests {
 
 	@Test
 	void extractImportLibraryWithNoExports() throws IOException {
-		AbiModel model = extract(fixture("no-exports/no_exports.lib"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("no-exports/no_exports.lib"));
 		assertThat(model, is(emptySharedLibrary()));
 	}
 
 	@Test
 	void extractImportLibraryWithOrdinalOnlyExports() throws IOException {
-		AbiModel model = extract(fixture("ordinal-only-exports/ordinal.lib"));
+		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("ordinal-only-exports/ordinal.lib"));
 		assertThat(model, is(sharedLibrary(
 			ordinalOnlyPeSymbol(1),
 			ordinalOnlyPeSymbol(2)

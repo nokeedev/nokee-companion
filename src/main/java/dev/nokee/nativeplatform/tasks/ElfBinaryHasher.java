@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 
-final class ElfAbiModelReader implements AbiModelReader {
+final class ElfBinaryHasher implements AbiBinaryHasher {
 	private static final int ET_DYN = 3;
 	private static final int SHT_DYNAMIC = 6;
 	private static final int SHT_DYNSYM = 11;
@@ -20,7 +20,7 @@ final class ElfAbiModelReader implements AbiModelReader {
 	private static final int SHN_UNDEF = 0;
 
 	@Override
-	public AbiModel hash(FileChannel channel) throws IOException {
+	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
 		ByteBuffer ident = BinaryUtils.readAt(channel, 0, 16);
 		if (!(ident.get(0) == 0x7f && ident.get(1) == 0x45 && ident.get(2) == 0x4c && ident.get(3) == 0x46)) {
 			throw new IllegalArgumentException("not an ELF file");

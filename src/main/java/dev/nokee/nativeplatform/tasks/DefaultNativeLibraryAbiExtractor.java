@@ -10,9 +10,9 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 	private static final byte[] ELF_MAGIC = {0x7f, 0x45, 0x4c, 0x46};
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
 
-	private final ElfAbiModelReader elfReader = new ElfAbiModelReader();
-	private final MachOAbiModelReader machOReader = new MachOAbiModelReader();
-	private final ImportLibraryAbiModelReader importReader = new ImportLibraryAbiModelReader();
+	private final ElfBinaryHasher elfReader = new ElfBinaryHasher();
+	private final MachOBinaryHasher machOReader = new MachOBinaryHasher();
+	private final ImportLibraryBinaryHasher importReader = new ImportLibraryBinaryHasher();
 
 	public Object hash(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
@@ -21,7 +21,7 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			}
 			byte[] header = BinaryUtils.readBytes(channel, 0, 8);
 
-			AbiModelReader reader;
+			AbiBinaryHasher reader;
 			if (isElfMagic(header)) {
 				reader = elfReader;
 			} else if (isMachOMagic(header)) {
