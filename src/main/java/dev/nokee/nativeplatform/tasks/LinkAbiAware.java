@@ -4,7 +4,9 @@ import org.gradle.api.Task;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.*;
+import org.gradle.api.provider.ListProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.provider.SetProperty;
 import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
@@ -26,7 +28,7 @@ interface LinkAbiAware extends Task {
 		if (!getExt_linkAbi().isPresent()) { // safe as we control the lifecycle
 			ObjectFactory objects = getProject().getObjects();
 			LinkAbiExtension extension = objects.newInstance(LinkAbiExtension.class);
-			extension.getExtractor().set(getProject().getGradle().getSharedServices().registerIfAbsent("link-abi-cache", LinkAbiCache.class).map(it -> objects.newInstance(CachingNativeLibraryAbiExtractor.class, it)));
+			extension.getLinkAbiCache().set(getProject().getGradle().getSharedServices().registerIfAbsent("link-abi-cache", LinkAbiCache.class));
 			getExt_linkAbi().set(extension);
 		}
 
@@ -36,7 +38,7 @@ interface LinkAbiAware extends Task {
 
 	abstract /*final*/ class LinkAbiExtension {
 		@Internal
-		protected abstract Property<CachingNativeLibraryAbiExtractor> getExtractor();
+		protected abstract Property<LinkAbiCache> getLinkAbiCache();
 
 		private SetProperty<Map<String, Object>> libraryAbiModelsProps;
 		private ListProperty<AbiBinaryHasher.AbiBinaryHashCode> libraryAbiModels;
@@ -67,10 +69,10 @@ interface LinkAbiAware extends Task {
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
 			getLinkLibInputs().set(getLibs().getElements().map(libsx -> {
-				AbiExtractorService extractor = getAbiExtractor();
+				NativeLibraryAbiExtractor extractor = getAbiExtractor();
 				List<Object> result = new ArrayList<>();
 				for (FileSystemLocation lib : libsx) {
-					Object entry = extractor.hash(lib.getAsFile());
+					Object entry = extractor.hash(lib.getAsFile().toPath());
 					result.add(entry);
 				}
 				return result;
@@ -100,8 +102,8 @@ interface LinkAbiAware extends Task {
 
 		@Inject protected abstract ObjectFactory getObjects();
 
-		private AbiExtractorService getAbiExtractor() {
-			return getObjects().newInstance(AbiExtractorService.class, getExtractor().get());
+		private NativeLibraryAbiExtractor getAbiExtractor() {
+			return getObjects().newInstance(CachingNativeLibraryAbiExtractor.class, getLinkAbiCache().get());
 		}
 
 		@Internal
