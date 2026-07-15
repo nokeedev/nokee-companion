@@ -14,7 +14,25 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 final class ElfBinaryHasher implements AbiBinaryHasher {
-	private static final int ET_DYN = 3;
+	// for e_ident
+	private static final int EI_MAG0 = 0; // index in e_ident array
+	private static final int EI_MAG1 = 1; // index in e_ident array
+	private static final int EI_MAG2 = 2; // index in e_ident array
+	private static final int EI_MAG3 = 3; // index in e_ident array
+	private static final int EI_CLASS = 4; // index in e_ident array
+	private static final int EI_DATA = 5; // index in e_ident array
+	private static final int EI_NIDENT = 16; // size of e_ident array
+
+	private static final byte ELFMAG0 = 0x7f; // required value at e_ident[EI_MAG0]
+	private static final byte ELFMAG1 = 'E'; // required value at e_ident[EI_MAG1]
+	private static final byte ELFMAG2 = 'L'; // required value at e_ident[EI_MAG2]
+	private static final byte ELFMAG3 = 'F'; // required value at e_ident[EI_MAG3]
+
+	private static final byte ELFCLASS64 = 2; // a value of e_ident[EI_CLASS]
+
+	private static final byte ELFDATA2LSB = 1; // little endian value of e_ident[EI_DATA]
+
+	private static final int ET_DYN = 3; // for e_type
 	private static final int SHT_DYNAMIC = 6;
 	private static final int SHT_DYNSYM = 11;
 	private static final long DT_SONAME = 14;
@@ -26,25 +44,25 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	@Override
 	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
 		ByteBuffer ident = BinaryUtils.readAt(channel, 0, 16);
-		if (!(ident.get(0) == 0x7f && ident.get(1) == 0x45 && ident.get(2) == 0x4c && ident.get(3) == 0x46)) {
+		if (!(ident.get(EI_MAG0) == ELFMAG0 && ident.get(EI_MAG1) == ELFMAG1 && ident.get(EI_MAG2) == ELFMAG2 && ident.get(EI_MAG3) == ELFMAG3)) {
 			throw new IllegalArgumentException("not an ELF file");
 		}
-		boolean is64 = ident.get(4) == 2; // EI_CLASS
-		ByteOrder order = ident.get(5) == 1 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN; // EI_DATA
+		boolean is64 = ident.get(EI_CLASS) == ELFCLASS64;
+		ByteOrder order = ident.get(EI_DATA) == ELFDATA2LSB ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 
 		ByteBuffer hdr = BinaryUtils.readAt(channel, 0, is64 ? 64 : 52);
 		hdr.order(order);
 
-		int eType = hdr.getShort(16) & 0xFFFF;
-		if (eType != ET_DYN) {
-			throw new NotASharedLibraryException("ELF file is not a shared library (e_type=" + eType + ")");
+		int e_type = hdr.getShort(16) & 0xFFFF;
+		if (e_type != ET_DYN) {
+			throw new NotASharedLibraryException("ELF file is not a shared library (e_type=" + e_type + ")");
 		}
 
-		long shoff = is64 ? hdr.getLong(40) : (hdr.getInt(32) & 0xFFFFFFFFL);
-		int shentsize = hdr.getShort(is64 ? 58 : 46) & 0xFFFF;
-		int shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
+		long e_shoff = is64 ? hdr.getLong(40) : (hdr.getInt(32) & 0xFFFFFFFFL);
+		int e_shentsize = hdr.getShort(is64 ? 58 : 46) & 0xFFFF;
+		int e_shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
 
-		if (shoff == 0 || shnum == 0 || shentsize == 0) {
+		if (e_shoff == 0 || e_shnum == 0 || e_shentsize == 0) {
 			return new ElfHashCode(null, null);
 		}
 
@@ -55,39 +73,29 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 		// Scan the section header table one entry at a time, reusing a single entry-sized buffer
 		// instead of holding the whole table (shentsize * shnum bytes) in memory.
-		ByteBuffer sh = ByteBuffer.allocate(shentsize);
+		ByteBuffer sh = ByteBuffer.allocate(e_shentsize);
 		sh.order(order);
-		for (int i = 0; i < shnum; i++) {
-			BinaryUtils.readInto(channel, shoff + (long) i * shentsize, sh, shentsize);
-			int shType = sh.getInt(4);
-			long shOff, shSize, shEntsize;
-			int shLink;
+		for (int i = 0; i < e_shnum; i++) {
+			BinaryUtils.readInto(channel, e_shoff + (long) i * e_shentsize, sh, e_shentsize);
+			int sh_type = sh.getInt(4);
+			long sh_offset = is64 ? sh.getLong(24) : sh.getInt(16) & 0xFFFFFFFFL;
+			long sh_size = is64 ? sh.getLong(32) : sh.getInt(20) & 0xFFFFFFFFL;
+			int sh_link = is64 ? sh.getInt(40) : sh.getInt(24);
+			long sh_entsize = is64 ? sh.getLong(56) : sh.getInt(36) & 0xFFFFFFFFL;
 
-			if (is64) {
-				shOff = sh.getLong(24);
-				shSize = sh.getLong(32);
-				shLink = sh.getInt(40);
-				shEntsize = sh.getLong(56);
-			} else {
-				shOff = sh.getInt(16) & 0xFFFFFFFFL;
-				shSize = sh.getInt(20) & 0xFFFFFFFFL;
-				shLink = sh.getInt(24);
-				shEntsize = sh.getInt(36) & 0xFFFFFFFFL;
-			}
-
-			if (shType == SHT_DYNAMIC) {
-				dynamicOff = shOff;
-				dynamicSize = shSize;
-			} else if (shType == SHT_DYNSYM) {
-				dynsymOff = shOff;
-				dynsymSize = shSize;
-				dynsymEntsize = shEntsize;
-				dynsymLink = shLink;
+			if (sh_type == SHT_DYNAMIC) { // only one section can exists
+				dynamicOff = sh_offset;
+				dynamicSize = sh_size;
+			} else if (sh_type == SHT_DYNSYM) {
+				dynsymOff = sh_offset;
+				dynsymSize = sh_size;
+				dynsymEntsize = sh_entsize;
+				dynsymLink = sh_link;
 			}
 		}
 
-		if (dynsymLink >= 0 && dynsymLink < shnum) {
-			BinaryUtils.readInto(channel, shoff + (long) dynsymLink * shentsize, sh, shentsize);
+		if (dynsymLink >= 0 && dynsymLink < e_shnum) {
+			BinaryUtils.readInto(channel, e_shoff + (long) dynsymLink * e_shentsize, sh, e_shentsize);
 			if (is64) {
 				dynstrOff = sh.getLong(24);
 				dynstrSize = sh.getLong(32);
