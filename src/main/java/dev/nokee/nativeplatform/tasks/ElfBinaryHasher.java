@@ -41,12 +41,14 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	private static final int STB_WEAK = 2;
 	private static final int SHN_UNDEF = 0;
 
+	private final ByteBuffer buffer = ByteBuffer.allocate(64); // this buffer gets allocated once
+
 	@Override
 	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
 		// e_ident (first 16 bytes) is format-independent, so read the full 64-bit header size up front:
 		// a single read covers both the identification and the rest of the header, and the shorter
 		// 32-bit header (52 bytes) fits within these 64 bytes.
-		ByteBuffer hdr = BinaryUtils.readAt(channel, 0, 64);
+		ByteBuffer hdr = BinaryUtils.readInto(channel, 0, buffer, 64);
 		if (!(hdr.get(EI_MAG0) == ELFMAG0 && hdr.get(EI_MAG1) == ELFMAG1 && hdr.get(EI_MAG2) == ELFMAG2 && hdr.get(EI_MAG3) == ELFMAG3)) {
 			throw new IllegalArgumentException("not an ELF file");
 		}
@@ -74,8 +76,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 		// Scan the section header table one entry at a time, reusing a single entry-sized buffer
 		// instead of holding the whole table (shentsize * shnum bytes) in memory.
-		ByteBuffer sh = ByteBuffer.allocate(e_shentsize);
-		sh.order(order);
+		assert e_shentsize <= buffer.limit() : "try to minimize allocation by reusing other buffers";
+		ByteBuffer sh = buffer.order(order);
 		for (int i = 0; i < e_shnum; i++) {
 			BinaryUtils.readInto(channel, e_shoff + (long) i * e_shentsize, sh, e_shentsize);
 			int sh_type = sh.getInt(4);
@@ -126,8 +128,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 		// Scan the dynamic table one entry at a time, reusing a single entry-sized buffer instead of
 		// holding the whole section in memory.
-		ByteBuffer dyn = ByteBuffer.allocate(entSize);
-		dyn.order(order);
+		assert entSize <= buffer.limit() : "try minimizing buffer allocation by reusing the 'bigger' buffer";
+		ByteBuffer dyn = buffer.order(order);
 
 		for (int i = 0; i < count; i++) {
 			BinaryUtils.readInto(channel, dynOff + (long) i * entSize, dyn, entSize);
@@ -152,7 +154,6 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 		// Read each symbol name on demand from the string table instead of loading the whole table.
 		long strEnd = strOff + strSize;
-		ByteBuffer nameBuf = ByteBuffer.allocate(256);
 
 		int count = (int) (symSize / symEntsize);
 
@@ -174,7 +175,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			int binding = stInfo >> 4;
 
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
-				int length = BinaryUtils.hashCStringAt(hasher, channel, nameBuf, strOff + (stName & 0xFFFFFFFFL), strEnd);
+				int length = BinaryUtils.hashCStringAt(hasher, channel, buffer, strOff + (stName & 0xFFFFFFFFL), strEnd);
 				if (length > 0) {
 					hasher.putInt(binding);
 					size++;

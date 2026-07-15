@@ -2,6 +2,7 @@ package dev.nokee.nativeplatform.tasks;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -10,34 +11,57 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 	private static final byte[] ELF_MAGIC = {0x7f, 0x45, 0x4c, 0x46};
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
 
-	private final ElfBinaryHasher elfReader = new ElfBinaryHasher();
-	private final MachOBinaryHasher machOReader = new MachOBinaryHasher();
-	private final ImportLibraryBinaryHasher importReader = new ImportLibraryBinaryHasher();
+	private ElfBinaryHasher elfHasher;
+	private MachOBinaryHasher machOHasher;
+	private ImportLibraryBinaryHasher importLibraryHasher;
+
+	private final ByteBuffer buffer = ByteBuffer.allocate(8);
 
 	public Object hash(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 			if (channel.size() < 8) {
 				return library;
 			}
-			byte[] header = BinaryUtils.readBytes(channel, 0, 8);
+			byte[] header = BinaryUtils.readInto(channel, 0, buffer,8).array();
 
-			AbiBinaryHasher reader;
+			AbiBinaryHasher hasher;
 			if (isElfMagic(header)) {
-				reader = elfReader;
+				hasher = elfHasher();
 			} else if (isMachOMagic(header)) {
-				reader = machOReader;
+				hasher = machOHasher();
 			} else if (isArMagic(header)) {
-				reader = importReader;
+				hasher = importLibraryHasher();
 			} else {
 				return library;
 			}
 
-			return reader.hash(channel);
+			return hasher.hash(channel);
 		} catch (NotASharedLibraryException e) {
-			return library;
+			return library; // should not get here
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
+	}
+
+	private AbiBinaryHasher elfHasher() {
+		if (elfHasher == null) {
+			elfHasher = new ElfBinaryHasher();
+		}
+		return elfHasher;
+	}
+
+	private AbiBinaryHasher machOHasher() {
+		if (machOHasher == null) {
+			machOHasher = new MachOBinaryHasher();
+		}
+		return machOHasher;
+	}
+
+	private AbiBinaryHasher importLibraryHasher() {
+		if (importLibraryHasher == null) {
+			importLibraryHasher = new ImportLibraryBinaryHasher();
+		}
+		return importLibraryHasher;
 	}
 
 	private static boolean isElfMagic(byte[] h) {
