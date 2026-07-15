@@ -29,8 +29,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		if (!(ident.get(0) == 0x7f && ident.get(1) == 0x45 && ident.get(2) == 0x4c && ident.get(3) == 0x46)) {
 			throw new IllegalArgumentException("not an ELF file");
 		}
-		boolean is64 = ident.get(4) == 2;
-		ByteOrder order = ident.get(5) == 1 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
+		boolean is64 = ident.get(4) == 2; // EI_CLASS
+		ByteOrder order = ident.get(5) == 1 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN; // EI_DATA
 
 		ByteBuffer hdr = BinaryUtils.readAt(channel, 0, is64 ? 64 : 52);
 		hdr.order(order);
@@ -123,8 +123,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			long val = is64 ? dyn.getLong(base + 8) : (dyn.getInt(base + 4) & 0xFFFFFFFFL);
 			if (tag == DT_NULL) break;
 			if (tag == DT_SONAME) {
-				ByteBuffer dynstr = BinaryUtils.readAt(channel, dynstrOff, (int) dynstrSize);
-				return BinaryUtils.readCString(dynstr, (int) val);
+				return BinaryUtils.readCStringAt(channel, dynstrOff + val, dynstrOff + dynstrSize);
 			}
 		}
 		return null;
@@ -133,31 +132,37 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	private HashCode extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
 		long symOff, long symSize, long symEntsize, long strOff, long strSize) throws IOException {
 		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-		ByteBuffer syms = BinaryUtils.readAt(channel, symOff, (int) symSize);
-		syms.order(order);
-		ByteBuffer strtab = BinaryUtils.readAt(channel, strOff, (int) strSize);
+
+		// Scan the symbol table one entry at a time, reusing a single entry-sized buffer instead of
+		// holding the whole table (symEntsize * count bytes) in memory.
+		ByteBuffer sym = ByteBuffer.allocate((int) symEntsize);
+		sym.order(order);
+
+		// Read each symbol name on demand from the string table instead of loading the whole table.
+		long strEnd = strOff + strSize;
+		ByteBuffer nameBuf = ByteBuffer.allocate(256);
 
 		int count = (int) (symSize / symEntsize);
 
 		int size = 0;
 		for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
-			int base = (int) (i * symEntsize);
+			BinaryUtils.readInto(channel, symOff + (long) i * symEntsize, sym, (int) symEntsize);
 			int stName, stInfo, stShndx;
 
 			if (is64) {
-				stName = syms.getInt(base);
-				stInfo = syms.get(base + 4) & 0xFF;
-				stShndx = syms.getShort(base + 6) & 0xFFFF;
+				stName = sym.getInt(0);
+				stInfo = sym.get(4) & 0xFF;
+				stShndx = sym.getShort(6) & 0xFFFF;
 			} else {
-				stName = syms.getInt(base);
-				stInfo = syms.get(base + 12) & 0xFF;
-				stShndx = syms.getShort(base + 14) & 0xFFFF;
+				stName = sym.getInt(0);
+				stInfo = sym.get(12) & 0xFF;
+				stShndx = sym.getShort(14) & 0xFFFF;
 			}
 
 			int binding = stInfo >> 4;
 
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
-				int length = BinaryUtils.hashCString(hasher, strtab, stName);
+				int length = BinaryUtils.hashCStringAt(hasher, channel, nameBuf, strOff + (stName & 0xFFFFFFFFL), strEnd);
 				if (length > 0) {
 					hasher.putInt(binding);
 					size++;

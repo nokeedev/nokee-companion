@@ -2,6 +2,7 @@ package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.internal.hash.PrimitiveHasher;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -54,5 +55,60 @@ final class BinaryUtils {
 			hasher.putBytes(b, offset, length);
 		}
 		return length;
+	}
+
+	/**
+	 * Hashes the NUL-terminated string at {@code offset} directly from the channel, reading only as
+	 * much as the string needs (in chunks through the reused {@code scratch} buffer) instead of
+	 * loading the enclosing string table. Reads never pass {@code endOffset} (the string table end),
+	 * which also bounds a string whose terminator is missing. Returns the string length in bytes.
+	 * Fed byte-for-byte into the hasher, so the result matches {@link #hashCString} for the same name.
+	 */
+	static int hashCStringAt(PrimitiveHasher hasher, FileChannel channel, ByteBuffer scratch, long offset, long endOffset) throws IOException {
+		int length = 0;
+		long pos = offset;
+		while (pos < endOffset) {
+			scratch.clear();
+			scratch.limit((int) Math.min(scratch.capacity(), endOffset - pos));
+			int n = channel.read(scratch, pos);
+			if (n <= 0) break;
+			byte[] b = scratch.array();
+			for (int i = 0; i < n; i++) {
+				if (b[i] == 0) {
+					if (i > 0) hasher.putBytes(b, 0, i);
+					return length + i;
+				}
+			}
+			hasher.putBytes(b, 0, n);
+			length += n;
+			pos += n;
+		}
+		return length;
+	}
+
+	/**
+	 * Reads the NUL-terminated string at {@code offset} directly from the channel, without loading the
+	 * enclosing string table. Reads are bounded by {@code endOffset} (the string table end).
+	 */
+	static String readCStringAt(FileChannel channel, long offset, long endOffset) throws IOException {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		ByteBuffer buf = ByteBuffer.allocate(256);
+		long pos = offset;
+		while (pos < endOffset) {
+			buf.clear();
+			buf.limit((int) Math.min(buf.capacity(), endOffset - pos));
+			int n = channel.read(buf, pos);
+			if (n <= 0) break;
+			byte[] b = buf.array();
+			for (int i = 0; i < n; i++) {
+				if (b[i] == 0) {
+					out.write(b, 0, i);
+					return new String(out.toByteArray());
+				}
+			}
+			out.write(b, 0, n);
+			pos += n;
+		}
+		return new String(out.toByteArray());
 	}
 }

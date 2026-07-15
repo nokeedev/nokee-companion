@@ -149,7 +149,9 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		int startSym = iextdefsym;
 		int endSym = Math.min(iextdefsym + nextdefsym, nsyms);
 
-		ByteBuffer strtab = BinaryUtils.readAt(channel, stroff, strsize);
+		// Read each symbol name on demand from the string table instead of loading the whole table.
+		long strEnd = stroff + (strsize & 0xFFFFFFFFL);
+		ByteBuffer nameBuf = ByteBuffer.allocate(256);
 
 		// Reuse a single nlist-sized buffer across all symbols instead of allocating one per entry.
 		ByteBuffer sym = ByteBuffer.allocate(nlistSize);
@@ -164,7 +166,7 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			if ((nType & N_EXT) == 0) continue;
 			if ((nType & N_TYPE) == N_UNDF) continue;
 
-			int length = BinaryUtils.hashCString(hasher, strtab, strx);
+			int length = BinaryUtils.hashCStringAt(hasher, channel, nameBuf, stroff + (strx & 0xFFFFFFFFL), strEnd);
 			if (length > 0) {
 				hasher.putBoolean((nDesc & N_WEAK_DEF) != 0);
 			}
