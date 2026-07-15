@@ -48,30 +48,31 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			return new ElfHashCode(null, null);
 		}
 
-		ByteBuffer shdrs = BinaryUtils.readAt(channel, shoff, shentsize * shnum);
-		shdrs.order(order);
-
 		long dynstrOff = -1, dynstrSize = -1;
 		long dynamicOff = -1, dynamicSize = -1;
 		long dynsymOff = -1, dynsymSize = -1, dynsymEntsize = -1;
 		int dynsymLink = -1;
 
+		// Scan the section header table one entry at a time, reusing a single entry-sized buffer
+		// instead of holding the whole table (shentsize * shnum bytes) in memory.
+		ByteBuffer sh = ByteBuffer.allocate(shentsize);
+		sh.order(order);
 		for (int i = 0; i < shnum; i++) {
-			int base = i * shentsize;
-			int shType = shdrs.getInt(base + 4);
+			BinaryUtils.readInto(channel, shoff + (long) i * shentsize, sh, shentsize);
+			int shType = sh.getInt(4);
 			long shOff, shSize, shEntsize;
 			int shLink;
 
 			if (is64) {
-				shOff = shdrs.getLong(base + 24);
-				shSize = shdrs.getLong(base + 32);
-				shLink = shdrs.getInt(base + 40);
-				shEntsize = shdrs.getLong(base + 56);
+				shOff = sh.getLong(24);
+				shSize = sh.getLong(32);
+				shLink = sh.getInt(40);
+				shEntsize = sh.getLong(56);
 			} else {
-				shOff = shdrs.getInt(base + 16) & 0xFFFFFFFFL;
-				shSize = shdrs.getInt(base + 20) & 0xFFFFFFFFL;
-				shLink = shdrs.getInt(base + 24);
-				shEntsize = shdrs.getInt(base + 36) & 0xFFFFFFFFL;
+				shOff = sh.getInt(16) & 0xFFFFFFFFL;
+				shSize = sh.getInt(20) & 0xFFFFFFFFL;
+				shLink = sh.getInt(24);
+				shEntsize = sh.getInt(36) & 0xFFFFFFFFL;
 			}
 
 			if (shType == SHT_DYNAMIC) {
@@ -86,13 +87,13 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		}
 
 		if (dynsymLink >= 0 && dynsymLink < shnum) {
-			int base = dynsymLink * shentsize;
+			BinaryUtils.readInto(channel, shoff + (long) dynsymLink * shentsize, sh, shentsize);
 			if (is64) {
-				dynstrOff = shdrs.getLong(base + 24);
-				dynstrSize = shdrs.getLong(base + 32);
+				dynstrOff = sh.getLong(24);
+				dynstrSize = sh.getLong(32);
 			} else {
-				dynstrOff = shdrs.getInt(base + 16) & 0xFFFFFFFFL;
-				dynstrSize = shdrs.getInt(base + 20) & 0xFFFFFFFFL;
+				dynstrOff = sh.getInt(16) & 0xFFFFFFFFL;
+				dynstrSize = sh.getInt(20) & 0xFFFFFFFFL;
 			}
 		}
 
