@@ -43,14 +43,15 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 	@Override
 	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
-		ByteBuffer ident = BinaryUtils.readAt(channel, 0, 16);
-		if (!(ident.get(EI_MAG0) == ELFMAG0 && ident.get(EI_MAG1) == ELFMAG1 && ident.get(EI_MAG2) == ELFMAG2 && ident.get(EI_MAG3) == ELFMAG3)) {
+		// e_ident (first 16 bytes) is format-independent, so read the full 64-bit header size up front:
+		// a single read covers both the identification and the rest of the header, and the shorter
+		// 32-bit header (52 bytes) fits within these 64 bytes.
+		ByteBuffer hdr = BinaryUtils.readAt(channel, 0, 64);
+		if (!(hdr.get(EI_MAG0) == ELFMAG0 && hdr.get(EI_MAG1) == ELFMAG1 && hdr.get(EI_MAG2) == ELFMAG2 && hdr.get(EI_MAG3) == ELFMAG3)) {
 			throw new IllegalArgumentException("not an ELF file");
 		}
-		boolean is64 = ident.get(EI_CLASS) == ELFCLASS64;
-		ByteOrder order = ident.get(EI_DATA) == ELFDATA2LSB ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
-
-		ByteBuffer hdr = BinaryUtils.readAt(channel, 0, is64 ? 64 : 52);
+		boolean is64 = hdr.get(EI_CLASS) == ELFCLASS64;
+		ByteOrder order = hdr.get(EI_DATA) == ELFDATA2LSB ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 		hdr.order(order);
 
 		int e_type = hdr.getShort(16) & 0xFFFF;
