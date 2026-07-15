@@ -122,13 +122,16 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		long dynOff, long dynSize, long dynstrOff, long dynstrSize) throws IOException {
 		int entSize = is64 ? 16 : 8;
 		int count = (int) (dynSize / entSize);
-		ByteBuffer dyn = BinaryUtils.readAt(channel, dynOff, (int) dynSize);
+
+		// Scan the dynamic table one entry at a time, reusing a single entry-sized buffer instead of
+		// holding the whole section in memory.
+		ByteBuffer dyn = ByteBuffer.allocate(entSize);
 		dyn.order(order);
 
 		for (int i = 0; i < count; i++) {
-			int base = i * entSize;
-			long tag = is64 ? dyn.getLong(base) : (dyn.getInt(base) & 0xFFFFFFFFL);
-			long val = is64 ? dyn.getLong(base + 8) : (dyn.getInt(base + 4) & 0xFFFFFFFFL);
+			BinaryUtils.readInto(channel, dynOff + (long) i * entSize, dyn, entSize);
+			long tag = is64 ? dyn.getLong(0) : (dyn.getInt(0) & 0xFFFFFFFFL);
+			long val = is64 ? dyn.getLong(8) : (dyn.getInt(4) & 0xFFFFFFFFL);
 			if (tag == DT_NULL) break;
 			if (tag == DT_SONAME) {
 				return BinaryUtils.readCStringAt(channel, dynstrOff + val, dynstrOff + dynstrSize);
