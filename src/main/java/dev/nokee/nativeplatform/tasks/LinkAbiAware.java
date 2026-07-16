@@ -68,14 +68,17 @@ interface LinkAbiAware extends Task {
 			}));
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
-			getLinkLibInputs().set(getLibs().getElements().map(libs -> {
-				NativeLibraryAbiExtractor extractor = getAbiExtractor();
-				List<Object> result = new ArrayList<>();
-				for (FileSystemLocation lib : libs) {
-					Object entry = extractor.hash(lib.getAsFile().toPath());
-					result.add(entry);
+			getLinkLibInputs().set(getUseNormalizedAbi().orElse(false).zip(getLibs().getElements(), (useAbi, libs) -> {
+				if (useAbi) {
+					NativeLibraryAbiExtractor extractor = getAbiExtractor();
+					List<Object> result = new ArrayList<>();
+					for (FileSystemLocation lib : libs) {
+						Object entry = extractor.hash(lib.getAsFile().toPath());
+						result.add(entry);
+					}
+					return result;
 				}
-				return result;
+				return libs;
 			}));
 			getLinkLibInputs().finalizeValueOnRead(); // ensure one resolution per snapshot
 			getLinkLibInputs().disallowChanges();
@@ -99,6 +102,9 @@ interface LinkAbiAware extends Task {
 
 		@Internal
 		public abstract ConfigurableFileCollection getLibs();
+
+		@Input
+		public abstract Property<Boolean> getUseNormalizedAbi();
 
 		@Inject protected abstract ObjectFactory getObjects();
 
