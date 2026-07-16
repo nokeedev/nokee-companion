@@ -68,10 +68,10 @@ interface LinkAbiAware extends Task {
 			}));
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
-			getLinkLibInputs().set(getLibs().getElements().map(libsx -> {
+			getLinkLibInputs().set(getLibs().getElements().map(libs -> {
 				NativeLibraryAbiExtractor extractor = getAbiExtractor();
 				List<Object> result = new ArrayList<>();
-				for (FileSystemLocation lib : libsx) {
+				for (FileSystemLocation lib : libs) {
 					Object entry = extractor.hash(lib.getAsFile().toPath());
 					result.add(entry);
 				}
@@ -116,8 +116,9 @@ interface LinkAbiAware extends Task {
 			return libraryAbiModels;
 		}
 
-		@Input
-		SetProperty<Map<String, Object>> getLibraryAbiModelsProps() {
+		@Input // This pattern is @Nested while respecting the provider knowledge
+		// Note that this pattern must split the "@InputFiles"/"@OutputFiles" from the "@Input" values as we don't have real @Nested
+		protected SetProperty<Map<String, Object>> getLibraryAbiModelsProps() {
 			return libraryAbiModelsProps;
 		}
 
