@@ -42,6 +42,7 @@ class LinkAvoidanceFunctionalTests {
 
 		build.properties(it -> {
 			it.put("org.gradle.configuration-cache", true);
+			it.put("dev.nokee.native-companion.link-avoidance.enabled", true);
 		});
 		build.subproject("lib", project -> {
 			project.plugins(it -> {

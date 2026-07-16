@@ -6,12 +6,14 @@ import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.reflect.TypeOf;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
+import org.gradle.api.tasks.Optional;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -19,7 +21,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-interface LinkAbiAware extends Task {
+// This class is considered private for the moment
+public interface LinkAbiAware extends Task {
 	@Internal
 	Property<LinkAbiExtension> getExt_linkAbi();
 
@@ -68,8 +71,9 @@ interface LinkAbiAware extends Task {
 			}));
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
-			getLinkLibInputs().set(getUseNormalizedAbi().orElse(false).zip(getLibs().getElements(), (useAbi, libs) -> {
-				if (useAbi) {
+			final Provider<Boolean> useAbi = getUseNormalizedAbi().orElse(false);
+			getLinkLibInputs().set(getLibs().getElements().map(libs -> {
+				if (useAbi.get()) {
 					NativeLibraryAbiExtractor extractor = getAbiExtractor();
 					List<Object> result = new ArrayList<>();
 					for (FileSystemLocation lib : libs) {
@@ -104,6 +108,7 @@ interface LinkAbiAware extends Task {
 		public abstract ConfigurableFileCollection getLibs();
 
 		@Input
+		@Optional
 		public abstract Property<Boolean> getUseNormalizedAbi();
 
 		@Inject protected abstract ObjectFactory getObjects();

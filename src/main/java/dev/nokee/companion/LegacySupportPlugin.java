@@ -56,6 +56,7 @@ import java.util.Set;
 		feature.apply("incremental-compilation-after-failure");
 		feature.apply("overlinking-avoidance");
 		feature.apply("rpath-link-flags");
+		feature.apply("link-avoidance");
 
 		feature.apply("multiplatform-publication");
 		// TODO: Source include (cxx)
