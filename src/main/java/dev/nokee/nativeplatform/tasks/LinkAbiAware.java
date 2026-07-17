@@ -55,8 +55,8 @@ public interface LinkAbiAware extends Task {
 
 			getLibraryFiles().from(getLinkLibInputs().map(it -> {
 				return it.stream().flatMap(t -> {
-					if (t instanceof File) {
-						return Stream.of((File) t);
+					if (t instanceof File || t instanceof FileSystemLocation) {
+						return Stream.of(t);
 					}
 					return Stream.empty();
 				}).collect(Collectors.toList());
