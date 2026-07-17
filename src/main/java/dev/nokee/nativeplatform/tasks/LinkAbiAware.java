@@ -17,6 +17,7 @@ import org.gradle.api.tasks.Optional;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -55,7 +56,7 @@ public interface LinkAbiAware extends Task {
 
 			getLibraryFiles().from(getLinkLibInputs().map(it -> {
 				return it.stream().flatMap(t -> {
-					if (t instanceof File || t instanceof FileSystemLocation) {
+					if (t instanceof File || t instanceof FileSystemLocation || t instanceof Path) {
 						return Stream.of(t);
 					}
 					return Stream.empty();
