@@ -8,6 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.AbstractMap;
 import java.util.LinkedHashSet;
@@ -74,17 +75,18 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		long dynsymOff = -1, dynsymSize = -1, dynsymEntsize = -1;
 		int dynsymLink = -1;
 
-		// Scan the section header table one entry at a time, reusing a single entry-sized buffer
-		// instead of holding the whole table (shentsize * shnum bytes) in memory.
-		assert e_shentsize <= buffer.limit() : "try to minimize allocation by reusing other buffers";
-		ByteBuffer sh = buffer.order(order);
+		// Map the section header table: it is scanned in full (every entry, plus a lookup of the dynstr
+		// section), so a mapping turns those per-entry reads into memory accesses. Each entry i is at index
+		// i * e_shentsize into this mapping.
+		MappedByteBuffer sht = channel.map(FileChannel.MapMode.READ_ONLY, e_shoff, (long) e_shentsize * e_shnum);
+		sht.order(order);
 		for (int i = 0; i < e_shnum; i++) {
-			BinaryUtils.readInto(channel, e_shoff + (long) i * e_shentsize, sh, e_shentsize);
-			int sh_type = sh.getInt(4);
-			long sh_offset = is64 ? sh.getLong(24) : sh.getInt(16) & 0xFFFFFFFFL;
-			long sh_size = is64 ? sh.getLong(32) : sh.getInt(20) & 0xFFFFFFFFL;
-			int sh_link = is64 ? sh.getInt(40) : sh.getInt(24);
-			long sh_entsize = is64 ? sh.getLong(56) : sh.getInt(36) & 0xFFFFFFFFL;
+			int sh = i * e_shentsize;
+			int sh_type = sht.getInt(sh + 4);
+			long sh_offset = is64 ? sht.getLong(sh + 24) : sht.getInt(sh + 16) & 0xFFFFFFFFL;
+			long sh_size = is64 ? sht.getLong(sh + 32) : sht.getInt(sh + 20) & 0xFFFFFFFFL;
+			int sh_link = is64 ? sht.getInt(sh + 40) : sht.getInt(sh + 24);
+			long sh_entsize = is64 ? sht.getLong(sh + 56) : sht.getInt(sh + 36) & 0xFFFFFFFFL;
 
 			if (sh_type == SHT_DYNAMIC) { // only one section can exists
 				dynamicOff = sh_offset;
@@ -98,84 +100,93 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		}
 
 		if (dynsymLink >= 0 && dynsymLink < e_shnum) {
-			BinaryUtils.readInto(channel, e_shoff + (long) dynsymLink * e_shentsize, sh, e_shentsize);
+			int sh = dynsymLink * e_shentsize;
 			if (is64) {
-				dynstrOff = sh.getLong(24);
-				dynstrSize = sh.getLong(32);
+				dynstrOff = sht.getLong(sh + 24);
+				dynstrSize = sht.getLong(sh + 32);
 			} else {
-				dynstrOff = sh.getInt(16) & 0xFFFFFFFFL;
-				dynstrSize = sh.getInt(20) & 0xFFFFFFFFL;
+				dynstrOff = sht.getInt(sh + 16) & 0xFFFFFFFFL;
+				dynstrSize = sht.getInt(sh + 20) & 0xFFFFFFFFL;
 			}
 		}
 
+		// Map just the string table: it is the one section read at random (a lookup per exported symbol
+		// name), so a mapping turns those scattered reads into memory accesses paged in on demand, while
+		// the header, section headers and symbol entries keep streaming through the channel. Offsets into
+		// the table (st_name, DT_SONAME's value) are relative to its start, i.e. indices into this mapping.
+		MappedByteBuffer strtab = null;
+		if (dynstrOff >= 0 && dynstrSize > 0) {
+			strtab = channel.map(FileChannel.MapMode.READ_ONLY, dynstrOff, dynstrSize);
+		}
+
 		String soname = null;
-		if (dynamicOff >= 0 && dynstrOff >= 0) {
-			soname = extractSoname(channel, order, is64, dynamicOff, dynamicSize, dynstrOff, dynstrSize);
+		if (dynamicOff >= 0 && strtab != null) {
+			soname = extractSoname(channel, strtab, order, is64, dynamicOff, dynamicSize);
 		}
 
 		HashCode symbols = null;
-		if (dynsymOff >= 0 && dynstrOff >= 0 && dynsymEntsize > 0) {
-			symbols = extractSymbols(channel, order, is64, dynsymOff, dynsymSize, dynsymEntsize, dynstrOff, dynstrSize);
+		if (dynsymOff >= 0 && strtab != null && dynsymEntsize > 0) {
+			symbols = extractSymbols(channel, strtab, order, is64, dynsymOff, dynsymSize, dynsymEntsize);
 		}
 
 		return new ElfHashCode(soname, symbols);
 	}
 
-	private String extractSoname(FileChannel channel, ByteOrder order, boolean is64,
-		long dynOff, long dynSize, long dynstrOff, long dynstrSize) throws IOException {
+	private String extractSoname(FileChannel channel, MappedByteBuffer strtab, ByteOrder order, boolean is64,
+		long dynOff, long dynSize) throws IOException {
 		int entSize = is64 ? 16 : 8;
 		int count = (int) (dynSize / entSize);
 
-		// Scan the dynamic table one entry at a time, reusing a single entry-sized buffer instead of
-		// holding the whole section in memory.
-		assert entSize <= buffer.limit() : "try minimizing buffer allocation by reusing the 'bigger' buffer";
-		ByteBuffer dyn = buffer.order(order);
+		// Map the dynamic table: it is scanned entry by entry (until DT_NULL/DT_SONAME), so a mapping turns
+		// those per-entry reads into memory accesses. Each entry i is at index i * entSize into this mapping.
+		MappedByteBuffer dynamic = channel.map(FileChannel.MapMode.READ_ONLY, dynOff, dynSize);
+		dynamic.order(order);
 
 		for (int i = 0; i < count; i++) {
-			BinaryUtils.readInto(channel, dynOff + (long) i * entSize, dyn, entSize);
-			long tag = is64 ? dyn.getLong(0) : (dyn.getInt(0) & 0xFFFFFFFFL);
-			long val = is64 ? dyn.getLong(8) : (dyn.getInt(4) & 0xFFFFFFFFL);
+			int dyn = i * entSize;
+			long tag = is64 ? dynamic.getLong(dyn) : (dynamic.getInt(dyn) & 0xFFFFFFFFL);
+			long val = is64 ? dynamic.getLong(dyn + 8) : (dynamic.getInt(dyn + 4) & 0xFFFFFFFFL);
 			if (tag == DT_NULL) break;
 			if (tag == DT_SONAME) {
-				return BinaryUtils.readCStringAt(channel, dynstrOff + val, dynstrOff + dynstrSize);
+				return BinaryUtils.readCString(strtab, (int) val, strtab.limit());
 			}
 		}
 		return null;
 	}
 
-	private HashCode extractSymbols(FileChannel channel, ByteOrder order, boolean is64,
-		long symOff, long symSize, long symEntsize, long strOff, long strSize) throws IOException {
+	private HashCode extractSymbols(FileChannel channel, MappedByteBuffer strtab, ByteOrder order, boolean is64,
+		long symOff, long symSize, long symEntsize) throws IOException {
 		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 
-		// Scan the symbol table one entry at a time, reusing a single entry-sized buffer instead of
-		// holding the whole table (symEntsize * count bytes) in memory.
-		ByteBuffer sym = ByteBuffer.allocate((int) symEntsize);
-		sym.order(order);
+		// Map the symbol table: it is scanned in full (one entry per symbol), so a mapping turns those
+		// per-entry reads into memory accesses. Each entry i is at index i * symEntsize into this mapping.
+		MappedByteBuffer symtab = channel.map(FileChannel.MapMode.READ_ONLY, symOff, symSize);
+		symtab.order(order);
 
-		// Read each symbol name on demand from the string table instead of loading the whole table.
-		long strEnd = strOff + strSize;
+		// Each symbol name is read at random from the mapped string table (indexed by st_name).
+		int strEnd = strtab.limit();
 
 		int count = (int) (symSize / symEntsize);
 
 		int size = 0;
 		for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
-			BinaryUtils.readInto(channel, symOff + (long) i * symEntsize, sym, (int) symEntsize);
+			int sym = (int) (i * symEntsize);
 			int stName, stInfo, stShndx;
 
 			if (is64) {
-				stName = sym.getInt(0);
-				stInfo = sym.get(4) & 0xFF;
-				stShndx = sym.getShort(6) & 0xFFFF;
+				stName = symtab.getInt(sym);
+				stInfo = symtab.get(sym + 4) & 0xFF;
+				stShndx = symtab.getShort(sym + 6) & 0xFFFF;
 			} else {
-				stName = sym.getInt(0);
-				stInfo = sym.get(12) & 0xFF;
-				stShndx = sym.getShort(14) & 0xFFFF;
+				stName = symtab.getInt(sym);
+				stInfo = symtab.get(sym + 12) & 0xFF;
+				stShndx = symtab.getShort(sym + 14) & 0xFFFF;
 			}
 
 			int binding = stInfo >> 4;
 
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
-				int length = BinaryUtils.hashCStringAt(hasher, channel, buffer, strOff + (stName & 0xFFFFFFFFL), strEnd);
+				int length = BinaryUtils.hashCString(hasher, strtab, stName & 0xFFFFFFFF, strEnd);
 				if (length > 0) {
 					hasher.putInt(binding);
 					size++;

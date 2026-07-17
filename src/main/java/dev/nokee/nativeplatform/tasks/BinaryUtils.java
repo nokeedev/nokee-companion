@@ -58,6 +58,43 @@ final class BinaryUtils {
 	}
 
 	/**
+	 * Reads the NUL-terminated string at {@code offset} from an in-memory buffer, scanning no further than
+	 * {@code end}. Uses absolute {@code get(index)} access, so it works with buffers that have no backing
+	 * array such as a {@link java.nio.MappedByteBuffer} over the string table, where {@code end} bounds a
+	 * string whose terminator is missing.
+	 */
+	static String readCString(ByteBuffer buf, int offset, int end) {
+		int i = offset;
+		while (i < end && buf.get(i) != 0) {
+			i++;
+		}
+		byte[] b = new byte[i - offset];
+		for (int j = 0; j < b.length; j++) {
+			b[j] = buf.get(offset + j);
+		}
+		return new String(b);
+	}
+
+	/**
+	 * Hashes the NUL-terminated string at {@code offset} from an in-memory buffer, feeding each byte to the
+	 * hasher as it is read and scanning no further than {@code end}. Feeds the same bytes as
+	 * {@link #hashCString(PrimitiveHasher, ByteBuffer, int)}, so the result is identical for the same name.
+	 * Uses absolute {@code get(index)} access, so it works with buffers that have no backing array such as a
+	 * {@link java.nio.MappedByteBuffer} over the string table. Returns the string length in bytes.
+	 */
+	static int hashCString(PrimitiveHasher hasher, ByteBuffer buf, int offset, int end) {
+		int i = offset;
+		for (; i < end; i++) {
+			byte b = buf.get(i);
+			if (b == 0) {
+				break;
+			}
+			hasher.putByte(b);
+		}
+		return i - offset;
+	}
+
+	/**
 	 * Hashes the NUL-terminated string at {@code offset} directly from the channel, reading only as
 	 * much as the string needs (in chunks through the reused {@code scratch} buffer) instead of
 	 * loading the enclosing string table. Reads never pass {@code endOffset} (the string table end),
