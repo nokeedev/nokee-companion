@@ -30,7 +30,7 @@ import static org.hamcrest.Matchers.not;
  *     <li><b>The wrappers</b> ({@link #succeeds(GradleRunner)}, {@link #fails(GradleRunner)}) run the build,
  *         assert the coarse outcome, and hand back the opaque model so successive {@code assertThat}
  *         statements can read well.</li>
- *     <li><b>The matchers</b> ({@link #task}, {@link #tasksExecuted}, {@link #outcome}, {@link #output}, …)
+ *     <li><b>The matchers</b> ({@link #tasksExecuted}, {@link #outcome}, {@link #output}, …)
  *         are declarative property checks over the opaque model, composable with the standard Hamcrest
  *         combinators ({@code not}, {@code allOf}, {@code hasItem}, {@code everyItem}, …).</li>
  * </ul>
@@ -243,38 +243,9 @@ public final class GradleTestKitMatchers {
 	}
 	//endregion
 
-	//region Task selection
-
-	/** Locates a single task by path and applies the given task matcher to it. */
-	public static Matcher<ExecutedBuild> task(Object taskPath, Matcher<? super ExecutedTask> matcher) {
-		String path = taskPath.toString();
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(ExecutedBuild build, Description mismatch) {
-				ExecutedTask task = build.taskOrNull(path);
-				if (task == null) {
-					mismatch.appendText("no task ").appendValue(path).appendText(" in build; tasks were ").appendValue(build.taskPaths());
-					return false;
-				}
-				if (!matcher.matches(task)) {
-					mismatch.appendText("task ").appendValue(path).appendText(" ");
-					matcher.describeMismatch(task, mismatch);
-					return false;
-				}
-				return true;
-			}
-
-			@Override
-			public void describeTo(Description description) {
-				description.appendText("build with task ").appendValue(path).appendText(" that ").appendDescriptionOf(matcher);
-			}
-		};
-	}
-	//endregion
-
 	//region Task matchers (over ExecutedTask)
 
-	public static Matcher<ExecutedTask> outcome(Matcher<? super TaskOutcome> matcher) {
+	private static Matcher<ExecutedTask> outcome(Matcher<? super TaskOutcome> matcher) {
 		return new FeatureMatcher<ExecutedTask, TaskOutcome>(matcher, "a task with outcome", "outcome") {
 			@Override
 			protected TaskOutcome featureValueOf(ExecutedTask actual) {
@@ -357,29 +328,6 @@ public final class GradleTestKitMatchers {
 	}
 	//endregion
 
-	//region Single-task shorthands (over ExecutedBuild)
-
-	public static Matcher<ExecutedBuild> taskExecuted(Object taskPath) {
-		return task(taskPath, executed());
-	}
-
-	public static Matcher<ExecutedBuild> taskSkipped(Object taskPath) {
-		return task(taskPath, skipped());
-	}
-
-	public static Matcher<ExecutedBuild> taskFailed(Object taskPath) {
-		return task(taskPath, failed());
-	}
-
-	public static Matcher<ExecutedBuild> taskCached(Object taskPath) {
-		return task(taskPath, fromCache());
-	}
-
-	public static Matcher<ExecutedBuild> taskPerformsFullRebuild(Object taskPath) {
-		return task(taskPath, performsFullRebuild());
-	}
-	//endregion
-
 	//region Task-set matchers (over ExecutedBuild)
 
 	public static Matcher<ExecutedBuild> tasksExecuted(Matcher<? super Iterable<String>> matcher) {
@@ -392,10 +340,6 @@ public final class GradleTestKitMatchers {
 
 	public static Matcher<ExecutedBuild> tasksSkipped(Matcher<? super Iterable<String>> matcher) {
 		return taskPaths("skipped task paths of ", task -> !isExecutedAndNotSkipped(task), matcher);
-	}
-
-	public static Matcher<ExecutedBuild> tasksExecutedAndFromCache(Matcher<? super Iterable<String>> matcher) {
-		return taskPaths("executed and from cache task paths of ", task -> task.outcome() == TaskOutcome.FROM_CACHE, matcher);
 	}
 
 	private static boolean isExecutedAndNotSkipped(ExecutedTask task) {
