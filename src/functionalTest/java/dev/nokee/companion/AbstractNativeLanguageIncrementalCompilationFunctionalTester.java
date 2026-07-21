@@ -21,7 +21,7 @@ import dev.nokee.commons.fixtures.GradleTaskUnderTestExtension;
 import dev.nokee.commons.fixtures.TaskUnderTest;
 import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.companion.fixtures.GradleRunnerArguments;
-import org.gradle.testkit.runner.BuildResult;
+import dev.nokee.companion.fixtures.GradleTestKitMatchers.ExecutedBuild;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,9 +45,9 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 	default void skipCompileTaskWhenNoSource(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-without-source") GradleBuildElement project) {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		BuildResult result = runner.withArguments(GradleRunnerArguments.create().withTasks(taskUnderTest).toList()).build();
+		ExecutedBuild result = succeeds(runner.withArguments(GradleRunnerArguments.create().withTasks(taskUnderTest).toList()));
 
-		assertThat(result, taskSkipped(taskUnderTest).becauseNoSource());
+		assertThat(result, task(taskUnderTest, noSource()));
 	}
 
 	@Test
@@ -55,19 +55,19 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create();
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat("no previous builds, everything is out-of-date", result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat("no previous builds, everything is out-of-date", result, task(taskUnderTest, executed()));
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat("no change, everything is up-to-date", result, taskSkipped(taskUnderTest).becauseUpToDate());
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat("no change, everything is up-to-date", result, task(taskUnderTest, upToDate()));
 
 		// TODO: Use incremental elements
 		Files.write(build.file("src/main/cpp/main.cpp"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 
-		result = runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskPerformsIncrementalBuild(taskUnderTest));
+		result = succeeds(runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
 	}
 
 	@Test
@@ -75,18 +75,18 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create();
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat("no previous builds, everything is out-of-date", result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat("no previous builds, everything is out-of-date", result, task(taskUnderTest, executed()));
 
 		// TODO: Use incremental elements
 		Files.delete(build.getLocation().resolve("src/main/cpp/file-to-remove.cpp"));
 		// TODO: Use TaskUnderTest model
 		assertThat(build.getLocation().resolve("build/objs"), aFile(hasDescendants(hasItem(withRelativePath(endsWith("file-to-remove.o"))))));
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskPerformsIncrementalBuild(taskUnderTest));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
 
 		// TODO: Use TaskUnderTest model
 		assertThat(build.getLocation().resolve("build/objs"), aFile(not(hasDescendants(hasItem(withRelativePath(endsWith("file-to-remove.o")))))));
@@ -97,23 +97,23 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create();
-		BuildResult result = null;
+		ExecutedBuild result;
 
 		// TODO: write file to source of project
 		Path fileToRelocate = build.file("src/main/cpp/relocate.cpp");
 
 		runner = runner.withArguments(args.withTasks(taskUnderTest).toList());
 
-		result = runner.build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner);
+		assertThat(result, task(taskUnderTest, executed()));
 
-		result = runner.build();
-		assertThat(result, taskSkipped(taskUnderTest).forAnyReason());
+		result = succeeds(runner);
+		assertThat(result, task(taskUnderTest, skipped()));
 
 		// TODO: must be relative
 		Files.move(fileToRelocate, build.dir("src/main/cpp/subdir").resolve("relocate.cpp"));
-		result = runner.build();
-		assertThat(result, taskPerformsIncrementalBuild(taskUnderTest.toString()));
+		result = succeeds(runner);
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
 	}
 
 	@Test
@@ -121,13 +121,13 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest);
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		result = runner.build();
-		assertThat(result, taskSkipped(taskUnderTest).forAnyReason());
+		result = succeeds(runner);
+		assertThat(result, task(taskUnderTest, skipped()));
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -135,8 +135,8 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = runner.withArguments(args.append("-i").toList()).build();
-		assertThat(result, taskPerformsFullRebuild(taskUnderTest));
+		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
 	}
 
 	@Test
@@ -144,13 +144,13 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest);
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskSkipped(taskUnderTest).forAnyReason());
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, skipped()));
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -158,8 +158,8 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = runner.withArguments(args.append("-i").toList()).build();
-		assertThat(result, taskPerformsFullRebuild(taskUnderTest));
+		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
 	}
 
 	@Test
@@ -167,13 +167,13 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest);
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		result = runner.build();
-		assertThat(result, taskSkipped(taskUnderTest).forAnyReason());
+		result = succeeds(runner);
+		assertThat(result, task(taskUnderTest, skipped()));
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -181,8 +181,8 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = runner.withArguments(args.append("-i").toList()).build();
-		assertThat(result, taskPerformsFullRebuild(taskUnderTest.toString()));
+		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
 	}
 
 	@Test
@@ -190,13 +190,13 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest);
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest.toString()));
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskSkipped(taskUnderTest).forAnyReason());
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, skipped()));
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -204,8 +204,8 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = runner.withArguments(args.append("-i").toList()).build();
-		assertThat(result, taskPerformsFullRebuild(taskUnderTest));
+		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
 	}
 
 	@Test
@@ -213,13 +213,13 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest);
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskSkipped(taskUnderTest).forAnyReason());
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, skipped()));
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -227,8 +227,8 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = runner.withArguments(args.append("-i").toList()).build();
-		assertThat(result, taskPerformsFullRebuild(taskUnderTest));
+		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
 	}
 
 	@Test
@@ -236,13 +236,13 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest);
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		result = runner.withArguments(args.toList()).build();
-		assertThat(result, taskSkipped(taskUnderTest).forAnyReason());
+		result = succeeds(runner.withArguments(args.toList()));
+		assertThat(result, task(taskUnderTest, skipped()));
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -254,7 +254,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = runner.withArguments(args.append("-i").toList()).build();
-		assertThat(result, taskPerformsFullRebuild(taskUnderTest));
+		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
 	}
 }

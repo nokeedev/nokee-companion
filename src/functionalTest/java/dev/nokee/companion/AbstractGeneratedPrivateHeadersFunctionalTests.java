@@ -23,6 +23,6 @@ public interface AbstractGeneratedPrivateHeadersFunctionalTests {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withPluginClasspath().forwardOutput().withProjectDir(build.getLocation().toFile());
 
-		assertThat(runner.withArguments("verify"), succeeds(tasksExecutedAndNotSkipped(hasItem(":generatePrivateHeaders"))));
+		assertThat(succeeds(runner.withArguments("verify")), tasksExecutedAndNotSkipped(hasItem(":generatePrivateHeaders")));
 	}
 }

@@ -3,12 +3,9 @@ package dev.nokee.companion.fixtures;
 import dev.gradleplugins.runnerkit.GradleRunner;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
-public class GradleRunnerArguments {
+public class GradleRunnerArguments implements Iterable<String> {
 	private final List<String> tasks;
 	private final File gradleUserHomeDirectory;
 	private final List<String> additionalArgs;
@@ -68,22 +65,6 @@ public class GradleRunnerArguments {
 		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace);
 	}
 
-	public List<String> toList() {
-		List<String> result = new ArrayList<>();
-		result.addAll(additionalArgs);
-		if (buildCache == BuildCache.ENABLED) result.add("--build-cache");
-		if (stacktrace == Stacktrace.SHOW) result.add("--stacktrace");
-		if (gradleUserHomeDirectory != null) {
-			result.add("--gradle-user-home");
-			result.add(gradleUserHomeDirectory.getPath());
-		}
-		if (deprecationChecks == DeprecationChecks.FAILS) result.add("--warning-mode=fails");
-		if (welcomeMessage != null) result.add("-D" + WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY + "=" + (welcomeMessage == WelcomeMessage.ENABLED));
-
-		result.addAll(tasks);
-		return result;
-	}
-
 	//region
 	private final Stacktrace stacktrace;
 
@@ -128,4 +109,25 @@ public class GradleRunnerArguments {
 		ENABLED, DISABLED
 	}
 	//endregion
+
+	public List<String> toList() {
+		List<String> result = new ArrayList<>();
+		result.addAll(additionalArgs);
+		if (buildCache == BuildCache.ENABLED) result.add("--build-cache");
+		if (stacktrace == Stacktrace.SHOW) result.add("--stacktrace");
+		if (gradleUserHomeDirectory != null) {
+			result.add("--gradle-user-home");
+			result.add(gradleUserHomeDirectory.getPath());
+		}
+		if (deprecationChecks == DeprecationChecks.FAILS) result.add("--warning-mode=fails");
+		if (welcomeMessage != null) result.add("-D" + WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY + "=" + (welcomeMessage == WelcomeMessage.ENABLED));
+
+		result.addAll(tasks);
+		return result;
+	}
+
+	@Override
+	public Iterator<String> iterator() {
+		return toList().iterator();
+	}
 }

@@ -3,27 +3,187 @@ package dev.nokee.companion.fixtures;
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.BuildTask;
 import org.gradle.testkit.runner.GradleRunner;
-import org.gradle.testkit.runner.TaskOutcome;
 import org.hamcrest.Description;
+import org.hamcrest.FeatureMatcher;
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.hamcrest.TypeSafeDiagnosingMatcher;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.function.Predicate;
 
 import static java.util.stream.Collectors.toList;
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
-public class GradleTestKitMatchers {
-	public static Matcher<GradleRunner> succeeds(Matcher<? super BuildResult> matcher) {
+/**
+ * Hamcrest matchers over the result of a <em>Gradle</em> build, decoupled from any specific runner.
+ *
+ * <p>The design separates three concerns:
+ * <ul>
+ *     <li><b>The seam</b> ({@link #theBuild(GradleRunner)}, {@link #from(BuildResult)}) adapts a concrete
+ *         runner (or its result) into the opaque {@link ExecutedBuild}/{@link TheBuild} model. This is the
+ *         only place that knows about a particular runner, so supporting a new one is a new overload here.</li>
+ *     <li><b>The wrappers</b> ({@link #succeeds(GradleRunner)}, {@link #fails(GradleRunner)}) run the build,
+ *         assert the coarse outcome, and hand back the opaque model so successive {@code assertThat}
+ *         statements can read well.</li>
+ *     <li><b>The matchers</b> ({@link #task}, {@link #tasksExecuted}, {@link #outcome}, {@link #output}, …)
+ *         are declarative property checks over the opaque model, composable with the standard Hamcrest
+ *         combinators ({@code not}, {@code allOf}, {@code hasItem}, {@code everyItem}, …).</li>
+ * </ul>
+ *
+ * <p>The model is deliberately <em>opaque</em>: {@link ExecutedBuild} and {@link ExecutedTask} expose no
+ * public accessors, so they can only ever be fed to a matcher — never used as a general-purpose build API.
+ */
+public final class GradleTestKitMatchers {
+	private GradleTestKitMatchers() {}
+
+	//region Normalized, opaque model (matching-only)
+
+	/** Runner-agnostic task outcome. Adapters map their native outcome into this. */
+	public enum TaskOutcome { SUCCESS, FAILED, UP_TO_DATE, SKIPPED, FROM_CACHE, NO_SOURCE }
+
+	/** An executed task. Opaque: only matchers in this class can read it. */
+	public static final class ExecutedTask {
+		private final String path;
+		private final TaskOutcome outcome;
+		private final BuildResult source;
+
+		private ExecutedTask(String path, TaskOutcome outcome, BuildResult source) {
+			this.path = path;
+			this.outcome = outcome;
+			this.source = source;
+		}
+
+		private String path() {
+			return path;
+		}
+
+		private TaskOutcome outcome() {
+			return outcome;
+		}
+
+		private String output() {
+			// NOTE: runnerkit is used here only because it already parses per-task Gradle output.
+			// This is a temporary borrow to be extracted from the model later.
+			return dev.gradleplugins.runnerkit.BuildResult.from(source.getOutput()).task(path).getOutput();
+		}
+	}
+
+	/** The outcome of a completed build. Opaque: only matchers in this class can read it. */
+	public static final class ExecutedBuild {
+		private final BuildResult source;
+
+		private ExecutedBuild(BuildResult source) {
+			this.source = source;
+		}
+
+		private ExecutedTask taskOrNull(String path) {
+			BuildTask task = source.task(path);
+			if (task == null) {
+				return null;
+			}
+			return new ExecutedTask(path, outcomeOf(task), source);
+		}
+
+		private List<ExecutedTask> tasks() {
+			List<ExecutedTask> result = new ArrayList<>();
+			for (BuildTask task : source.getTasks()) {
+				result.add(new ExecutedTask(task.getPath(), outcomeOf(task), source));
+			}
+			return result;
+		}
+
+		private List<String> taskPaths() {
+			return source.getTasks().stream().map(BuildTask::getPath).collect(toList());
+		}
+
+		private List<dev.gradleplugins.runnerkit.BuildResult.Failure> failures() {
+			// NOTE: runnerkit borrowed only for its Gradle output parser; to be extracted later.
+			return dev.gradleplugins.runnerkit.BuildResult.from(source.getOutput()).getFailures();
+		}
+	}
+
+	private static TaskOutcome outcomeOf(BuildTask task) {
+		switch (task.getOutcome()) {
+			case SUCCESS: return TaskOutcome.SUCCESS;
+			case FAILED: return TaskOutcome.FAILED;
+			case UP_TO_DATE: return TaskOutcome.UP_TO_DATE;
+			case SKIPPED: return TaskOutcome.SKIPPED;
+			case FROM_CACHE: return TaskOutcome.FROM_CACHE;
+			case NO_SOURCE: return TaskOutcome.NO_SOURCE;
+			default: throw new IllegalStateException("unknown task outcome: " + task.getOutcome());
+		}
+	}
+	//endregion
+
+	//region Adapters / seam
+
+	/** Adapts an already-executed result into the opaque model. */
+	public static ExecutedBuild from(BuildResult result) {
+		return new ExecutedBuild(result);
+	}
+
+	/** Adapts a runner into an executable, opaque subject. The only place that references the runner type. */
+	public static TheBuild theBuild(GradleRunner runner) {
+		return new TheBuild(runner);
+	}
+
+	/** A build that has not run yet. Opaque: only wrappers/matchers in this class can drive it. */
+	public static final class TheBuild {
+		private final GradleRunner runner;
+
+		private TheBuild(GradleRunner runner) {
+			this.runner = runner;
+		}
+
+		private ExecutedBuild build() {
+			return new ExecutedBuild(runner.build());
+		}
+
+		private ExecutedBuild buildAndFail() {
+			return new ExecutedBuild(runner.buildAndFail());
+		}
+	}
+	//endregion
+
+	//region Wrappers (run + assert coarse outcome + return opaque model)
+
+	/** Runs the build, asserting it succeeds, and returns its result for further assertions. */
+	public static ExecutedBuild succeeds(GradleRunner runner) {
+		return theBuild(runner).build();
+	}
+
+	/** Runs the build, asserting it fails, and returns its result for further assertions. */
+	public static ExecutedBuild fails(GradleRunner runner) {
+		return theBuild(runner).buildAndFail();
+	}
+	//endregion
+
+	//region Runner matcher
+
+	/**
+	 * Matches a build that, when run a second time, leaves the given task {@code UP-TO-DATE}.
+	 * Builds twice to reach a steady state; the explicit task path avoids the false-positive of inferring
+	 * tasks from command-line arguments.
+	 */
+	public static Matcher<TheBuild> becomesUpToDate(Object taskPath) {
+		String path = taskPath.toString();
 		return new TypeSafeDiagnosingMatcher<>() {
 			@Override
-			protected boolean matchesSafely(GradleRunner runner, Description mismatch) {
-				assert runner.getArguments().contains("--stacktrace");
-				BuildResult result = runner.build();
-				if (!matcher.matches(result)) {
-					matcher.describeMismatch(result, mismatch);
+			protected boolean matchesSafely(TheBuild subject, Description mismatch) {
+				subject.build(); // reach steady state
+				ExecutedBuild second = subject.build();
+				ExecutedTask task = second.taskOrNull(path);
+				if (task == null) {
+					mismatch.appendText("no task ").appendValue(path).appendText(" in build; tasks were ").appendValue(second.taskPaths());
+					return false;
+				}
+				if (task.outcome() != TaskOutcome.UP_TO_DATE) {
+					mismatch.appendText("task ").appendValue(path).appendText(" was ").appendValue(task.outcome()).appendText(" on the incremental build");
 					return false;
 				}
 				return true;
@@ -31,19 +191,28 @@ public class GradleTestKitMatchers {
 
 			@Override
 			public void describeTo(Description description) {
-				description.appendText("build succeeds and ").appendDescriptionOf(matcher);
+				description.appendText("task ").appendValue(path).appendText(" UP-TO-DATE on an incremental build");
 			}
 		};
 	}
+	//endregion
 
-	public static Matcher<GradleRunner> fails(Matcher<? super BuildResult> matcher) {
+	//region Task selection
+
+	/** Locates a single task by path and applies the given task matcher to it. */
+	public static Matcher<ExecutedBuild> task(Object taskPath, Matcher<? super ExecutedTask> matcher) {
+		String path = taskPath.toString();
 		return new TypeSafeDiagnosingMatcher<>() {
 			@Override
-			protected boolean matchesSafely(GradleRunner runner, Description mismatch) {
-				assert runner.getArguments().contains("--stacktrace");
-				BuildResult result = runner.buildAndFail();
-				if (!matcher.matches(result)) {
-					matcher.describeMismatch(result, mismatch);
+			protected boolean matchesSafely(ExecutedBuild build, Description mismatch) {
+				ExecutedTask task = build.taskOrNull(path);
+				if (task == null) {
+					mismatch.appendText("no task ").appendValue(path).appendText(" in build; tasks were ").appendValue(build.taskPaths());
+					return false;
+				}
+				if (!matcher.matches(task)) {
+					mismatch.appendText("task ").appendValue(path).appendText(" ");
+					matcher.describeMismatch(task, mismatch);
 					return false;
 				}
 				return true;
@@ -51,458 +220,193 @@ public class GradleTestKitMatchers {
 
 			@Override
 			public void describeTo(Description description) {
-				description.appendText("build fails and ").appendDescriptionOf(matcher);
+				description.appendText("build with task ").appendValue(path).appendText(" that ").appendDescriptionOf(matcher);
+			}
+		};
+	}
+	//endregion
+
+	//region Task matchers (over ExecutedTask)
+
+	public static Matcher<ExecutedTask> outcome(Matcher<? super TaskOutcome> matcher) {
+		return new FeatureMatcher<ExecutedTask, TaskOutcome>(matcher, "a task with outcome", "outcome") {
+			@Override
+			protected TaskOutcome featureValueOf(ExecutedTask actual) {
+				return actual.outcome();
 			}
 		};
 	}
 
-	public static Matcher<BuildResult> tasksExecuted(Matcher<? super Iterable<String>> matcher) {
-		return new TasksExecuted(matcher);
+	public static Matcher<ExecutedTask> output(Matcher<? super String> matcher) {
+		return new FeatureMatcher<ExecutedTask, String>(matcher, "a task with output", "output") {
+			@Override
+			protected String featureValueOf(ExecutedTask actual) {
+				return actual.output();
+			}
+		};
 	}
 
-	public static Matcher<BuildResult> tasksSkipped(Matcher<? super Iterable<String>> matcher) {
-		return new TasksSkipped(matcher);
-	}
-
-	public static Matcher<BuildResult> tasksExecutedAndNotSkipped(Matcher<? super Iterable<String>> matcher) {
-		return new TasksExecutedAndNotSkipped(matcher);
-	}
-
-	public static Matcher<BuildResult> taskExecutedAndNotSkipped(Object taskPath) {
+	/** Path-aware output matcher, for messages that embed the task path. */
+	public static Matcher<ExecutedTask> output(Function<String, Matcher<? super String>> byPath) {
 		return new TypeSafeDiagnosingMatcher<>() {
 			@Override
-			protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-				return isExecutedAndNotSkipped(item.task(taskPath.toString()));
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildResult> taskExecutedAndFromCache(Object taskPath) {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-				return isExecutedAndFromCache(item.task(taskPath.toString()));
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildResult> taskExecutedAndUpToDate(Object taskPath) {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-				return item.task(taskPath.toString()).getOutcome().equals(TaskOutcome.UP_TO_DATE);
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildResult> taskSkippedBecauseNoSource(Object taskPath) {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-				return item.task(taskPath.toString()).getOutcome().equals(TaskOutcome.NO_SOURCE);
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static TaskSkippedMatcher taskSkipped(Object taskPath) {
-		return new TaskSkippedMatcher() {
-			@Override
-			public Matcher<BuildResult> becauseNoSource() {
-				return new TypeSafeDiagnosingMatcher<BuildResult>() {
-					@Override
-					protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-						return item.task(taskPath.toString()).getOutcome().equals(TaskOutcome.NO_SOURCE);
-					}
-
-					@Override
-					public void describeTo(Description description) {
-
-					}
-				};
-			}
-
-			@Override
-			public Matcher<BuildResult> becauseUpToDate() {
-				return new TypeSafeDiagnosingMatcher<BuildResult>() {
-					@Override
-					protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-						return item.task(taskPath.toString()).getOutcome().equals(TaskOutcome.UP_TO_DATE);
-					}
-
-					@Override
-					public void describeTo(Description description) {
-
-					}
-				};
-			}
-
-			@Override
-			public Matcher<BuildResult> forAnyReason() {
-				return new TypeSafeDiagnosingMatcher<>() {
-					@Override
-					protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-						return !isExecutedAndNotSkipped(item.task(taskPath.toString()));
-					}
-
-					@Override
-					public void describeTo(Description description) {
-
-					}
-				};
-			}
-		};
-	}
-
-	public interface TaskSkippedMatcher {
-		Matcher<BuildResult> becauseNoSource();
-		Matcher<BuildResult> becauseUpToDate();
-		Matcher<BuildResult> forAnyReason();
-	}
-
-	public static Matcher<BuildResult> taskFailed(Object taskPath) {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-				return item.task(taskPath.toString()).getOutcome().equals(TaskOutcome.FAILED);
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildResult> tasksExecutedAndFromCache(Matcher<? super Iterable<String>> matcher) {
-		return new TasksExecutedAndFromCache(matcher);
-	}
-
-	private static final class TasksExecutedAndFromCache extends AbstractTaskMatcher {
-		TasksExecutedAndFromCache(Matcher<? super Iterable<String>> matcher) {
-			super("executed and from cache task paths of ", TasksExecutedAndFromCache::getExecutedAndFromCacheTaskPaths, matcher);
-		}
-
-		private static List<String> getExecutedAndFromCacheTaskPaths(BuildResult item) {
-			return item.getTasks().stream().filter(GradleTestKitMatchers::isExecutedAndFromCache).map(BuildTask::getPath).collect(toList());
-		}
-	}
-
-	private static boolean isExecutedAndFromCache(BuildTask buildTask) {
-		return buildTask.getOutcome().equals(TaskOutcome.FROM_CACHE);
-	}
-
-	private static final class TasksExecuted extends AbstractTaskMatcher {
-		TasksExecuted(Matcher<? super Iterable<String>> matcher) {
-			super("executed task paths of ", TasksExecuted::executedTaskPaths, matcher);
-		}
-
-		private static List<String> executedTaskPaths(BuildResult item) {
-			return item.getTasks().stream().map(BuildTask::getPath).collect(toList());
-		}
-	}
-
-	private static final class TasksSkipped extends AbstractTaskMatcher {
-		TasksSkipped(Matcher<? super Iterable<String>> matcher) {
-			super("skipped task paths of ", TasksSkipped::skippedTaskPaths, matcher);
-		}
-
-		private static List<String> skippedTaskPaths(BuildResult item) {
-			return item.getTasks().stream().filter(TasksSkipped::isSkipped).map(BuildTask::getPath).collect(toList());
-		}
-
-		private static boolean isSkipped(BuildTask task) {
-			return !(task.getOutcome().equals(TaskOutcome.SUCCESS) || task.getOutcome().equals(TaskOutcome.FAILED));
-		}
-	}
-
-	private static final class TasksExecutedAndNotSkipped extends AbstractTaskMatcher {
-		TasksExecutedAndNotSkipped(Matcher<? super Iterable<String>> matcher) {
-			super("executed and not skipped task paths of ", TasksExecutedAndNotSkipped::getExecutedAndNotSkippedTaskPaths, matcher);
-		}
-
-		private static List<String> getExecutedAndNotSkippedTaskPaths(BuildResult item) {
-			return item.getTasks().stream().filter(GradleTestKitMatchers::isExecutedAndNotSkipped).map(BuildTask::getPath).collect(toList());
-		}
-	}
-
-	private static boolean isExecutedAndNotSkipped(BuildTask buildTask) {
-		return buildTask.getOutcome().equals(TaskOutcome.SUCCESS) || buildTask.getOutcome().equals(TaskOutcome.FAILED);
-	}
-
-	private abstract static class AbstractTaskMatcher extends TypeSafeDiagnosingMatcher<BuildResult> {
-		private final String description;
-		private final Function<BuildResult, List<String>> extractTaskPaths;
-		private final Matcher<? super Iterable<String>> matcher;
-
-		AbstractTaskMatcher(String description, Function<BuildResult, List<String>> extractTaskPaths, Matcher<? super Iterable<String>> matcher) {
-			this.description = description;
-			this.extractTaskPaths = extractTaskPaths;
-			this.matcher = matcher;
-		}
-
-		@Override
-		protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-			List<String> actualTasks = extractTaskPaths.apply(item);
-			if (!matcher.matches(actualTasks)) {
-				matcher.describeMismatch(actualTasks, mismatchDescription);
-				return false;
-			}
-			return true;
-		}
-
-		@Override
-		public void describeTo(Description description) {
-			description.appendText(this.description).appendDescriptionOf(matcher);
-		}
-	}
-
-	public static Matcher<GradleRunner> becomesUpToDate() {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(GradleRunner runner, Description mismatch) {
-				runner.build();
-				BuildResult result = runner.build();
-				boolean matched = true;
-				for (String arg : runner.getArguments()) {
-					if (!arg.startsWith(":")) continue;
-					TaskOutcome outcome = result.task(arg).getOutcome();
-					if (outcome != TaskOutcome.UP_TO_DATE) {
-						mismatch.appendText("task " + arg + " was " + outcome);
-						matched = false;
-					}
+			protected boolean matchesSafely(ExecutedTask task, Description mismatch) {
+				Matcher<? super String> matcher = byPath.apply(task.path());
+				if (!matcher.matches(task.output())) {
+					matcher.describeMismatch(task.output(), mismatch);
+					return false;
 				}
-				return matched;
+				return true;
 			}
 
 			@Override
 			public void describeTo(Description description) {
-				description.appendText("all tasks UP-TO-DATE on incremental build");
+				description.appendText("a task whose output matches a path-derived matcher");
 			}
 		};
 	}
 
-	public static Matcher<BuildResult> hasFailureCause(String cause) {
+	public static Matcher<ExecutedTask> executed() {
+		return outcome(anyOf(is(TaskOutcome.SUCCESS), is(TaskOutcome.FAILED)));
+	}
+
+	public static Matcher<ExecutedTask> skipped() {
+		return not(executed());
+	}
+
+	public static Matcher<ExecutedTask> upToDate() {
+		return outcome(is(TaskOutcome.UP_TO_DATE));
+	}
+
+	public static Matcher<ExecutedTask> fromCache() {
+		return outcome(is(TaskOutcome.FROM_CACHE));
+	}
+
+	public static Matcher<ExecutedTask> noSource() {
+		return outcome(is(TaskOutcome.NO_SOURCE));
+	}
+
+	public static Matcher<ExecutedTask> failed() {
+		return outcome(is(TaskOutcome.FAILED));
+	}
+
+	public static Matcher<ExecutedTask> performsFullRebuild() {
+		return new TypeSafeDiagnosingMatcher<>() {
+			@Override
+			protected boolean matchesSafely(ExecutedTask task, Description mismatch) {
+				// TODO: also assert the message is logged at INFO level
+				String needle = String.format("The input changes require a full rebuild for incremental task '%s'.", task.path());
+				if (!task.output().contains(needle)) {
+					mismatch.appendText("task ").appendValue(task.path()).appendText(" did not perform a full rebuild");
+					return false;
+				}
+				return true;
+			}
+
+			@Override
+			public void describeTo(Description description) {
+				description.appendText("a task that performs a full rebuild");
+			}
+		};
+	}
+	//endregion
+
+	//region Task-set matchers (over ExecutedBuild)
+
+	public static Matcher<ExecutedBuild> tasksExecuted(Matcher<? super Iterable<String>> matcher) {
+		return taskPaths("executed task paths of ", task -> true, matcher);
+	}
+
+	public static Matcher<ExecutedBuild> tasksExecutedAndNotSkipped(Matcher<? super Iterable<String>> matcher) {
+		return taskPaths("executed and not skipped task paths of ", GradleTestKitMatchers::isExecutedAndNotSkipped, matcher);
+	}
+
+	public static Matcher<ExecutedBuild> tasksSkipped(Matcher<? super Iterable<String>> matcher) {
+		return taskPaths("skipped task paths of ", task -> !isExecutedAndNotSkipped(task), matcher);
+	}
+
+	public static Matcher<ExecutedBuild> tasksExecutedAndFromCache(Matcher<? super Iterable<String>> matcher) {
+		return taskPaths("executed and from cache task paths of ", task -> task.outcome() == TaskOutcome.FROM_CACHE, matcher);
+	}
+
+	private static boolean isExecutedAndNotSkipped(ExecutedTask task) {
+		return task.outcome() == TaskOutcome.SUCCESS || task.outcome() == TaskOutcome.FAILED;
+	}
+
+	private static Matcher<ExecutedBuild> taskPaths(String description, Predicate<ExecutedTask> filter, Matcher<? super Iterable<String>> matcher) {
+		return new TypeSafeDiagnosingMatcher<>() {
+			@Override
+			protected boolean matchesSafely(ExecutedBuild build, Description mismatch) {
+				List<String> paths = build.tasks().stream().filter(filter).map(ExecutedTask::path).collect(toList());
+				if (!matcher.matches(paths)) {
+					matcher.describeMismatch(paths, mismatch);
+					return false;
+				}
+				return true;
+			}
+
+			@Override
+			public void describeTo(Description description2) {
+				description2.appendText(description).appendDescriptionOf(matcher);
+			}
+		};
+	}
+	//endregion
+
+	//region Failure matchers (over ExecutedBuild)
+
+	public static Matcher<ExecutedBuild> hasFailureCause(String cause) {
 		return hasFailureCause(Matchers.startsWith(cause));
 	}
 
-	public static Matcher<BuildResult> hasFailureCause(Matcher<? super String> matcher) {
-		return new FailureCause(matcher);
-	}
-
-	public static Matcher<BuildResult> hasFailureDescription(String description) {
-		return hasFailureDescription(Matchers.startsWith(description));
-	}
-
-	public static Matcher<BuildResult> hasFailureDescription(Matcher<? super String> matcher) {
-		return new FailureDescription(matcher);
-	}
-
-	private static final class FailureCause extends TypeSafeDiagnosingMatcher<BuildResult> {
-		private final Matcher<? super String> matcher;
-
-		FailureCause(Matcher<? super String> matcher) {
-			this.matcher = matcher;
-		}
-
-		protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-			dev.gradleplugins.runnerkit.BuildResult result = dev.gradleplugins.runnerkit.BuildResult.from(item.getOutput());
-			for(dev.gradleplugins.runnerkit.BuildResult.Failure failure : result.getFailures()) {
-				for(String cause : failure.getCauses()) {
-					if (this.matcher.matches(cause)) {
+	public static Matcher<ExecutedBuild> hasFailureCause(Matcher<? super String> matcher) {
+		return new TypeSafeDiagnosingMatcher<>() {
+			@Override
+			protected boolean matchesSafely(ExecutedBuild build, Description mismatch) {
+				List<String> causes = new ArrayList<>();
+				for (dev.gradleplugins.runnerkit.BuildResult.Failure failure : build.failures()) {
+					causes.addAll(failure.getCauses());
+				}
+				for (String cause : causes) {
+					if (matcher.matches(cause)) {
 						return true;
 					}
 				}
+				mismatch.appendValueList("none of the following causes matches: ", ", ", "", causes);
+				return false;
 			}
 
-			mismatchDescription.appendValueList("none of the following causes matches: ", ", ", "", (Iterable)result.getFailures().stream().flatMap((it) -> it.getCauses().stream()).distinct().collect(Collectors.toList()));
-			return false;
-		}
-
-		public void describeTo(Description description) {
-			description.appendText("a failure cause matching ").appendDescriptionOf(this.matcher);
-		}
+			@Override
+			public void describeTo(Description description) {
+				description.appendText("a failure cause matching ").appendDescriptionOf(matcher);
+			}
+		};
 	}
 
-	private static final class FailureDescription extends TypeSafeDiagnosingMatcher<BuildResult> {
-		private final Matcher<? super String> matcher;
+	public static Matcher<ExecutedBuild> hasFailureDescription(String description) {
+		return hasFailureDescription(Matchers.startsWith(description));
+	}
 
-		FailureDescription(Matcher<? super String> matcher) {
-			this.matcher = matcher;
-		}
-
-		public void describeTo(Description description) {
-			description.appendText("a failure description matching ").appendDescriptionOf(this.matcher);
-		}
-
-		protected boolean matchesSafely(BuildResult item, Description mismatchDescription) {
-			dev.gradleplugins.runnerkit.BuildResult result = dev.gradleplugins.runnerkit.BuildResult.from(item.getOutput());
-			for(dev.gradleplugins.runnerkit.BuildResult.Failure failure : result.getFailures()) {
-				if (this.matcher.matches(failure.getDescription())) {
-					return true;
+	public static Matcher<ExecutedBuild> hasFailureDescription(Matcher<? super String> matcher) {
+		return new TypeSafeDiagnosingMatcher<>() {
+			@Override
+			protected boolean matchesSafely(ExecutedBuild build, Description mismatch) {
+				List<String> descriptions = new ArrayList<>();
+				for (dev.gradleplugins.runnerkit.BuildResult.Failure failure : build.failures()) {
+					if (matcher.matches(failure.getDescription())) {
+						return true;
+					}
+					descriptions.add(failure.getDescription());
 				}
-			}
-
-			mismatchDescription.appendValueList("none of the following description matches: ", ", ", "", (Iterable)result.getFailures().stream().map(dev.gradleplugins.runnerkit.BuildResult.Failure::getDescription).distinct().collect(Collectors.toList()));
-			return false;
-		}
-	}
-
-	public static Matcher<BuildResult> performFullRebuildForIncrementalTask(Object taskPath) {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildResult item, Description description) {
-				dev.gradleplugins.runnerkit.BuildResult result = dev.gradleplugins.runnerkit.BuildResult.from(item.getOutput());
-				// TODO: Check the output is info
-				return result.task(taskPath.toString()).getOutput().contains(String.format("The input changes require a full rebuild for incremental task '%s'.", taskPath.toString()));
+				mismatch.appendValueList("none of the following descriptions matches: ", ", ", "", descriptions);
+				return false;
 			}
 
 			@Override
 			public void describeTo(Description description) {
-
+				description.appendText("a failure description matching ").appendDescriptionOf(matcher);
 			}
 		};
 	}
-
-	public static Matcher<BuildTaskOutput> performFullRebuildForIncrementalTask() {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildTaskOutput item, Description description) {
-				// TODO: Check the output is info
-				return item.getOutput().contains(String.format("The input changes require a full rebuild for incremental task '%s'.", item.getPath()));
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildResult> taskPerformsIncrementalBuild(Object taskPath) {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildResult result, Description description) {
-				BuildTaskOutput item = tasksOutput(result).task(taskPath);
-				// TODO: Check the output is info
-				return !item.getOutput().contains(String.format("The input changes require a full rebuild for incremental task '%s'.", item.getPath()));
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildResult> taskPerformsFullRebuild(Object taskPath) {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildResult result, Description description) {
-				BuildTaskOutput item = tasksOutput(result).task(taskPath);
-				// TODO: Check the output is info
-				return item.getOutput().contains(String.format("The input changes require a full rebuild for incremental task '%s'.", item.getPath()));
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildTaskOutput> taskPerformsFullRebuild() {
-		return new TypeSafeDiagnosingMatcher<>() {
-			@Override
-			protected boolean matchesSafely(BuildTaskOutput item, Description description) {
-				// TODO: Check the output is info
-				return item.getOutput().contains(String.format("The input changes require a full rebuild for incremental task '%s'.", item.getPath()));
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildTaskOutput> outputContains(Function<String, String> mapper) {
-		return new TypeSafeDiagnosingMatcher<BuildTaskOutput>() {
-			@Override
-			protected boolean matchesSafely(BuildTaskOutput item, Description mismatchDescription) {
-				return item.getOutput().contains(mapper.apply(item.getPath()));
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static Matcher<BuildTaskOutput> outputContains(String substring) {
-		return new TypeSafeDiagnosingMatcher<BuildTaskOutput>() {
-			@Override
-			protected boolean matchesSafely(BuildTaskOutput item, Description mismatchDescription) {
-				return item.getOutput().contains(substring);
-			}
-
-			@Override
-			public void describeTo(Description description) {
-
-			}
-		};
-	}
-
-	public static PerTaskOutput tasksOutput(BuildResult result) {
-		return new PerTaskOutput() {
-			@Override
-			public BuildTaskOutput task(Object taskPath) {
-				return new BuildTaskOutput() {
-					@Override
-					public String getOutput() {
-						return dev.gradleplugins.runnerkit.BuildResult.from(result.getOutput()).task(taskPath.toString()).getOutput();
-					}
-
-					@Override
-					public String getPath() {
-						return taskPath.toString();
-					}
-
-					@Override
-					public String toString() {
-						return getOutput();
-					}
-				};
-			}
-		};
-	}
-
-	public interface PerTaskOutput {
-		BuildTaskOutput task(Object taskPath);
-	}
-
-	public interface BuildTaskOutput {
-		String getOutput();
-		String getPath();
-	}
+	//endregion
 }

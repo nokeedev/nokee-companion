@@ -22,6 +22,6 @@ public interface AbstractGeneratedPublicHeadersFunctionalTests {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withPluginClasspath().forwardOutput().withProjectDir(build.getLocation().toFile());
 
-		assertThat(runner.withArguments("verify"), succeeds(tasksExecutedAndNotSkipped(hasItem(":generatePublicHeaders"))));
+		assertThat(succeeds(runner.withArguments("verify")), tasksExecutedAndNotSkipped(hasItem(":generatePublicHeaders")));
 	}
 }

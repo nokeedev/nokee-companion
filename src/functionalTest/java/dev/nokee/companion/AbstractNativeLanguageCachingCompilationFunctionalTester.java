@@ -42,8 +42,8 @@ public interface AbstractNativeLanguageCachingCompilationFunctionalTester {
 		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest.cleanIt(), taskUnderTest.toString()).withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
 		runner.withArguments(args.toList());
 
-		assertThat(runner.withProjectDir(firstBuild.getLocation().toFile()), succeeds(tasksExecutedAndNotSkipped(hasItem(taskUnderTest.toString()))));
-		assertThat(runner.withProjectDir(firstBuild.getLocation().toFile()), succeeds(tasksExecutedAndFromCache(hasItem(taskUnderTest.toString()))));
-		assertThat("restore from cache", runner.withProjectDir(secondBuild.getLocation().toFile()), succeeds(tasksExecutedAndFromCache(hasItem(taskUnderTest.toString()))));
+		assertThat(succeeds(runner.withProjectDir(firstBuild.getLocation().toFile())), tasksExecutedAndNotSkipped(hasItem(taskUnderTest.toString())));
+		assertThat(succeeds(runner.withProjectDir(firstBuild.getLocation().toFile())), tasksExecutedAndFromCache(hasItem(taskUnderTest.toString())));
+		assertThat("restore from cache", succeeds(runner.withProjectDir(secondBuild.getLocation().toFile())), tasksExecutedAndFromCache(hasItem(taskUnderTest.toString())));
 	}
 }

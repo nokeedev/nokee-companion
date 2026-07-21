@@ -6,8 +6,8 @@ import dev.nokee.commons.fixtures.GradleTaskUnderTestExtension;
 import dev.nokee.commons.fixtures.TaskUnderTest;
 import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.companion.fixtures.GradleRunnerArguments;
+import dev.nokee.companion.fixtures.GradleTestKitMatchers.ExecutedBuild;
 import org.apache.commons.io.FileUtils;
-import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +20,7 @@ import java.util.Arrays;
 
 import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.*;
 
 @ExtendWith({GradleProjectExtension.class, GradleTaskUnderTestExtension.class})
 public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
@@ -30,15 +30,15 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.write(build.file("src/main/headers/my-include-macro.h"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 
-		BuildResult result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		assertThat(tasksOutput(result).task(taskUnderTest), not(performFullRebuildForIncrementalTask()));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains(taskPath -> String.format("Found all include files for '%s'", taskPath)));
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result, task(taskUnderTest, output(taskPath -> containsString(String.format("Found all include files for '%s'", taskPath)))));
 	}
 
 	@Test
@@ -47,17 +47,17 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
-		BuildResult result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		assertThat(tasksOutput(result).task(taskUnderTest), not(performFullRebuildForIncrementalTask()));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/a.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/b.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), not(outputContains("/src/main/cpp/c.cpp")));
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
+		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
 	}
 
 	@Test
@@ -65,19 +65,18 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
-		BuildResult result = null;
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		assertThat(tasksOutput(result).task(taskUnderTest), not(performFullRebuildForIncrementalTask()));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/a.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/b.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), not(outputContains("/src/main/cpp/c.cpp")));
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
+		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
 	}
 
 	@Test
@@ -86,17 +85,17 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.write(build.file("src/main/headers/f.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
-		BuildResult result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		assertThat(tasksOutput(result).task(taskUnderTest), not(performFullRebuildForIncrementalTask()));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/a.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/b.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), not(outputContains("/src/main/cpp/c.cpp")));
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
+		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
 	}
 
 	@Test
@@ -106,29 +105,29 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.fix-for-gradle-34152.enabled=true");
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		assertThat(tasksOutput(result).task(taskUnderTest), performFullRebuildForIncrementalTask());
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/a.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/b.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/c.cpp"));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/c.cpp"))));
 
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		assertThat(tasksOutput(result).task(taskUnderTest), not(performFullRebuildForIncrementalTask()));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/a.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/b.cpp"));
-		assertThat(tasksOutput(result).task(taskUnderTest), not(outputContains("/src/main/cpp/c.cpp")));
+		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
+		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
 	}
 
 	@Test
@@ -137,9 +136,9 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.writeString(build.file("src/main/headers/my-other-include-macro.h"), """
 			#ifndef _MY_OTHER_INCLUDE_MACRO_H_
@@ -150,11 +149,11 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 			#endif
 			""".stripIndent());
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).append("-Pinclude-file=my-other-include-macro.h").toList()).build();
-		assertThat(result, taskExecutedAndNotSkipped(taskUnderTest));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).append("-Pinclude-file=my-other-include-macro.h").toList()));
+		assertThat(result, task(taskUnderTest, executed()));
 
-		assertThat(tasksOutput(result).task(taskUnderTest), performFullRebuildForIncrementalTask());
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("/src/main/cpp/source-with-include-macros.cpp"));
+		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/source-with-include-macros.cpp"))));
 	}
 
 	@Test
@@ -163,9 +162,9 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i").append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true").withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.walkFileTree(testDirectory.resolve(".gradle"), new SimpleFileVisitor<>() {
 			@Override
@@ -177,13 +176,13 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 				return FileVisitResult.CONTINUE;
 			}
 		});
-		result = runner.withArguments(args.withTasks("clean", taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndFromCache(taskUnderTest));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."));
+		result = succeeds(runner.withArguments(args.withTasks("clean", taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, fromCache()));
+		assertThat(result, task(taskUnderTest, output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."))));
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndUpToDate(taskUnderTest));
-		assertThat(tasksOutput(result).task(taskUnderTest), not(outputContains("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, upToDate()));
+		assertThat(result, task(taskUnderTest, not(output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")))));
 	}
 
 	@Test
@@ -192,9 +191,9 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i").append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true");
-		BuildResult result = null;
+		ExecutedBuild result;
 
-		assertThat(runner.withArguments(args.withTasks(taskUnderTest).toList()), becomesUpToDate());
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
 
 		Files.walkFileTree(testDirectory.resolve(".gradle"), new SimpleFileVisitor<>() {
 			@Override
@@ -206,12 +205,12 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 				return FileVisitResult.CONTINUE;
 			}
 		});
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndUpToDate(taskUnderTest));
-		assertThat(tasksOutput(result).task(taskUnderTest), outputContains("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, upToDate()));
+		assertThat(result, task(taskUnderTest, output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."))));
 
-		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
-		assertThat(result, taskExecutedAndUpToDate(taskUnderTest));
-		assertThat(tasksOutput(result).task(taskUnderTest.toString()), not(outputContains("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")));
+		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
+		assertThat(result, task(taskUnderTest, upToDate()));
+		assertThat(result, task(taskUnderTest, not(output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")))));
 	}
 }

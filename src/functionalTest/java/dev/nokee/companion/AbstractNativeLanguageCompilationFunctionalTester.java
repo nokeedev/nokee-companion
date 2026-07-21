@@ -28,8 +28,8 @@ public interface AbstractNativeLanguageCompilationFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 
-		assertThat(runner.withArguments(taskUnderTest), fails(allOf(
+		assertThat(fails(runner.withArguments(taskUnderTest)), allOf(
 			hasFailureDescription("Execution failed for task '" + taskUnderTest + "'."),
-			hasFailureCause(containsString(expectedCompilationFailureCause)))));
+			hasFailureCause(containsString(expectedCompilationFailureCause))));
 	}
 }

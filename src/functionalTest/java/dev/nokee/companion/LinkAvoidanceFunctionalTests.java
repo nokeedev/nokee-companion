@@ -1,11 +1,11 @@
 package dev.nokee.companion;
 
 import dev.nokee.companion.fixtures.GradleBuild;
+import dev.nokee.companion.fixtures.GradleTestKitMatchers.ExecutedBuild;
 import dev.nokee.elements.core.*;
 import dev.nokee.elements.nativebase.NativeElement;
 import dev.nokee.elements.nativebase.NativeLibraryElement;
 import org.apache.commons.lang3.SystemUtils;
-import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -100,42 +100,42 @@ class LinkAvoidanceFunctionalTests {
 		void doesNotRelinkOnImplementationOnlyChange() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void relinkOnNewExportedSymbol() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(addedSymbol())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void alwaysRelinkAfterClean() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
-			assertThat(runner.withArguments("clean", ":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments("clean", ":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void relinkOnRemovedExportedSymbol() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withRenamedAbiChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -144,96 +144,96 @@ class LinkAvoidanceFunctionalTests {
 
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withWeakSymbolChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void relinkOnSymbolTypeChangesFromFunctionToVariable() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
 			build.subproject("lib", writeToProject(ofPublicHeaders(fixture.lib.api.withVariableKindChange())));
 			build.subproject("app", writeToProject(ofSources(fixture.app.main.useAsVariableSymbol())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 
 			// TODO: SEEMS TO BE ONLY UNDEFINED
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void relinkWhenParameterCountChanges() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void doesNotRelinkWhenReturnTypeChanges() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void doesNotRelinkWhenFunctionBecomesVariableInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
 			build.subproject("lib", writeToProject(ofPublicHeaders(fixture.lib.api.withVariableKindChange())));
 			build.subproject("app", writeToProject(ofSources(fixture.app.main.useAsVariableSymbol())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
-			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void doesNotRelinkWhenParameterCountChangesInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
 		void doesNotRelinkWhenReturnTypeChangesInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -250,7 +250,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			// relocating a library should not cause a relink
 			build.subproject("lib", project -> {
@@ -263,7 +263,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -278,11 +278,11 @@ class LinkAvoidanceFunctionalTests {
 
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
 
-			assertThat(runner.withArguments(":app:assemble").run(), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -293,7 +293,7 @@ class LinkAvoidanceFunctionalTests {
 				write(project.file("src/main/cpp/foo.cpp"), "int foo_bar() { return 42; }");
 				project.plugins(it -> it.id("cpp-library"));
 			});
-			runner.withArguments(":other-lib:assemble").build();
+			succeeds(runner.withArguments(":other-lib:assemble"));
 
 			build.subproject("app", project -> {
 				project.append(groovyDsl("""
@@ -306,11 +306,11 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(runner.withArguments(":app:assemble"), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
 
-			BuildResult result = runner.withArguments(":app:assemble", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")).run();
+			ExecutedBuild result = succeeds(runner.withArguments(":app:assemble", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")));
 			assertThat(result, tasksExecuted(hasItem(":app:linkDebug")));
-			assertThat(dev.gradleplugins.runnerkit.BuildResult.from(result.getOutput()).task(":app:linkDebug").getOutput(), containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib"));
+			assertThat(result, task(":app:linkDebug", output(containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib"))));
 		}
 	}
 
