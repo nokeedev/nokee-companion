@@ -39,11 +39,11 @@ public interface AbstractNativeLanguageCachingCompilationFunctionalTester {
 		GradleBuildElement firstBuild = project.writeToDirectory(testDirectory.resolve("first"));
 		GradleBuildElement secondBuild = project.writeToDirectory(testDirectory.resolve("second"));
 		GradleRunner runner = GradleRunner.create().withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest.cleanIt(), taskUnderTest.toString()).withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest.cleanIt(), taskUnderTest.toString()).withBuildCacheEnabled().withGradleUserHomeDirectory(testDirectory.resolve("user-home").toFile());
 		runner.withArguments(args.toList());
 
-		assertThat(succeeds(runner.withProjectDir(firstBuild.getLocation().toFile())), tasksExecutedAndNotSkipped(hasItem(taskUnderTest.toString())));
-		assertThat(succeeds(runner.withProjectDir(firstBuild.getLocation().toFile())), tasksExecutedAndFromCache(hasItem(taskUnderTest.toString())));
-		assertThat("restore from cache", succeeds(runner.withProjectDir(secondBuild.getLocation().toFile())), tasksExecutedAndFromCache(hasItem(taskUnderTest.toString())));
+		assertThat(succeeds(runner.withProjectDir(firstBuild.getLocation().toFile())).task(taskUnderTest), executed());
+		assertThat(succeeds(runner.withProjectDir(firstBuild.getLocation().toFile())).task(taskUnderTest), fromCache());
+		assertThat("restore from cache", succeeds(runner.withProjectDir(secondBuild.getLocation().toFile())).task(taskUnderTest), fromCache());
 	}
 }

@@ -47,7 +47,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		ExecutedBuild result = succeeds(runner.withArguments(GradleRunnerArguments.create().withTasks(taskUnderTest).toList()));
 
-		assertThat(result, task(taskUnderTest, noSource()));
+		assertThat(result.task(taskUnderTest), noSource());
 	}
 
 	@Test
@@ -58,16 +58,16 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat("no previous builds, everything is out-of-date", result, task(taskUnderTest, executed()));
+		assertThat("no previous builds, everything is out-of-date", result.task(taskUnderTest), executed());
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat("no change, everything is up-to-date", result, task(taskUnderTest, upToDate()));
+		assertThat("no change, everything is up-to-date", result.task(taskUnderTest), upToDate());
 
 		// TODO: Use incremental elements
 		Files.write(build.file("src/main/cpp/main.cpp"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 
 		result = succeeds(runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 	}
 
 	@Test
@@ -78,7 +78,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat("no previous builds, everything is out-of-date", result, task(taskUnderTest, executed()));
+		assertThat("no previous builds, everything is out-of-date", result.task(taskUnderTest), executed());
 
 		// TODO: Use incremental elements
 		Files.delete(build.getLocation().resolve("src/main/cpp/file-to-remove.cpp"));
@@ -86,7 +86,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		assertThat(build.getLocation().resolve("build/objs"), aFile(hasDescendants(hasItem(withRelativePath(endsWith("file-to-remove.o"))))));
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 
 		// TODO: Use TaskUnderTest model
 		assertThat(build.getLocation().resolve("build/objs"), aFile(not(hasDescendants(hasItem(withRelativePath(endsWith("file-to-remove.o")))))));
@@ -105,15 +105,15 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		runner = runner.withArguments(args.withTasks(taskUnderTest).toList());
 
 		result = succeeds(runner);
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
 		result = succeeds(runner);
-		assertThat(result, task(taskUnderTest, skipped()));
+		assertThat(result.task(taskUnderTest), skipped());
 
 		// TODO: must be relative
 		Files.move(fileToRelocate, build.dir("src/main/cpp/subdir").resolve("relocate.cpp"));
 		result = succeeds(runner);
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 	}
 
 	@Test
@@ -124,10 +124,10 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
 		result = succeeds(runner);
-		assertThat(result, task(taskUnderTest, skipped()));
+		assertThat(result.task(taskUnderTest), skipped());
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -136,7 +136,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		""".stripIndent()));
 
 		result = succeeds(runner.withArguments(args.append("-i").toList()));
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
 	@Test
@@ -147,10 +147,10 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, skipped()));
+		assertThat(result.task(taskUnderTest), skipped());
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -159,7 +159,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		""".stripIndent()));
 
 		result = succeeds(runner.withArguments(args.append("-i").toList()));
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
 	@Test
@@ -170,10 +170,10 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
 		result = succeeds(runner);
-		assertThat(result, task(taskUnderTest, skipped()));
+		assertThat(result.task(taskUnderTest), skipped());
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -182,7 +182,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		""".stripIndent()));
 
 		result = succeeds(runner.withArguments(args.append("-i").toList()));
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
 	@Test
@@ -193,10 +193,10 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, skipped()));
+		assertThat(result.task(taskUnderTest), skipped());
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -205,7 +205,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		""".stripIndent()));
 
 		result = succeeds(runner.withArguments(args.append("-i").toList()));
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
 	@Test
@@ -216,10 +216,10 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, skipped()));
+		assertThat(result.task(taskUnderTest), skipped());
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -228,7 +228,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		""".stripIndent()));
 
 		result = succeeds(runner.withArguments(args.append("-i").toList()));
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
 	@Test
@@ -239,10 +239,10 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
 		result = succeeds(runner.withArguments(args.toList()));
-		assertThat(result, task(taskUnderTest, skipped()));
+		assertThat(result.task(taskUnderTest), skipped());
 
 		build.getBuildFile().append(groovyDsl("""
 			subject.configure {
@@ -255,6 +255,6 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		""".stripIndent()));
 
 		result = succeeds(runner.withArguments(args.append("-i").toList()));
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 }

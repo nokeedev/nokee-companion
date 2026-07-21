@@ -81,6 +81,15 @@ public final class GradleTestKitMatchers {
 			this.source = source;
 		}
 
+		/** Returns the executed task at the given path, for use with the {@link ExecutedTask} matchers. */
+		public ExecutedTask task(Object taskPath) {
+			ExecutedTask task = taskOrNull(taskPath.toString());
+			if (task == null) {
+				throw new AssertionError("no task '" + taskPath + "' in build; tasks were " + taskPaths());
+			}
+			return task;
+		}
+
 		private ExecutedTask taskOrNull(String path) {
 			BuildTask task = source.task(path);
 			if (task == null) {
@@ -158,12 +167,16 @@ public final class GradleTestKitMatchers {
 
 	/** Runs the build, asserting it succeeds, and returns its result for further assertions. */
 	public static ExecutedBuild succeeds(GradleRunner runner) {
-		return theBuild(runner).build();
+		return new ExecutedBuild(runner.build());
+	}
+
+	public static ExecutedBuild runs(GradleRunner runner) {
+		return new ExecutedBuild(runner.run());
 	}
 
 	/** Runs the build, asserting it fails, and returns its result for further assertions. */
 	public static ExecutedBuild fails(GradleRunner runner) {
-		return theBuild(runner).buildAndFail();
+		return new ExecutedBuild(runner.buildAndFail());
 	}
 	//endregion
 
@@ -341,6 +354,29 @@ public final class GradleTestKitMatchers {
 				description.appendText("a task that performs a full rebuild");
 			}
 		};
+	}
+	//endregion
+
+	//region Single-task shorthands (over ExecutedBuild)
+
+	public static Matcher<ExecutedBuild> taskExecuted(Object taskPath) {
+		return task(taskPath, executed());
+	}
+
+	public static Matcher<ExecutedBuild> taskSkipped(Object taskPath) {
+		return task(taskPath, skipped());
+	}
+
+	public static Matcher<ExecutedBuild> taskFailed(Object taskPath) {
+		return task(taskPath, failed());
+	}
+
+	public static Matcher<ExecutedBuild> taskCached(Object taskPath) {
+		return task(taskPath, fromCache());
+	}
+
+	public static Matcher<ExecutedBuild> taskPerformsFullRebuild(Object taskPath) {
+		return task(taskPath, performsFullRebuild());
 	}
 	//endregion
 

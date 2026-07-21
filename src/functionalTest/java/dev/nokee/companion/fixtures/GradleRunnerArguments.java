@@ -119,7 +119,7 @@ public class GradleRunnerArguments implements Iterable<String> {
 			result.add("--gradle-user-home");
 			result.add(gradleUserHomeDirectory.getPath());
 		}
-		if (deprecationChecks == DeprecationChecks.FAILS) result.add("--warning-mode=fails");
+		if (deprecationChecks == DeprecationChecks.FAILS) result.add("--warning-mode=fail");
 		if (welcomeMessage != null) result.add("-D" + WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY + "=" + (welcomeMessage == WelcomeMessage.ENABLED));
 
 		result.addAll(tasks);

@@ -36,8 +36,8 @@ public interface AbstractNativeLanguageIncrementalCompilationAfterFailureFunctio
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
 		ExecutedBuild result = fails(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat("no previous builds, everything is out-of-date", result, task(taskUnderTest, failed()));
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
+		assertThat("no previous builds, everything is out-of-date", result.task(taskUnderTest), failed());
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
 		assertThat(build.dir("build/objs"), hasDescendants(aFileBaseNamed("message"), aFileBaseNamed("split"), aFileBaseNamed("destructor"), aFileBaseNamed("remove"), aFileBaseNamed("join"), aFileBaseNamed("add"), aFileBaseNamed("get"), aFileBaseNamed("main"), aFileBaseNamed("copy_ctor_assign"), aFileBaseNamed("size")));
 	}
 
@@ -54,23 +54,23 @@ public interface AbstractNativeLanguageIncrementalCompilationAfterFailureFunctio
 		ExecutedBuild result;
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat("no previous builds, everything is out-of-date", result, task(taskUnderTest, executed()));
+		assertThat("no previous builds, everything is out-of-date", result.task(taskUnderTest), executed());
 
 		CompilationOutputs outputs = CompilationOutputs.from(build.dir("build/objs")).withExtensions("o", "obj");
 		CompilationOutputs.Result<ExecutedBuild> snap = null;
 		result = (snap = outputs.snapshot(() -> succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList())))).get();
-		assertThat("no change, everything is up-to-date", result, task(taskUnderTest, upToDate()));
+		assertThat("no change, everything is up-to-date", result.task(taskUnderTest), upToDate());
 
 		// TODO: Use incremental elements
 		Files.write(build.file("src/main/cpp/main.cpp"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 		Files.write(build.file("src/main/cpp/broken.cpp"), Arrays.asList("broken!", "", ""));
 		result = fails(runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 		assertThat(snap, noneRecompiled());
 
 		Files.write(build.file("src/main/cpp/broken.cpp"), Arrays.asList("int foo() { return 52; }"));
 		result = succeeds(runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 		assertThat(snap, recompiledFiles(aFileBaseNamed("main"), aFileBaseNamed("broken")));
 	}
 }

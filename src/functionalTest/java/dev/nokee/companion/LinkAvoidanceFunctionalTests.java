@@ -1,6 +1,7 @@
 package dev.nokee.companion;
 
 import dev.nokee.companion.fixtures.GradleBuild;
+import dev.nokee.companion.fixtures.GradleRunnerArguments;
 import dev.nokee.companion.fixtures.GradleTestKitMatchers.ExecutedBuild;
 import dev.nokee.elements.core.*;
 import dev.nokee.elements.nativebase.NativeElement;
@@ -104,7 +105,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -115,7 +116,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(addedSymbol())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -124,7 +125,7 @@ class LinkAvoidanceFunctionalTests {
 			fixture.writeToProject(build);
 			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
-			assertThat(succeeds(runner.withArguments("clean", ":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments("clean", ":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -135,7 +136,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withRenamedAbiChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -148,7 +149,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withWeakSymbolChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -159,17 +160,17 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
 			build.subproject("lib", writeToProject(ofPublicHeaders(fixture.lib.api.withVariableKindChange())));
 			build.subproject("app", writeToProject(ofSources(fixture.app.main.useAsVariableSymbol())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 
 			// TODO: SEEMS TO BE ONLY UNDEFINED
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -180,7 +181,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -191,7 +192,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -202,16 +203,16 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
 			build.subproject("lib", writeToProject(ofPublicHeaders(fixture.lib.api.withVariableKindChange())));
 			build.subproject("app", writeToProject(ofSources(fixture.app.main.useAsVariableSymbol())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -222,7 +223,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -233,7 +234,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -263,7 +264,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksSkipped(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -282,7 +283,7 @@ class LinkAvoidanceFunctionalTests {
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
 
-			assertThat(succeeds(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
 
 		@Test
@@ -308,9 +309,9 @@ class LinkAvoidanceFunctionalTests {
 
 			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
-			ExecutedBuild result = succeeds(runner.withArguments(":app:assemble", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")));
+			ExecutedBuild result = runs(runner.withArguments(":app:assemble", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")));
 			assertThat(result, tasksExecuted(hasItem(":app:linkDebug")));
-			assertThat(result, task(":app:linkDebug", output(containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib"))));
+			assertThat(result.task(":app:linkDebug"), output(containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib")));
 		}
 	}
 

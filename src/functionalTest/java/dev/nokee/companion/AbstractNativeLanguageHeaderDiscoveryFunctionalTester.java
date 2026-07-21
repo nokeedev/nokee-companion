@@ -35,10 +35,10 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		Files.write(build.file("src/main/headers/my-include-macro.h"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 
 		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
-		assertThat(result, task(taskUnderTest, output(taskPath -> containsString(String.format("Found all include files for '%s'", taskPath)))));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), output(taskPath -> containsString(String.format("Found all include files for '%s'", taskPath))));
 	}
 
 	@Test
@@ -52,12 +52,12 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
 		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
-		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/a.cpp")));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/b.cpp")));
+		assertThat(result.task(taskUnderTest), not(output(containsString("/src/main/cpp/c.cpp"))));
 	}
 
 	@Test
@@ -71,12 +71,12 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
 		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
-		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/a.cpp")));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/b.cpp")));
+		assertThat(result.task(taskUnderTest), not(output(containsString("/src/main/cpp/c.cpp"))));
 	}
 
 	@Test
@@ -90,12 +90,12 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		Files.write(build.file("src/main/headers/f.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
 		ExecutedBuild result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
-		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/a.cpp")));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/b.cpp")));
+		assertThat(result.task(taskUnderTest), not(output(containsString("/src/main/cpp/c.cpp"))));
 	}
 
 	@Test
@@ -112,22 +112,22 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.fix-for-gradle-34152.enabled=true");
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/c.cpp"))));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/a.cpp")));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/b.cpp")));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/c.cpp")));
 
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
-		assertThat(result, task(taskUnderTest, not(performsFullRebuild())));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/a.cpp"))));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/b.cpp"))));
-		assertThat(result, task(taskUnderTest, not(output(containsString("/src/main/cpp/c.cpp")))));
+		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/a.cpp")));
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/b.cpp")));
+		assertThat(result.task(taskUnderTest), not(output(containsString("/src/main/cpp/c.cpp"))));
 	}
 
 	@Test
@@ -150,10 +150,10 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 			""".stripIndent());
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).append("-Pinclude-file=my-other-include-macro.h").toList()));
-		assertThat(result, task(taskUnderTest, executed()));
+		assertThat(result.task(taskUnderTest), executed());
 
-		assertThat(result, task(taskUnderTest, performsFullRebuild()));
-		assertThat(result, task(taskUnderTest, output(containsString("/src/main/cpp/source-with-include-macros.cpp"))));
+		assertThat(result.task(taskUnderTest), performsFullRebuild());
+		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/source-with-include-macros.cpp")));
 	}
 
 	@Test
@@ -177,12 +177,12 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 			}
 		});
 		result = succeeds(runner.withArguments(args.withTasks("clean", taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, fromCache()));
-		assertThat(result, task(taskUnderTest, output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."))));
+		assertThat(result.task(taskUnderTest), fromCache());
+		assertThat(result.task(taskUnderTest), output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")));
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, upToDate()));
-		assertThat(result, task(taskUnderTest, not(output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")))));
+		assertThat(result.task(taskUnderTest), upToDate());
+		assertThat(result.task(taskUnderTest), not(output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."))));
 	}
 
 	@Test
@@ -206,11 +206,11 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 			}
 		});
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, upToDate()));
-		assertThat(result, task(taskUnderTest, output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."))));
+		assertThat(result.task(taskUnderTest), upToDate());
+		assertThat(result.task(taskUnderTest), output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")));
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
-		assertThat(result, task(taskUnderTest, upToDate()));
-		assertThat(result, task(taskUnderTest, not(output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'.")))));
+		assertThat(result.task(taskUnderTest), upToDate());
+		assertThat(result.task(taskUnderTest), not(output(containsString("Cannot locate header file for '#include UNRESOLVED_MACRO' in source file 'a.cpp'."))));
 	}
 }
