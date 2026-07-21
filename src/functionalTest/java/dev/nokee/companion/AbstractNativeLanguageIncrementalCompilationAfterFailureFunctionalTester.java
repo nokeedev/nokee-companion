@@ -1,12 +1,11 @@
 package dev.nokee.companion;
 
-import dev.gradleplugins.runnerkit.BuildResult;
-import dev.gradleplugins.runnerkit.GradleRunner;
-import dev.gradleplugins.runnerkit.TaskOutcome;
 import dev.nokee.commons.fixtures.GradleProject;
 import dev.nokee.commons.fixtures.TaskUnderTest;
-import dev.nokee.commons.hamcrest.gradle.FileSystemMatchers;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.companion.fixtures.GradleRunnerArguments;
+import org.gradle.testkit.runner.BuildResult;
+import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -17,14 +16,12 @@ import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
-import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
-import static dev.nokee.commons.fixtures.BuildResultExMatchers.taskPerformsFullRebuild;
-import static dev.nokee.commons.fixtures.BuildResultExMatchers.taskPerformsIncrementalBuild;
-import static dev.nokee.commons.hamcrest.gradle.FileSystemMatchers.*;
+import static dev.nokee.commons.hamcrest.gradle.FileSystemMatchers.aFileBaseNamed;
+import static dev.nokee.commons.hamcrest.gradle.FileSystemMatchers.hasDescendants;
 import static dev.nokee.companion.CompilationOutputs.noneRecompiled;
 import static dev.nokee.companion.CompilationOutputs.recompiledFiles;
+import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
 
 public interface AbstractNativeLanguageIncrementalCompilationAfterFailureFunctionalTester {
 	@Test
@@ -35,12 +32,13 @@ public interface AbstractNativeLanguageIncrementalCompilationAfterFailureFunctio
 				options.incrementalAfterFailure = true
 			}
 		"""));
-		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput().withArgument("-i");
+		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
+		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 		BuildResult result = null;
 
-		result = runner.withTasks(taskUnderTest.toString()).buildAndFail();
-		assertThat("no previous builds, everything is out-of-date", result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.FAILED));
-		assertThat(result, taskPerformsFullRebuild(taskUnderTest.toString()));
+		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).buildAndFail();
+		assertThat("no previous builds, everything is out-of-date", result, taskFailed(taskUnderTest));
+		assertThat(tasksOutput(result).task(taskUnderTest), taskPerformsFullRebuild());
 		assertThat(build.dir("build/objs"), hasDescendants(aFileBaseNamed("message"), aFileBaseNamed("split"), aFileBaseNamed("destructor"), aFileBaseNamed("remove"), aFileBaseNamed("join"), aFileBaseNamed("add"), aFileBaseNamed("get"), aFileBaseNamed("main"), aFileBaseNamed("copy_ctor_assign"), aFileBaseNamed("size")));
 	}
 
@@ -52,26 +50,27 @@ public interface AbstractNativeLanguageIncrementalCompilationAfterFailureFunctio
 				options.incrementalAfterFailure = true
 			}
 		"""));
-		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput();
+		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
+		GradleRunnerArguments args = GradleRunnerArguments.create();
 		BuildResult result = null;
 
-		result = runner.withTasks(taskUnderTest.toString()).build();
-		assertThat("no previous builds, everything is out-of-date", result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
+		result = runner.withArguments(args.withTasks(taskUnderTest).toList()).build();
+		assertThat("no previous builds, everything is out-of-date", result, taskExecutedAndNotSkipped(taskUnderTest));
 
 		CompilationOutputs outputs = CompilationOutputs.from(build.dir("build/objs")).withExtensions("o", "obj");
 		CompilationOutputs.Result<BuildResult> snap = null;
-		result = (snap = outputs.snapshot(() -> runner.withTasks(taskUnderTest.toString()).build())).get();
-		assertThat("no change, everything is up-to-date", result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.UP_TO_DATE));
+		result = (snap = outputs.snapshot(() -> runner.withArguments(args.withTasks(taskUnderTest).toList()).build())).get();
+		assertThat("no change, everything is up-to-date", result, taskExecutedAndUpToDate(taskUnderTest));
 
 		// TODO: Use incremental elements
 		Files.write(build.file("src/main/cpp/main.cpp"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 		Files.write(build.file("src/main/cpp/broken.cpp"), Arrays.asList("broken!", "", ""));
-		result = runner.withArgument("-i").withTasks(taskUnderTest.toString()).buildAndFail();
-		assertThat(result, taskPerformsIncrementalBuild(taskUnderTest.toString()));
+		result = runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()).buildAndFail();
+		assertThat(result, taskPerformsIncrementalBuild(taskUnderTest));
 		assertThat(snap, noneRecompiled());
 
 		Files.write(build.file("src/main/cpp/broken.cpp"), Arrays.asList("int foo() { return 52; }"));
-		result = runner.withArgument("-i").withTasks(taskUnderTest.toString()).build();
+		result = runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()).build();
 		assertThat(result, taskPerformsIncrementalBuild(taskUnderTest.toString()));
 		assertThat(snap, recompiledFiles(aFileBaseNamed("main"), aFileBaseNamed("broken")));
 	}

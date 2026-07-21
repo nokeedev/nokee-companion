@@ -15,23 +15,22 @@
  */
 package dev.nokee.companion;
 
-import dev.gradleplugins.runnerkit.BuildResult;
-import dev.gradleplugins.runnerkit.GradleRunner;
-import dev.gradleplugins.runnerkit.TaskOutcome;
 import dev.nokee.commons.fixtures.GradleProject;
 import dev.nokee.commons.fixtures.GradleProjectExtension;
 import dev.nokee.commons.fixtures.GradleTaskUnderTestExtension;
 import dev.nokee.commons.fixtures.TaskUnderTest;
 import dev.nokee.commons.sources.GradleBuildElement;
+import dev.nokee.companion.fixtures.GradleRunnerArguments;
+import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 
-import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
 
 @ExtendWith({GradleProjectExtension.class, GradleTaskUnderTestExtension.class})
 public interface AbstractNativeLanguageCachingCompilationFunctionalTester {
@@ -39,16 +38,12 @@ public interface AbstractNativeLanguageCachingCompilationFunctionalTester {
 	default void restoreFromCacheInSecondLocation(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-with-sources") GradleBuildElement project) {
 		GradleBuildElement firstBuild = project.writeToDirectory(testDirectory.resolve("first"));
 		GradleBuildElement secondBuild = project.writeToDirectory(testDirectory.resolve("second"));
-		GradleRunner runner = GradleRunner.create(gradleTestKit()).withPluginClasspath().forwardOutput().withTasks(taskUnderTest.cleanIt(), taskUnderTest.toString()).withBuildCacheEnabled().withGradleUserHomeDirectory(testDirectory.resolve("user-home").toFile());
-		BuildResult result = null;
+		GradleRunner runner = GradleRunner.create().withPluginClasspath().forwardOutput();
+		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest.cleanIt(), taskUnderTest.toString()).withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
+		runner.withArguments(args.toList());
 
-		result = runner.inDirectory(firstBuild.getLocation()).build();
-		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.SUCCESS));
-
-		result = runner.inDirectory(firstBuild.getLocation()).build();
-		assertThat(result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.FROM_CACHE));
-
-		result = runner.inDirectory(secondBuild.getLocation()).build();
-		assertThat("restore from cache", result.task(taskUnderTest.toString()).getOutcome(), equalTo(TaskOutcome.FROM_CACHE));
+		assertThat(runner.withProjectDir(firstBuild.getLocation().toFile()), succeeds(tasksExecutedAndNotSkipped(hasItem(taskUnderTest.toString()))));
+		assertThat(runner.withProjectDir(firstBuild.getLocation().toFile()), succeeds(tasksExecutedAndFromCache(hasItem(taskUnderTest.toString()))));
+		assertThat("restore from cache", runner.withProjectDir(secondBuild.getLocation().toFile()), succeeds(tasksExecutedAndFromCache(hasItem(taskUnderTest.toString()))));
 	}
 }

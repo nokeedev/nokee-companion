@@ -1,21 +1,19 @@
 package dev.nokee.companion;
 
-import dev.gradleplugins.runnerkit.BuildResult;
-import dev.gradleplugins.runnerkit.GradleRunner;
 import dev.nokee.commons.fixtures.GradleProject;
 import dev.nokee.commons.fixtures.GradleProjectExtension;
 import dev.nokee.commons.fixtures.GradleTaskUnderTestExtension;
 import dev.nokee.commons.sources.GradleBuildElement;
+import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 
-import static dev.gradleplugins.fixtures.runnerkit.BuildResultMatchers.hasFailureCause;
-import static dev.gradleplugins.fixtures.runnerkit.BuildResultMatchers.hasFailureDescription;
-import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
+import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 
 @ExtendWith({GradleProjectExtension.class, GradleTaskUnderTestExtension.class})
@@ -28,10 +26,10 @@ public interface AbstractNativeLanguageCompilationFunctionalTester {
 		String expectedCompilationFailureCause = "C++ compiler failed while compiling broken.cpp";
 
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
-		GradleRunner runner = GradleRunner.create(gradleTestKit()).inDirectory(build.getLocation()).withPluginClasspath().forwardOutput();
-		BuildResult result = runner.withTasks(taskUnderTest).buildAndFail();
+		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 
-		assertThat(result, hasFailureDescription("Execution failed for task '" + taskUnderTest + "'."));
-		assertThat(result, hasFailureCause(containsString(expectedCompilationFailureCause)));
+		assertThat(runner.withArguments(taskUnderTest), fails(allOf(
+			hasFailureDescription("Execution failed for task '" + taskUnderTest + "'."),
+			hasFailureCause(containsString(expectedCompilationFailureCause)))));
 	}
 }
