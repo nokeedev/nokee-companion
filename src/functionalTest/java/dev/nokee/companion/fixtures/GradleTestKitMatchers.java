@@ -147,6 +147,10 @@ public final class GradleTestKitMatchers {
 		private ExecutedBuild buildAndFail() {
 			return new ExecutedBuild(runner.buildAndFail());
 		}
+
+		private List<String> arguments() {
+			return runner.getArguments();
+		}
 	}
 	//endregion
 
@@ -166,34 +170,63 @@ public final class GradleTestKitMatchers {
 	//region Runner matcher
 
 	/**
-	 * Matches a build that, when run a second time, leaves the given task {@code UP-TO-DATE}.
-	 * Builds twice to reach a steady state; the explicit task path avoids the false-positive of inferring
-	 * tasks from command-line arguments.
+	 * Matches a build whose requested tasks are all {@code UP-TO-DATE} when run a second time.
+	 * Builds twice to reach a steady state, then checks the tasks named on the command line: an argument
+	 * starting with {@code :} is an absolute task path, while any other non-flag argument (not starting
+	 * with {@code -}) is a relative task path. Task name compression (abbreviated names) is not expanded.
 	 */
-	public static Matcher<TheBuild> becomesUpToDate(Object taskPath) {
-		String path = taskPath.toString();
+	public static Matcher<TheBuild> becomesUpToDate() {
 		return new TypeSafeDiagnosingMatcher<>() {
 			@Override
 			protected boolean matchesSafely(TheBuild subject, Description mismatch) {
 				subject.build(); // reach steady state
 				ExecutedBuild second = subject.build();
-				ExecutedTask task = second.taskOrNull(path);
-				if (task == null) {
-					mismatch.appendText("no task ").appendValue(path).appendText(" in build; tasks were ").appendValue(second.taskPaths());
+
+				List<ExecutedTask> requested = new ArrayList<>();
+				for (ExecutedTask task : second.tasks()) {
+					if (isRequestedTask(task.path(), subject.arguments())) {
+						requested.add(task);
+					}
+				}
+
+				if (requested.isEmpty()) {
+					mismatch.appendText("no requested task ran; arguments were ").appendValue(subject.arguments());
 					return false;
 				}
-				if (task.outcome() != TaskOutcome.UP_TO_DATE) {
-					mismatch.appendText("task ").appendValue(path).appendText(" was ").appendValue(task.outcome()).appendText(" on the incremental build");
-					return false;
+
+				boolean matched = true;
+				for (ExecutedTask task : requested) {
+					if (task.outcome() != TaskOutcome.UP_TO_DATE) {
+						mismatch.appendText("task ").appendValue(task.path()).appendText(" was ").appendValue(task.outcome()).appendText("; ");
+						matched = false;
+					}
 				}
-				return true;
+				return matched;
 			}
 
 			@Override
 			public void describeTo(Description description) {
-				description.appendText("task ").appendValue(path).appendText(" UP-TO-DATE on an incremental build");
+				description.appendText("the requested tasks UP-TO-DATE on an incremental build");
 			}
 		};
+	}
+
+	private static boolean isRequestedTask(String taskPath, List<String> arguments) {
+		for (String arg : arguments) {
+			if (arg.startsWith("-")) {
+				continue; // flag
+			}
+			if (arg.startsWith(":")) {
+				// absolute task path
+				if (taskPath.equals(arg)) {
+					return true;
+				}
+			} else if (taskPath.equals(":" + arg) || taskPath.endsWith(":" + arg)) {
+				// relative task path (task name compression is not expanded)
+				return true;
+			}
+		}
+		return false;
 	}
 	//endregion
 

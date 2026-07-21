@@ -100,7 +100,7 @@ class LinkAvoidanceFunctionalTests {
 		void doesNotRelinkOnImplementationOnlyChange() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
 
@@ -111,7 +111,7 @@ class LinkAvoidanceFunctionalTests {
 		void relinkOnNewExportedSymbol() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(addedSymbol())));
 
@@ -122,7 +122,7 @@ class LinkAvoidanceFunctionalTests {
 		void alwaysRelinkAfterClean() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			assertThat(succeeds(runner.withArguments("clean", ":app:assemble")), tasksExecuted(hasItem(":app:linkDebug")));
 		}
@@ -131,7 +131,7 @@ class LinkAvoidanceFunctionalTests {
 		void relinkOnRemovedExportedSymbol() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withRenamedAbiChange())));
 
@@ -144,7 +144,7 @@ class LinkAvoidanceFunctionalTests {
 
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withWeakSymbolChange())));
 
@@ -155,7 +155,7 @@ class LinkAvoidanceFunctionalTests {
 		void relinkOnSymbolTypeChangesFromFunctionToVariable() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
 
@@ -176,7 +176,7 @@ class LinkAvoidanceFunctionalTests {
 		void relinkWhenParameterCountChanges() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
 
@@ -187,7 +187,7 @@ class LinkAvoidanceFunctionalTests {
 		void doesNotRelinkWhenReturnTypeChanges() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
 
@@ -198,7 +198,7 @@ class LinkAvoidanceFunctionalTests {
 		void doesNotRelinkWhenFunctionBecomesVariableInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
 
@@ -218,7 +218,7 @@ class LinkAvoidanceFunctionalTests {
 		void doesNotRelinkWhenParameterCountChangesInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
 
@@ -229,7 +229,7 @@ class LinkAvoidanceFunctionalTests {
 		void doesNotRelinkWhenReturnTypeChangesInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
 
@@ -250,7 +250,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			// relocating a library should not cause a relink
 			build.subproject("lib", project -> {
@@ -278,7 +278,7 @@ class LinkAvoidanceFunctionalTests {
 
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
 
@@ -306,7 +306,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate(":app:assemble"));
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
 
 			ExecutedBuild result = succeeds(runner.withArguments(":app:assemble", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")));
 			assertThat(result, tasksExecuted(hasItem(":app:linkDebug")));

@@ -30,7 +30,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.write(build.file("src/main/headers/my-include-macro.h"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 
@@ -47,7 +47,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
@@ -66,7 +66,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.write(build.file("src/main/headers/d.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
@@ -85,7 +85,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.write(build.file("src/main/headers/f.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
 
@@ -107,7 +107,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 		ExecutedBuild result;
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.fix-for-gradle-34152.enabled=true");
 
@@ -138,7 +138,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
 		ExecutedBuild result;
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.writeString(build.file("src/main/headers/my-other-include-macro.h"), """
 			#ifndef _MY_OTHER_INCLUDE_MACRO_H_
@@ -164,7 +164,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i").append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true").withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
 		ExecutedBuild result;
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.walkFileTree(testDirectory.resolve(".gradle"), new SimpleFileVisitor<>() {
 			@Override
@@ -193,7 +193,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i").append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true");
 		ExecutedBuild result;
 
-		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate(taskUnderTest));
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
 		Files.walkFileTree(testDirectory.resolve(".gradle"), new SimpleFileVisitor<>() {
 			@Override
