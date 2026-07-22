@@ -28,7 +28,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 	default void canDiscoverHeaderFromDefinedMacros(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-with-include-macros") GradleBuildElement project) throws IOException {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
@@ -45,7 +45,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 	default void discoverConsistentHeaderGraphOnMacroInclude(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-for-gradle-34152") GradleBuildElement project) throws IOException {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
@@ -64,7 +64,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 	default void discoverConsistentHeaderGraphOnMacroIncludeWithDuplicatedHeaders(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-for-gradle-34152-ex") GradleBuildElement project) throws IOException {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
@@ -83,7 +83,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 	default void discoverConsistentHeaderGraphOnMacroIncludeWithDuplicatedHeadersHavingDifferentResolvingPath(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-for-gradle-34152-ex2") GradleBuildElement project) throws IOException {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
 
@@ -104,7 +104,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		Files.writeString(build.file("gradle.properties"), "dev.nokee.native-companion.fix-for-gradle-34152.enabled=false");
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 		ExecutedBuild result;
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
@@ -135,7 +135,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 		ExecutedBuild result;
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
@@ -161,7 +161,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i").append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true").withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging().append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true").withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
 		ExecutedBuild result;
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
@@ -190,7 +190,7 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		GradleBuildElement build = project.writeToDirectory(testDirectory);
 
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i").append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging().append("-Dorg.gradle.internal.native.headers.unresolved.dependencies.ignore=true");
 		ExecutedBuild result;
 
 		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());

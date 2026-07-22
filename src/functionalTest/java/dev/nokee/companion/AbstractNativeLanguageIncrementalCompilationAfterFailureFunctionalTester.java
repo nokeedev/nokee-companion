@@ -33,7 +33,7 @@ public interface AbstractNativeLanguageIncrementalCompilationAfterFailureFunctio
 			}
 		"""));
 		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().append("-i");
+		GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 
 		ExecutedBuild result = fails(runner.withArguments(args.withTasks(taskUnderTest).toList()));
 		assertThat("no previous builds, everything is out-of-date", result.task(taskUnderTest), failed());
@@ -64,12 +64,12 @@ public interface AbstractNativeLanguageIncrementalCompilationAfterFailureFunctio
 		// TODO: Use incremental elements
 		Files.write(build.file("src/main/cpp/main.cpp"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 		Files.write(build.file("src/main/cpp/broken.cpp"), Arrays.asList("broken!", "", ""));
-		result = fails(runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()));
+		result = fails(runner.withArguments(args.withInfoLogging().withTasks(taskUnderTest).toList()));
 		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 		assertThat(snap, noneRecompiled());
 
 		Files.write(build.file("src/main/cpp/broken.cpp"), Arrays.asList("int foo() { return 52; }"));
-		result = succeeds(runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().withTasks(taskUnderTest).toList()));
 		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 		assertThat(snap, recompiledFiles(aFileBaseNamed("main"), aFileBaseNamed("broken")));
 	}

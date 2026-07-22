@@ -66,7 +66,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		// TODO: Use incremental elements
 		Files.write(build.file("src/main/cpp/main.cpp"), Arrays.asList("", "", ""), StandardOpenOption.APPEND);
 
-		result = succeeds(runner.withArguments(args.append("-i").withTasks(taskUnderTest).toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().withTasks(taskUnderTest).toList()));
 		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 	}
 
@@ -135,7 +135,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().toList()));
 		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
@@ -158,7 +158,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().toList()));
 		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
@@ -181,7 +181,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().toList()));
 		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
@@ -204,7 +204,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().toList()));
 		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
@@ -227,7 +227,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().toList()));
 		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 
@@ -254,7 +254,7 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 			}
 		""".stripIndent()));
 
-		result = succeeds(runner.withArguments(args.append("-i").toList()));
+		result = succeeds(runner.withArguments(args.withInfoLogging().toList()));
 		assertThat(result.task(taskUnderTest), performsFullRebuild());
 	}
 }
