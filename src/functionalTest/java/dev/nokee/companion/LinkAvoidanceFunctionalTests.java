@@ -121,6 +121,58 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@Test
+		void doesNotRelinkWhenStaticFunctionAdded() {
+			// A static function has internal linkage, i.e. private to its compilation unit, so it never
+			// reaches the exported symbol table and adding one must not change the ABI seen by consumers.
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+
+			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedStaticFunction())));
+
+			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+		}
+
+		@Test
+		void doesNotRelinkWhenStaticVariableAdded() {
+			// A static variable has internal linkage, i.e. private to its compilation unit, so it never
+			// reaches the exported symbol table and adding one must not change the ABI seen by consumers.
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+
+			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedStaticVariable())));
+
+			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+		}
+
+		@Test
+		void doesNotRelinkWhenAnonymousNamespaceFunctionAdded() {
+			// A function in an anonymous namespace also has internal linkage (a mangled, LOCAL symbol),
+			// so - like a static function - it stays out of the exported symbol table and must not relink.
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+
+			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedAnonymousNamespaceFunction())));
+
+			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+		}
+
+		@Test
+		void relinkWhenInlineFunctionAdded() {
+			// Sentinel for the opposite boundary: an inline function keeps external linkage and is emitted
+			// as a weak (COMDAT) exported symbol, so it IS part of the ABI and adding one must relink.
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+
+			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedInlineFunction())));
+
+			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+		}
+
+		@Test
 		void alwaysRelinkAfterClean() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
@@ -433,6 +485,30 @@ class LinkAvoidanceFunctionalTests {
 
 			public SourceFileElement withImplementationOnlyChange() {
 				return ofFile(getSourceFile().withContent(__ -> externC("int greet() { return 100; }")));
+			}
+
+			// The following changes add a symbol that is private to this compilation unit (internal
+			// linkage). greet() references the added symbol so it genuinely lands in the object file
+			// (the debug variant is unoptimized, so a referenced symbol is neither dead-stripped nor
+			// inlined away), and greet() still returns 32 so the exported ABI is otherwise unchanged.
+			// These are C++-only constructs, so they are never combined with extern "C".
+			public SourceFileElement withAddedStaticFunction() {
+				return ofFile(getSourceFile().withContent(__ -> "static int helper() { return 32; }\nint greet() { return helper(); }"));
+			}
+
+			public SourceFileElement withAddedStaticVariable() {
+				// volatile keeps the read (and thus the storage) even if the variant were ever optimized.
+				return ofFile(getSourceFile().withContent(__ -> "static volatile int counter = 32;\nint greet() { return counter; }"));
+			}
+
+			public SourceFileElement withAddedAnonymousNamespaceFunction() {
+				return ofFile(getSourceFile().withContent(__ -> "namespace { int helper() { return 32; } }\nint greet() { return helper(); }"));
+			}
+
+			// Unlike the above, an inline function keeps external linkage and is emitted as a weak
+			// exported symbol, so adding it is expected to relink.
+			public SourceFileElement withAddedInlineFunction() {
+				return ofFile(getSourceFile().withContent(__ -> "inline int helper() { return 32; }\nint greet() { return helper(); }"));
 			}
 
 			public SourceFileElement withRenamedAbiChange() {
