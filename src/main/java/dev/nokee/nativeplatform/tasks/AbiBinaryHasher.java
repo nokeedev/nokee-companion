@@ -4,6 +4,7 @@ import org.gradle.internal.hash.HashCode;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.util.Set;
 
 /**
  * Hashes an {@link AbiBinaryHashCode} out of a binary. A reader is stateless and reusable: a single instance
@@ -16,6 +17,6 @@ interface AbiBinaryHasher {
 	AbiBinaryHashCode hash(FileChannel channel) throws IOException;
 
 	interface AbiBinaryHashCode {
-		HashCode getExportedSymbols();
+		Set<HashCode> getExportedSymbols();
 	}
 }

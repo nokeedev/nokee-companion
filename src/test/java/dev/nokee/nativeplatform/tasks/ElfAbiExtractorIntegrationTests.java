@@ -32,11 +32,11 @@ class ElfAbiExtractorIntegrationTests {
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryWithNamedExports(String arch) throws IOException {
 		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("named-exports/" + arch + "/libnamed.so"));
-		assertThat(model, is(sharedLibrary(
+		assertThat(model, is(sharedLibrary(hasItems(
 			strongElfSymbol("greet"),
 			strongElfSymbol("value"),
 			strongElfSymbol("compute")
-		)));
+		))));
 	}
 
 	@ParameterizedTest
@@ -50,12 +50,12 @@ class ElfAbiExtractorIntegrationTests {
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
 		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
-		assertThat(model, is(sharedLibrary(
+		assertThat(model, is(sharedLibrary(hasItems(
 			weakElfSymbol("weak_var"),
 			strongElfSymbol("strong_var"),
 			strongElfSymbol("strong_func"),
 			weakElfSymbol("weak_func")
-		)));
+		))));
 	}
 
 	@ParameterizedTest

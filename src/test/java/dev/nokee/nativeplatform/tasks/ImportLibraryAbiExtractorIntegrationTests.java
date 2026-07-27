@@ -10,7 +10,8 @@ import java.nio.file.Paths;
 
 import static dev.nokee.nativeplatform.tasks.AbiMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.is;
 
 /**
  * Integration tests for Windows import library (.lib) ABI extraction via
@@ -32,11 +33,11 @@ class ImportLibraryAbiExtractorIntegrationTests {
 	@Test
 	void extractImportLibraryWithNamedExports() throws IOException {
 		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("named-exports/named.lib"));
-		assertThat(model, is(sharedLibrary(
+		assertThat(model, is(sharedLibrary(hasItems(
 			namedPeSymbol("compute"),
 			namedPeSymbol("greet"),
 			namedPeSymbol("value")
-		)));
+		))));
 	}
 
 	@Test
@@ -48,10 +49,10 @@ class ImportLibraryAbiExtractorIntegrationTests {
 	@Test
 	void extractImportLibraryWithOrdinalOnlyExports() throws IOException {
 		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("ordinal-only-exports/ordinal.lib"));
-		assertThat(model, is(sharedLibrary(
+		assertThat(model, is(sharedLibrary(hasItems(
 			ordinalOnlyPeSymbol(1),
 			ordinalOnlyPeSymbol(2)
-		)));
+		))));
 //		assertThat(model, is(sharedLibrary(not(hasItem(namedPeSymbol("func_one"))))));
 	}
 

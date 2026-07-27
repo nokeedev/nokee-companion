@@ -130,7 +130,7 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			lcOffset += cmdsize;
 		}
 
-		HashCode symbols = null;
+		Set<HashCode> symbols = null;
 		if (symoff >= 0 && stroff >= 0 && nsyms > 0) {
 			symbols = hashSymbols(channel, order, is64, symoff, nsyms, stroff, strsize,
 				hasDysymtab ? iextdefsym : 0,
@@ -140,10 +140,10 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		return new MachOHashCode(installName, symbols);
 	}
 
-	private HashCode hashSymbols(FileChannel channel, ByteOrder order, boolean is64,
+	private Set<HashCode> hashSymbols(FileChannel channel, ByteOrder order, boolean is64,
 		long symoff, int nsyms, long stroff, int strsize,
 		int iextdefsym, int nextdefsym) throws IOException {
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
+		Set<HashCode> result = new LinkedHashSet<>();
 
 		int nlistSize = is64 ? 16 : 12;
 		int startSym = iextdefsym;
@@ -166,16 +166,15 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			if ((nType & N_EXT) == 0) continue;
 			if ((nType & N_TYPE) == N_UNDF) continue;
 
+			PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 			int length = BinaryUtils.hashCStringAt(hasher, channel, nameBuf, stroff + (strx & 0xFFFFFFFFL), strEnd);
 			if (length > 0) {
 				hasher.putBoolean((nDesc & N_WEAK_DEF) != 0);
+				result.add(hasher.hash());
 			}
 		}
 
-		if ((endSym - startSym) > 0) {
-			return hasher.hash();
-		}
-		return null;
+		return result;
 	}
 
 	private static int asInt(byte[] b, int offset) {
@@ -186,7 +185,7 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 	private static final class MachOHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
 
-		public MachOHashCode(String installName, HashCode symbols) {
+		public MachOHashCode(String installName, Set<HashCode> symbols) {
 			entries.add(new SimpleEntry<>("installName", installName));
 			entries.add(new SimpleEntry<>("symbols", symbols));
 		}
@@ -197,8 +196,8 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
-		public HashCode getExportedSymbols() {
-			return (HashCode) get("symbols");
+		public Set<HashCode> getExportedSymbols() {
+			return (Set<HashCode>) get("symbols");
 		}
 	}
 }
