@@ -33,6 +33,10 @@ public class GradleRunnerArguments implements Iterable<String> {
 		return new GradleRunnerArguments(Collections.emptyList(), null, Collections.emptyList(), DeprecationChecks.FAILS, WelcomeMessage.DISABLED, BuildCache.DISABLED, Stacktrace.SHOW, Logging.LIFECYCLE, null);
 	}
 
+	public static List<String> forTasks(Object... tasks) {
+		return create().withTasks(tasks).toList();
+	}
+
 	//region Flag `--info` configuration
 	private final Logging logging;
 
@@ -88,9 +92,9 @@ public class GradleRunnerArguments implements Iterable<String> {
 		return new GradleRunnerArguments(Arrays.stream(tasks).map(Object::toString).toList(), gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 
-	public GradleRunnerArguments append(String arg) {
+	public GradleRunnerArguments append(String... arg) {
 		List<String> additionalArgs = new ArrayList<>(this.additionalArgs);
-		additionalArgs.add(arg);
+		additionalArgs.addAll(Arrays.asList(arg));
 		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 
