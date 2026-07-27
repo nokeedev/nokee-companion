@@ -11,6 +11,7 @@ import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -56,8 +57,7 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 	private AbiBinaryHashCode parse(FileChannel channel) throws IOException {
 		long offset = 8; // skip !<arch>\n
 		String dllName = null;
-		HashCode symbols = null;
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
+		Set<HashCode> symbols = new LinkedHashSet<>();
 
 		while (offset + 60 <= channel.size()) {
 			byte[] hdrBytes = BinaryUtils.readBytes(channel, offset, 60);
@@ -92,9 +92,12 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 				// data = dll_name\0 (no symbol name)
 				String dll = BinaryUtils.readCString(strData, 0);
 				if (dllName == null && !dll.isEmpty()) dllName = dll;
+				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 				hasher.putInt(ordinalOrHint);
+				symbols.add(hasher.hash());
 			} else {
 				// data = symbol_name\0dll_name\0
+				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 				int symNameLength = BinaryUtils.hashCString(hasher, strData, 0);
 				int dllStart = symNameLength + 1;
 				if (dllStart < strData.limit()) {
@@ -103,6 +106,7 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 				}
 				if (symNameLength > 0) {
 					hasher.putInt(ordinalOrHint);
+					symbols.add(hasher.hash());
 				}
 			}
 		}
@@ -136,7 +140,7 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 	private static final class PEHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
 
-		public PEHashCode(String dllName, HashCode symbols) {
+		public PEHashCode(String dllName, Set<HashCode> symbols) {
 			entries.add(new SimpleEntry<>("dllName", dllName));
 			entries.add(new SimpleEntry<>("symbols", symbols));
 		}
@@ -147,8 +151,8 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
-		public HashCode getExportedSymbols() {
-			return (HashCode) get("symbols");
+		public Set<HashCode> getExportedSymbols() {
+			return (Set<HashCode>) get("symbols");
 		}
 	}
 }
