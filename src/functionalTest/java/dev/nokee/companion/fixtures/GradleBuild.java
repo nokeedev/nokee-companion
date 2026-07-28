@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.function.Consumer;
 
-public class GradleBuild {
+public final class GradleBuild {
 	private final Map<String, GradleProject> subprojects = new HashMap<>();
 	private final Path location;
 	private final GradleSettingsFile settingsFile;
