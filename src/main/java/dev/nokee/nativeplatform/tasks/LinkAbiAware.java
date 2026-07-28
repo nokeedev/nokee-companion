@@ -39,7 +39,6 @@ public interface LinkAbiAware extends Task {
 		return getExt_linkAbi().get();
 	}
 
-
 	abstract /*final*/ class LinkAbiExtension {
 		@Internal
 		protected abstract Property<LinkAbiCache> getLinkAbiCache();
@@ -48,11 +47,84 @@ public interface LinkAbiAware extends Task {
 		private ListProperty<AbiBinaryHasher.AbiBinaryHashCode> libraryAbiModels;
 		private SetProperty<Object> linkLibInputs;
 
+		private enum AbiSnapshotter {
+			FULL_ABI,
+			NARROW_ABI
+		}
+
 		@Inject
 		public LinkAbiExtension(ObjectFactory objects) {
 			libraryAbiModelsProps = objects.setProperty(new TypeOf<Map<String, Object>>() {}.getConcreteClass());
 			libraryAbiModels = objects.listProperty(AbiBinaryHasher.AbiBinaryHashCode.class);
 			linkLibInputs = objects.setProperty(Object.class);
+
+			final Provider<Boolean> useAbi = getUseNormalizedAbi().orElse(false);
+			SetProperty<Object> abiBin = objects.setProperty(Object.class);
+			abiBin.addAll(getSource().getElements().map(elements -> {
+				if (!useAbi.get()) return Collections.emptyList();
+
+				Set<AbiBinaryHasher.AbiBinaryHashCode> result = new LinkedHashSet<>();
+				for (FileSystemLocation file : elements) {
+					AbiBinaryHasher.AbiBinaryHashCode hashcode = getAbiExtractor().hashObject(file.getAsFile().toPath());
+					result.add(hashcode);
+					if (hashcode instanceof AbiBinaryHasher.Unknown) {
+						return result; // stop early
+					}
+				}
+				return result;
+			}));
+			abiBin.set(getLibs().getElements().map(elements -> {
+				if (!useAbi.get()) return elements;
+
+				Set<AbiBinaryHasher.AbiBinaryHashCode> result = new LinkedHashSet<>();
+				for (FileSystemLocation file : elements) {
+					result.add(getAbiExtractor().hash(file.getAsFile().toPath()));
+				}
+				return result;
+			}));
+			abiBin.disallowChanges();
+			abiBin.finalizeValueOnRead();
+
+			getLinkLibInputs().set(abiBin.map(codes -> {
+				AbiSnapshotter snapshotter = AbiSnapshotter.NARROW_ABI;
+				List<Object> result = new ArrayList<>();
+				Set<Object> allImports = new HashSet<>();
+				for (Object c : codes) {
+					if (!(c instanceof AbiBinaryHasher.AbiBinaryHashCode)) {
+						result.add(c);
+						continue;
+					}
+					AbiBinaryHasher.AbiBinaryHashCode code = (AbiBinaryHasher.AbiBinaryHashCode) c;
+
+					if (snapshotter == AbiSnapshotter.NARROW_ABI && (code.type() == AbiBinaryHasher.Type.OBJECT_FILE || code.type() == AbiBinaryHasher.Type.STATIC_LIB)) {
+						if (code instanceof AbiBinaryHasher.HasImportSymbols) {
+							allImports.addAll(((AbiBinaryHasher.HasImportSymbols) code).getImportedSymbols());
+						} else {
+							snapshotter = AbiSnapshotter.FULL_ABI;
+						}
+					}
+					if (code.type() == AbiBinaryHasher.Type.STATIC_LIB) {
+						result.add(((AbiBinaryHasher.HasLocation) code).location());
+					} else if (code.type() == AbiBinaryHasher.Type.DYNAMIC_LIB) {
+						if (code instanceof AbiBinaryHasher.HasExportSymbols) {
+							result.add(code);
+						} else {
+							result.add(((AbiBinaryHasher.HasLocation) code).location());
+						}
+					}
+				}
+
+				// found all imports, narrowing the ABI
+				if (snapshotter == AbiSnapshotter.NARROW_ABI) {
+					result = result.stream().map(it -> {
+						if (it instanceof AbiBinaryHasher.HasExportSymbols) {
+							return ((AbiBinaryHasher.HasExportSymbols) it).narrowExports(allImports);
+						}
+						return it;
+					}).collect(Collectors.toList());
+				}
+				return result;
+			}));
 
 			getLibraryFiles().from(getLinkLibInputs().map(it -> {
 				return it.stream().flatMap(t -> {
@@ -72,19 +144,18 @@ public interface LinkAbiAware extends Task {
 			}));
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
-			final Provider<Boolean> useAbi = getUseNormalizedAbi().orElse(false);
-			getLinkLibInputs().set(getLibs().getElements().map(libs -> {
-				if (useAbi.get()) {
-					NativeLibraryAbiExtractor extractor = getAbiExtractor();
-					List<Object> result = new ArrayList<>();
-					for (FileSystemLocation lib : libs) {
-						Object entry = extractor.hash(lib.getAsFile().toPath());
-						result.add(entry);
-					}
-					return result;
-				}
-				return libs;
-			}));
+//			getLinkLibInputs().set(getLibs().getElements().map(libs -> {
+//				if (useAbi.get()) {
+//					NativeLibraryAbiExtractor extractor = getAbiExtractor();
+//					List<Object> result = new ArrayList<>();
+//					for (FileSystemLocation lib : libs) {
+//						Object entry = extractor.hash(lib.getAsFile().toPath());
+//						result.add(entry);
+//					}
+//					return result;
+//				}
+//				return libs;
+//			}));
 			getLinkLibInputs().finalizeValueOnRead(); // ensure one resolution per snapshot
 			getLinkLibInputs().disallowChanges();
 
@@ -104,6 +175,9 @@ public interface LinkAbiAware extends Task {
 			getLibraryAbiModelsProps().finalizeValueOnRead();
 			getLibraryAbiModelsProps().disallowChanges();
 		}
+
+		@Internal
+		public abstract ConfigurableFileCollection getSource();
 
 		@Internal
 		public abstract ConfigurableFileCollection getLibs();

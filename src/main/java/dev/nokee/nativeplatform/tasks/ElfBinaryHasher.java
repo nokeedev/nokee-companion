@@ -12,6 +12,7 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.AbstractMap;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 
 final class ElfBinaryHasher implements AbiBinaryHasher {
@@ -124,7 +125,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			soname = extractSoname(channel, strtab, order, is64, dynamicOff, dynamicSize);
 		}
 
-		Set<HashCode> symbols = null;
+		Set<ExportedSymbol> symbols = null;
 		if (dynsymOff >= 0 && strtab != null && dynsymEntsize > 0) {
 			symbols = extractSymbols(channel, strtab, order, is64, dynsymOff, dynsymSize, dynsymEntsize);
 		}
@@ -154,7 +155,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		return null;
 	}
 
-	private Set<HashCode> extractSymbols(FileChannel channel, MappedByteBuffer strtab, ByteOrder order, boolean is64,
+	private Set<ExportedSymbol> extractSymbols(FileChannel channel, MappedByteBuffer strtab, ByteOrder order, boolean is64,
 		long symOff, long symSize, long symEntsize) throws IOException {
 
 		// Map the symbol table: it is scanned in full (one entry per symbol), so a mapping turns those
@@ -166,7 +167,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		int strEnd = strtab.limit();
 
 		int count = (int) (symSize / symEntsize);
-		Set<HashCode> result = new LinkedHashSet<>();
+		Set<ExportedSymbol> result = new LinkedHashSet<>();
 
 		for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
 			int sym = (int) (i * symEntsize);
@@ -185,11 +186,9 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			int binding = stInfo >> 4;
 
 			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
-				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-				int length = BinaryUtils.hashCString(hasher, strtab, stName & 0xFFFFFFFF, strEnd);
-				if (length > 0) {
-					hasher.putInt(binding);
-					result.add(hasher.hash());
+				String name = BinaryUtils.readCString(strtab, stName & 0xFFFFFFFF, strEnd);
+				if (!name.isEmpty()) {
+					result.add(new ElfExportedSymbol(name, binding));
 				}
 			}
 		}
@@ -197,10 +196,29 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		return result;
 	}
 
-	private static final class ElfHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
+	private static final class ElfExportedSymbol extends AbstractMap<String, Object> implements ExportedSymbol {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
 
-		public ElfHashCode(String soname, Set<HashCode> symbols) {
+		public ElfExportedSymbol(String name, int binding) {
+			entries.add(new SimpleEntry<>("name", name));
+			entries.add(new SimpleEntry<>("binding", binding));
+		}
+
+		@Override
+		public Object getName() {
+			return get("name");
+		}
+
+		@Override
+		public @NotNull Set<Entry<String, Object>> entrySet() {
+			return entries;
+		}
+	}
+
+	private static final class ElfHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasExportSymbols {
+		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
+
+		public ElfHashCode(String soname, Set<ExportedSymbol> symbols) {
 			entries.add(new SimpleEntry<>("soname", soname));
 			entries.add(new SimpleEntry<>("symbols", symbols));
 		}
@@ -211,8 +229,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
-		public Set<HashCode> getExportedSymbols() {
-			return (Set<HashCode>) get("symbols");
+		public Set<ExportedSymbol> getExportedSymbols() {
+			return (Set<ExportedSymbol>) get("symbols");
 		}
 	}
 }

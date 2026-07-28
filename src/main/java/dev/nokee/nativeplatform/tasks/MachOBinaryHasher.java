@@ -130,7 +130,7 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			lcOffset += cmdsize;
 		}
 
-		Set<HashCode> symbols = null;
+		Set<ExportedSymbol> symbols = null;
 		if (symoff >= 0 && stroff >= 0 && nsyms > 0) {
 			symbols = hashSymbols(channel, order, is64, symoff, nsyms, stroff, strsize,
 				hasDysymtab ? iextdefsym : 0,
@@ -140,10 +140,10 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		return new MachOHashCode(installName, symbols);
 	}
 
-	private Set<HashCode> hashSymbols(FileChannel channel, ByteOrder order, boolean is64,
+	private Set<ExportedSymbol> hashSymbols(FileChannel channel, ByteOrder order, boolean is64,
 		long symoff, int nsyms, long stroff, int strsize,
 		int iextdefsym, int nextdefsym) throws IOException {
-		Set<HashCode> result = new LinkedHashSet<>();
+		Set<ExportedSymbol> result = new LinkedHashSet<>();
 
 		int nlistSize = is64 ? 16 : 12;
 		int startSym = iextdefsym;
@@ -167,10 +167,9 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			if ((nType & N_TYPE) == N_UNDF) continue;
 
 			PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-			int length = BinaryUtils.hashCStringAt(hasher, channel, nameBuf, stroff + (strx & 0xFFFFFFFFL), strEnd);
-			if (length > 0) {
-				hasher.putBoolean((nDesc & N_WEAK_DEF) != 0);
-				result.add(hasher.hash());
+			String name = BinaryUtils.readCStringAt(channel, stroff + (strx & 0xFFFFFFFFL), strEnd);
+			if (!name.isEmpty()) {
+				result.add(new MachOExportedSymbol(name, (nDesc & N_WEAK_DEF) != 0));
 			}
 		}
 
@@ -182,10 +181,29 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
 	}
 
-	private static final class MachOHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
+	private static final class MachOExportedSymbol extends AbstractMap<String, Object> implements ExportedSymbol {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
 
-		public MachOHashCode(String installName, Set<HashCode> symbols) {
+		public MachOExportedSymbol(String name, boolean isWeakBinding) {
+			entries.add(new SimpleEntry<>("name", name));
+			entries.add(new SimpleEntry<>("isWeakBinding", isWeakBinding));
+		}
+
+		@Override
+		public Object getName() {
+			return get("name");
+		}
+
+		@Override
+		public @NotNull Set<Entry<String, Object>> entrySet() {
+			return entries;
+		}
+	}
+
+	private static final class MachOHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasExportSymbols {
+		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
+
+		public MachOHashCode(String installName, Set<ExportedSymbol> symbols) {
 			entries.add(new SimpleEntry<>("installName", installName));
 			entries.add(new SimpleEntry<>("symbols", symbols));
 		}
@@ -196,8 +214,8 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
-		public Set<HashCode> getExportedSymbols() {
-			return (Set<HashCode>) get("symbols");
+		public Set<ExportedSymbol> getExportedSymbols() {
+			return (Set<ExportedSymbol>) get("symbols");
 		}
 	}
 }

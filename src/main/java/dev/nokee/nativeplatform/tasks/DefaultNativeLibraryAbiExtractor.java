@@ -17,10 +17,19 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 
 	private final ByteBuffer buffer = ByteBuffer.allocate(8);
 
-	public Object hash(Path library) {
+	private static final class UnknownHashCode implements AbiBinaryHasher.AbiBinaryHashCode {
+		private final Path location;
+
+		private UnknownHashCode(Path location) {
+			this.location = location;
+		}
+	}
+
+	@Override
+	public AbiBinaryHasher.AbiBinaryHashCode hash(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 			if (channel.size() < 8) {
-				return library;
+				return new UnknownHashCode(library);
 			}
 			byte[] header = BinaryUtils.readInto(channel, 0, buffer,8).array();
 
@@ -32,12 +41,12 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			} else if (isArMagic(header)) {
 				hasher = importLibraryHasher();
 			} else {
-				return library;
+				return new UnknownHashCode(library);
 			}
 
 			return hasher.hash(channel);
 		} catch (NotASharedLibraryException e) {
-			return library; // should not get here
+			return new UnknownHashCode(library); // should not get here
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}

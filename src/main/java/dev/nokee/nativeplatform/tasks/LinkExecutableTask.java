@@ -19,6 +19,22 @@ import java.util.Collections;
 	//region libs override
 	private void linkSuperClassLibsField() {
 		super.getLibs().from(getLibs());
+		super.getSource().from(getSource());
+	}
+
+	@Override
+	public ConfigurableFileCollection getSource() {
+		return getLinkAbi().getSource();
+	}
+
+	@Override
+	public void setSource(FileCollection source) {
+		getSource().setFrom(source);
+	}
+
+	@Override
+	public void source(Object source) {
+		getSource().from(source);
 	}
 
 	@Override

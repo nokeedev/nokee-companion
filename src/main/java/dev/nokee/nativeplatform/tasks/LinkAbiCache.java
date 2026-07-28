@@ -20,7 +20,7 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 	@Inject
 	public LinkAbiCache() {}
 
-	public Object find(Path path, Callable<Object> mapper) {
+	public AbiBinaryHasher.AbiBinaryHashCode find(Path path, Callable<AbiBinaryHasher.AbiBinaryHashCode> mapper) {
 		return cache.computeIfAbsent(path.toFile(), MapEntry::new).get(mapper);
 	}
 
@@ -32,18 +32,18 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 			this.path = path;
 		}
 
-		synchronized Object get(Callable<Object> mapper) {
+		synchronized AbiBinaryHasher.AbiBinaryHashCode get(Callable<AbiBinaryHasher.AbiBinaryHashCode> mapper) {
 			try {
 				BasicFileAttributes attributes = Files.getFileAttributeView(path.toPath(), BasicFileAttributeView.class).readAttributes();
 
 				if (ref == null) {
-					Object result = mapper.call();
+					AbiBinaryHasher.AbiBinaryHashCode result = mapper.call();
 					ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
 					return result;
 				}
 
 				if (attributes.size() == ref.size && attributes.lastModifiedTime().toMillis() == ref.modtime) {
-					Object result = ref.get();
+					AbiBinaryHasher.AbiBinaryHashCode result = ref.get();
 					if (result == null) {
 						result = mapper.call();
 						ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
@@ -52,7 +52,7 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 					return result;
 				}
 
-				Object result = mapper.call();
+				AbiBinaryHasher.AbiBinaryHashCode result = mapper.call();
 				ref = new CachedAbiEntry(attributes.size(), attributes.lastModifiedTime().toMillis(), result);
 				return result;
 			} catch (Exception e) {
@@ -61,11 +61,11 @@ abstract /*final*/ class LinkAbiCache implements BuildService<BuildServiceParame
 		}
 	}
 
-	private static final class CachedAbiEntry extends SoftReference<Object> {
+	private static final class CachedAbiEntry extends SoftReference<AbiBinaryHasher.AbiBinaryHashCode> {
 		private final long size;
 		private final long modtime;
 
-		public CachedAbiEntry(long size, long modtime, Object entry) {
+		public CachedAbiEntry(long size, long modtime, AbiBinaryHasher.AbiBinaryHashCode entry) {
 			super(entry);
 			this.size = size;
 			this.modtime = modtime;

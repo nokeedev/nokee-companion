@@ -57,7 +57,7 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 	private AbiBinaryHashCode parse(FileChannel channel) throws IOException {
 		long offset = 8; // skip !<arch>\n
 		String dllName = null;
-		Set<HashCode> symbols = new LinkedHashSet<>();
+		Set<ExportedSymbol> symbols = new LinkedHashSet<>();
 
 		while (offset + 60 <= channel.size()) {
 			byte[] hdrBytes = BinaryUtils.readBytes(channel, offset, 60);
@@ -86,27 +86,23 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 
 			if (sizeOfData <= 0 || dataOffset + 20 + sizeOfData > channel.size()) continue;
 
-			ByteBuffer strData = BinaryUtils.readAt(channel, dataOffset + 20, sizeOfData);
+			ByteBuffer strData = BinaryUtils.readAt(channel, dataOffset + 20, sizeOfData); // TODO: Use mmap
 
 			if (nameType == IMPORT_ORDINAL) {
 				// data = dll_name\0 (no symbol name)
 				String dll = BinaryUtils.readCString(strData, 0);
 				if (dllName == null && !dll.isEmpty()) dllName = dll;
-				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-				hasher.putInt(ordinalOrHint);
-				symbols.add(hasher.hash());
+				symbols.add(new PEExportedSymbol(null, ordinalOrHint));
 			} else {
 				// data = symbol_name\0dll_name\0
-				PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-				int symNameLength = BinaryUtils.hashCString(hasher, strData, 0);
-				int dllStart = symNameLength + 1;
+				String symName = BinaryUtils.readCString(strData, 0);
+				int dllStart = symName.length() + 1;
 				if (dllStart < strData.limit()) {
 					String dll = BinaryUtils.readCString(strData, dllStart);
 					if (dllName == null && !dll.isEmpty()) dllName = dll;
 				}
-				if (symNameLength > 0) {
-					hasher.putInt(ordinalOrHint);
-					symbols.add(hasher.hash());
+				if (!symName.isEmpty()) {
+					symbols.add(new PEExportedSymbol(symName, ordinalOrHint));
 				}
 			}
 		}
@@ -137,10 +133,29 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 		}
 	}
 
-	private static final class PEHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode {
+	private static final class PEExportedSymbol extends AbstractMap<String, Object> implements ExportedSymbol {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
 
-		public PEHashCode(String dllName, Set<HashCode> symbols) {
+		public PEExportedSymbol(String name, int ordinalOrHint) {
+			entries.add(new SimpleEntry<>("name", name));
+			entries.add(new SimpleEntry<>("ordinalOrHint", ordinalOrHint));
+		}
+
+		@Override
+		public Object getName() {
+			return get("name");
+		}
+
+		@Override
+		public @NotNull Set<Entry<String, Object>> entrySet() {
+			return entries;
+		}
+	}
+
+	private static final class PEHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasExportSymbols {
+		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
+
+		public PEHashCode(String dllName, Set<ExportedSymbol> symbols) {
 			entries.add(new SimpleEntry<>("dllName", dllName));
 			entries.add(new SimpleEntry<>("symbols", symbols));
 		}
@@ -151,8 +166,8 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
-		public Set<HashCode> getExportedSymbols() {
-			return (Set<HashCode>) get("symbols");
+		public Set<ExportedSymbol> getExportedSymbols() {
+			return (Set<ExportedSymbol>) get("symbols");
 		}
 	}
 }

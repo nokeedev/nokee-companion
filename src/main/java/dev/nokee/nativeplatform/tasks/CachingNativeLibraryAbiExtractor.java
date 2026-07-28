@@ -13,7 +13,7 @@ abstract /*final*/ class CachingNativeLibraryAbiExtractor implements NativeLibra
 		this.extractor = new DefaultNativeLibraryAbiExtractor();
 	}
 
-	public Object hash(Path library) {
+	public AbiBinaryHasher.AbiBinaryHashCode hash(Path library) {
 		return cache.find(library, () -> extractor.hash(library));
 	}
 }
