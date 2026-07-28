@@ -1,11 +1,17 @@
 package dev.nokee.nativeplatform.tasks;
 
+import dev.nokee.nativeplatform.tasks.AbiBinaryHasher.AbiBinaryHashCode;
+import dev.nokee.nativeplatform.tasks.AbiBinaryHasher.HasMembers;
+import dev.nokee.nativeplatform.tasks.AbiBinaryHasher.Type;
+
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Set;
 
 final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtractor {
 	private static final byte[] ELF_MAGIC = {0x7f, 0x45, 0x4c, 0x46};
@@ -13,25 +19,95 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 
 	private ElfBinaryHasher elfHasher;
 	private MachOBinaryHasher machOHasher;
-	private ImportLibraryBinaryHasher importLibraryHasher;
+	private ArchiveBinaryHasher archiveHasher;
+	private ObjectFileImportReader objectImportReader;
 
 	private final ByteBuffer buffer = ByteBuffer.allocate(8);
 
-	private static final class UnknownHashCode implements AbiBinaryHasher.AbiBinaryHashCode {
-		private final Path location;
+	/**
+	 * The model for a file we could not classify (or an import source we could not parse). It carries its
+	 * location so the link can byte-snapshot it, and — being {@link AbiBinaryHasher.Unknown} — forces the
+	 * link to fall back to the full ABI (it might be an import source with unknown imports).
+	 */
+	private static final class UnknownHashCode implements AbiBinaryHashCode, AbiBinaryHasher.Unknown, AbiBinaryHasher.HasLocation {
+		private final File location;
 
 		private UnknownHashCode(Path location) {
-			this.location = location;
+			this.location = location.toFile();
+		}
+
+		@Override
+		public Type type() {
+			return Type.UNKNOWN;
+		}
+
+		@Override
+		public File location() {
+			return location;
+		}
+	}
+
+	/**
+	 * Wraps an archive model so it carries its file location (the hashers read a {@link FileChannel} and do
+	 * not know the path). A static library is byte-snapshotted, so the link needs the location alongside the
+	 * members it exposes.
+	 */
+	private static final class LocatedArchive implements AbiBinaryHashCode, HasMembers, AbiBinaryHasher.HasLocation {
+		private final AbiBinaryHashCode delegate;
+		private final File location;
+
+		private LocatedArchive(AbiBinaryHashCode delegate, Path location) {
+			this.delegate = delegate;
+			this.location = location.toFile();
+		}
+
+		@Override
+		public Type type() {
+			return delegate.type();
+		}
+
+		@Override
+		public Set<AbiBinaryHashCode> getMembers() {
+			return ((HasMembers) delegate).getMembers();
+		}
+
+		@Override
+		public File location() {
+			return location;
+		}
+	}
+
+	/**
+	 * The model for a shared library we could identify but not parse. It is byte-snapshotted (via its
+	 * location) and is <em>not</em> {@link AbiBinaryHasher.Unknown}, so it is confined to itself — the
+	 * other shared libraries in the link keep narrowing. It exposes no exports, so the link snapshots the
+	 * whole file rather than an ABI subset.
+	 */
+	private static final class CorruptSharedLibrary implements AbiBinaryHashCode, AbiBinaryHasher.HasLocation {
+		private final File location;
+
+		private CorruptSharedLibrary(Path location) {
+			this.location = location.toFile();
+		}
+
+		@Override
+		public Type type() {
+			return Type.DYNAMIC_LIB;
+		}
+
+		@Override
+		public File location() {
+			return location;
 		}
 	}
 
 	@Override
-	public AbiBinaryHasher.AbiBinaryHashCode hash(Path library) {
+	public AbiBinaryHashCode hash(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 			if (channel.size() < 8) {
 				return new UnknownHashCode(library);
 			}
-			byte[] header = BinaryUtils.readInto(channel, 0, buffer,8).array();
+			byte[] header = BinaryUtils.readInto(channel, 0, buffer, 8).array();
 
 			AbiBinaryHasher hasher;
 			if (isElfMagic(header)) {
@@ -39,17 +115,42 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			} else if (isMachOMagic(header)) {
 				hasher = machOHasher();
 			} else if (isArMagic(header)) {
-				hasher = importLibraryHasher();
+				hasher = archiveHasher();
 			} else {
 				return new UnknownHashCode(library);
 			}
 
-			return hasher.hash(channel);
-		} catch (NotASharedLibraryException e) {
-			return new UnknownHashCode(library); // should not get here
+			return attachLocation(hasher.hash(channel), library);
+		} catch (UnreadableSharedLibraryException e) {
+			// A shared library we identified but could not parse: byte-snapshot the whole file, yet keep
+			// narrowing the other libraries — it is a shared library, not an import source.
+			return new CorruptSharedLibrary(library);
+		} catch (NotASharedLibraryException | IllegalArgumentException e) {
+			// Not the ABI we expected, or a member we could not read: conservatively treat as unknown.
+			return new UnknownHashCode(library);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
+	}
+
+	@Override
+	public AbiBinaryHashCode hashObject(Path library) {
+		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
+			return objectImportReader().hash(channel, 0, channel.size());
+		} catch (IllegalArgumentException e) {
+			// Object we could not parse: its imports are unknown, so narrowing must be disabled.
+			return new UnknownHashCode(library);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	// Archives are byte-snapshotted, so they must carry their location; export/import symbol models do not.
+	private static AbiBinaryHashCode attachLocation(AbiBinaryHashCode model, Path library) {
+		if (model instanceof HasMembers) {
+			return new LocatedArchive(model, library);
+		}
+		return model;
 	}
 
 	private AbiBinaryHasher elfHasher() {
@@ -66,11 +167,18 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 		return machOHasher;
 	}
 
-	private AbiBinaryHasher importLibraryHasher() {
-		if (importLibraryHasher == null) {
-			importLibraryHasher = new ImportLibraryBinaryHasher();
+	private AbiBinaryHasher archiveHasher() {
+		if (archiveHasher == null) {
+			archiveHasher = new ArchiveBinaryHasher(objectImportReader());
 		}
-		return importLibraryHasher;
+		return archiveHasher;
+	}
+
+	private ObjectFileImportReader objectImportReader() {
+		if (objectImportReader == null) {
+			objectImportReader = new ObjectFileImportReader();
+		}
+		return objectImportReader;
 	}
 
 	private static boolean isElfMagic(byte[] h) {

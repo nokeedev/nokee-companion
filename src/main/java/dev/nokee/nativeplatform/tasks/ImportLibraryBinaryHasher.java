@@ -161,6 +161,11 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
+		public Type type() {
+			return Type.DYNAMIC_LIB;
+		}
+
+		@Override
 		public @NotNull Set<Entry<String, Object>> entrySet() {
 			return entries;
 		}
@@ -168,6 +173,18 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 		@Override
 		public Set<ExportedSymbol> getExportedSymbols() {
 			return (Set<ExportedSymbol>) get("symbols");
+		}
+
+		@Override
+		public HasExportSymbols narrowExports(Set<Object> allImports, Set<Object> unresolved) {
+			Set<ExportedSymbol> retained = new LinkedHashSet<>();
+			for (ExportedSymbol symbol : getExportedSymbols()) {
+				if (allImports.contains(symbol.getName())) {
+					retained.add(symbol);
+					unresolved.remove(symbol.getName());
+				}
+			}
+			return new PEHashCode((String) get("dllName"), retained);
 		}
 	}
 }

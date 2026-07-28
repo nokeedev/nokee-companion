@@ -130,11 +130,14 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			lcOffset += cmdsize;
 		}
 
-		Set<ExportedSymbol> symbols = null;
+		Set<ExportedSymbol> symbols;
 		if (symoff >= 0 && stroff >= 0 && nsyms > 0) {
 			symbols = hashSymbols(channel, order, is64, symoff, nsyms, stroff, strsize,
 				hasDysymtab ? iextdefsym : 0,
 				hasDysymtab ? nextdefsym : nsyms);
+		} else {
+			// No symbol table to read: we cannot determine the dylib's exports.
+			throw new UnreadableSharedLibraryException("Mach-O dylib has no readable symbol table");
 		}
 
 		return new MachOHashCode(installName, symbols);
@@ -209,6 +212,11 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
+		public Type type() {
+			return Type.DYNAMIC_LIB;
+		}
+
+		@Override
 		public @NotNull Set<Entry<String, Object>> entrySet() {
 			return entries;
 		}
@@ -216,6 +224,18 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		@Override
 		public Set<ExportedSymbol> getExportedSymbols() {
 			return (Set<ExportedSymbol>) get("symbols");
+		}
+
+		@Override
+		public HasExportSymbols narrowExports(Set<Object> allImports, Set<Object> unresolved) {
+			Set<ExportedSymbol> retained = new LinkedHashSet<>();
+			for (ExportedSymbol symbol : getExportedSymbols()) {
+				if (allImports.contains(symbol.getName())) {
+					retained.add(symbol);
+					unresolved.remove(symbol.getName());
+				}
+			}
+			return new MachOHashCode((String) get("installName"), retained);
 		}
 	}
 }

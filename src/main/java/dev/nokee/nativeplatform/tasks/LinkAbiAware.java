@@ -52,6 +52,24 @@ public interface LinkAbiAware extends Task {
 			NARROW_ABI
 		}
 
+		private static final class Result {
+			private final List<Object> values;
+			private final Set<Object> unresolvedImports;
+
+			private Result(List<Object> values, Set<Object> unresolvedImports) {
+				this.values = values;
+				this.unresolvedImports = unresolvedImports;
+			}
+
+			public List<Object> get() {
+				return values;
+			}
+
+			public Set<Object> unresolvedImports() {
+				return unresolvedImports;
+			}
+		}
+
 		@Inject
 		public LinkAbiExtension(ObjectFactory objects) {
 			libraryAbiModelsProps = objects.setProperty(new TypeOf<Map<String, Object>>() {}.getConcreteClass());
@@ -73,7 +91,7 @@ public interface LinkAbiAware extends Task {
 				}
 				return result;
 			}));
-			abiBin.set(getLibs().getElements().map(elements -> {
+			abiBin.addAll(getLibs().getElements().map(elements -> {
 				if (!useAbi.get()) return elements;
 
 				Set<AbiBinaryHasher.AbiBinaryHashCode> result = new LinkedHashSet<>();
@@ -85,7 +103,8 @@ public interface LinkAbiAware extends Task {
 			abiBin.disallowChanges();
 			abiBin.finalizeValueOnRead();
 
-			getLinkLibInputs().set(abiBin.map(codes -> {
+			Property<Result> snap = objects.property(Result.class);
+			snap.set(abiBin.map(codes -> {
 				AbiSnapshotter snapshotter = AbiSnapshotter.NARROW_ABI;
 				List<Object> result = new ArrayList<>();
 				Set<Object> allImports = new HashSet<>();
@@ -96,10 +115,21 @@ public interface LinkAbiAware extends Task {
 					}
 					AbiBinaryHasher.AbiBinaryHashCode code = (AbiBinaryHasher.AbiBinaryHashCode) c;
 
+					// A file we could not classify might be an import source with unknown imports, so we can
+					// never narrow. Byte-snapshot it (when it is a library input) to stay correct.
+					if (code instanceof AbiBinaryHasher.Unknown) {
+						snapshotter = AbiSnapshotter.FULL_ABI;
+						if (code instanceof AbiBinaryHasher.HasLocation) {
+							result.add(((AbiBinaryHasher.HasLocation) code).location());
+						}
+						continue;
+					}
+
+					// Import sources (object files, static-lib members) donate the names narrowing keeps.
+					// If any importer's imports cannot be determined, the import set is incomplete and we
+					// must not narrow.
 					if (snapshotter == AbiSnapshotter.NARROW_ABI && (code.type() == AbiBinaryHasher.Type.OBJECT_FILE || code.type() == AbiBinaryHasher.Type.STATIC_LIB)) {
-						if (code instanceof AbiBinaryHasher.HasImportSymbols) {
-							allImports.addAll(((AbiBinaryHasher.HasImportSymbols) code).getImportedSymbols());
-						} else {
+						if (!collectImports(code, allImports)) {
 							snapshotter = AbiSnapshotter.FULL_ABI;
 						}
 					}
@@ -112,19 +142,26 @@ public interface LinkAbiAware extends Task {
 							result.add(((AbiBinaryHasher.HasLocation) code).location());
 						}
 					}
+					// An OBJECT_FILE contributes imports only; it is tracked as task source, not a snapshot input.
 				}
 
 				// found all imports, narrowing the ABI
+				Set<Object> unresolvedImports = new LinkedHashSet<>(allImports);
 				if (snapshotter == AbiSnapshotter.NARROW_ABI) {
 					result = result.stream().map(it -> {
 						if (it instanceof AbiBinaryHasher.HasExportSymbols) {
-							return ((AbiBinaryHasher.HasExportSymbols) it).narrowExports(allImports);
+							return ((AbiBinaryHasher.HasExportSymbols) it).narrowExports(allImports, unresolvedImports);
 						}
 						return it;
 					}).collect(Collectors.toList());
 				}
-				return result;
+				return new Result(result, unresolvedImports);
 			}));
+			snap.disallowChanges();
+			snap.finalizeValueOnRead();
+
+			getUnresolvedImports().set(snap.map(it -> it.unresolvedImports()));
+
 
 			getLibraryFiles().from(getLinkLibInputs().map(it -> {
 				return it.stream().flatMap(t -> {
@@ -144,6 +181,7 @@ public interface LinkAbiAware extends Task {
 			}));
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
+			getLinkLibInputs().set(snap.map(it -> it.get()));
 //			getLinkLibInputs().set(getLibs().getElements().map(libs -> {
 //				if (useAbi.get()) {
 //					NativeLibraryAbiExtractor extractor = getAbiExtractor();
@@ -176,6 +214,24 @@ public interface LinkAbiAware extends Task {
 			getLibraryAbiModelsProps().disallowChanges();
 		}
 
+		// Collects the imported names of an import source into {@code into}, recursing into an archive's
+		// members. Returns {@code false} when a code exposes neither imports nor members — i.e. its imports
+		// cannot be determined, so the link must fall back to the full ABI.
+		private static boolean collectImports(AbiBinaryHasher.AbiBinaryHashCode code, Set<Object> into) {
+			if (code instanceof AbiBinaryHasher.HasImportSymbols) {
+				into.addAll(((AbiBinaryHasher.HasImportSymbols) code).getImportedSymbols());
+				return true;
+			}
+			if (code instanceof AbiBinaryHasher.HasMembers) {
+				boolean complete = true;
+				for (AbiBinaryHasher.AbiBinaryHashCode member : ((AbiBinaryHasher.HasMembers) code).getMembers()) {
+					complete &= collectImports(member, into);
+				}
+				return complete;
+			}
+			return false;
+		}
+
 		@Internal
 		public abstract ConfigurableFileCollection getSource();
 
@@ -185,6 +241,9 @@ public interface LinkAbiAware extends Task {
 		@Input
 		@Optional
 		public abstract Property<Boolean> getUseNormalizedAbi();
+
+		@Input
+		protected abstract SetProperty<Object> getUnresolvedImports();
 
 		@Inject protected abstract ObjectFactory getObjects();
 

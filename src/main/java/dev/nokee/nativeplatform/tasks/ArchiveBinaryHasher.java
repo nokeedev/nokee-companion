@@ -92,24 +92,15 @@ final class ArchiveBinaryHasher implements AbiBinaryHasher {
 
 	private static final class ArchiveHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasMembers {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
-		private final Type type;
 
 		ArchiveHashCode(Set<AbiBinaryHashCode> members) {
+			assert members.stream().allMatch(it -> it.type() == Type.OBJECT_FILE);
 			entries.add(new SimpleEntry<>("members", members));
-			// Import-stub members report DYNAMIC_LIB (an import library for a DLL); object members do not.
-			Type t = Type.STATIC_LIB;
-			for (AbiBinaryHashCode member : members) {
-				if (member.type() == Type.DYNAMIC_LIB) {
-					t = Type.DYNAMIC_LIB;
-					break;
-				}
-			}
-			this.type = t;
 		}
 
 		@Override
 		public Type type() {
-			return type;
+			return Type.STATIC_LIB;
 		}
 
 		@Override

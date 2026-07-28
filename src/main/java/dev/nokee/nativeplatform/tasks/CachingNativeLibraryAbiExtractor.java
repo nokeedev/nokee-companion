@@ -16,4 +16,8 @@ abstract /*final*/ class CachingNativeLibraryAbiExtractor implements NativeLibra
 	public AbiBinaryHasher.AbiBinaryHashCode hash(Path library) {
 		return cache.find(library, () -> extractor.hash(library));
 	}
+
+	public AbiBinaryHasher.AbiBinaryHashCode hashObject(Path library) {
+		return cache.find(library, () -> extractor.hashObject(library));
+	}
 }

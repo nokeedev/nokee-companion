@@ -23,7 +23,7 @@ interface AbiBinaryHasher {
 		 */
 		Set<ExportedSymbol> getExportedSymbols();
 
-		HasExportSymbols narrowExports(Set<Object> allImports);
+		HasExportSymbols narrowExports(Set<Object> allImports, Set<Object> unresolved);
 	}
 
 	interface ExportedSymbol {
@@ -53,7 +53,7 @@ interface AbiBinaryHasher {
 	}
 
 	enum Type {
-		OBJECT_FILE, STATIC_LIB, DYNAMIC_LIB
+		OBJECT_FILE, STATIC_LIB, DYNAMIC_LIB, UNKNOWN
 	}
 
 	interface Unknown {}

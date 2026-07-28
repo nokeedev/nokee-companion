@@ -1,21 +1,23 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.internal.hash.HashCode;
-import org.gradle.internal.hash.Hashing;
-import org.gradle.internal.hash.PrimitiveHasher;
+import dev.nokee.nativeplatform.tasks.AbiBinaryHasher.AbiBinaryHashCode;
+import dev.nokee.nativeplatform.tasks.AbiBinaryHasher.ExportedSymbol;
+import dev.nokee.nativeplatform.tasks.AbiBinaryHasher.HasExportSymbols;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 
 import java.util.Collection;
+import java.util.Map;
+import java.util.Objects;
 
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
 
 /**
- * Matchers over the ABI model. The model exposes each exported symbol only as an opaque
- * {@link HashCode}, so a "symbol" matcher recomputes the symbol's hash the same way the readers do
- * and checks for its presence in the model's symbol set.
+ * Matchers over the ABI model. A shared library exposes its exports through {@link HasExportSymbols} as a
+ * collection of {@link ExportedSymbol}s; each concrete symbol is a small map-backed model keyed by name
+ * plus a format-specific attribute (ELF {@code binding}, Mach-O {@code isWeakBinding}, PE
+ * {@code ordinalOrHint}), so a "symbol" matcher checks the name and, where it matters, that attribute.
  */
 final class AbiMatchers {
 	private static final int STB_GLOBAL = 1;
@@ -23,11 +25,12 @@ final class AbiMatchers {
 
 	private AbiMatchers() {}
 
-	static Matcher<AbiBinaryHasher.AbiBinaryHashCode> sharedLibrary(Matcher<? super Collection<HashCode>> symbolsMatcher) {
-		return new TypeSafeMatcher<>() {
+	static Matcher<AbiBinaryHashCode> sharedLibrary(Matcher<? super Collection<ExportedSymbol>> symbolsMatcher) {
+		return new TypeSafeMatcher<AbiBinaryHashCode>() {
 			@Override
-			protected boolean matchesSafely(AbiBinaryHasher.AbiBinaryHashCode model) {
-				return symbolsMatcher.matches(model.getExportedSymbols());
+			protected boolean matchesSafely(AbiBinaryHashCode model) {
+				return model instanceof HasExportSymbols
+					&& symbolsMatcher.matches(((HasExportSymbols) model).getExportedSymbols());
 			}
 
 			@Override
@@ -36,54 +39,73 @@ final class AbiMatchers {
 			}
 
 			@Override
-			protected void describeMismatchSafely(AbiBinaryHasher.AbiBinaryHashCode model, Description description) {
+			protected void describeMismatchSafely(AbiBinaryHashCode model, Description description) {
+				if (!(model instanceof HasExportSymbols)) {
+					description.appendText("was not a shared library exposing exports (").appendValue(model).appendText(")");
+					return;
+				}
 				description.appendText("exported symbols ");
-				symbolsMatcher.describeMismatch(model.getExportedSymbols(), description);
+				symbolsMatcher.describeMismatch(((HasExportSymbols) model).getExportedSymbols(), description);
 			}
 		};
 	}
 
-	static Matcher<AbiBinaryHasher.AbiBinaryHashCode> emptySharedLibrary() {
+	static Matcher<AbiBinaryHashCode> emptySharedLibrary() {
 		return sharedLibrary(empty());
 	}
 
-	static Matcher<HashCode> strongElfSymbol(String name) {
-		return equalTo(elfSymbolHash(name, STB_GLOBAL));
+	static Matcher<ExportedSymbol> strongElfSymbol(String name) {
+		return exportedSymbol(name, "binding", STB_GLOBAL);
 	}
 
-	static Matcher<HashCode> weakElfSymbol(String name) {
-		return equalTo(elfSymbolHash(name, STB_WEAK));
+	static Matcher<ExportedSymbol> weakElfSymbol(String name) {
+		return exportedSymbol(name, "binding", STB_WEAK);
 	}
 
-	private static HashCode elfSymbolHash(String name, int binding) {
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-		hasher.putString(name);
-		hasher.putInt(binding);
-		return hasher.hash();
+	static Matcher<ExportedSymbol> strongMachOSymbol(String name) {
+		return exportedSymbol(name, "isWeakBinding", false);
 	}
 
-	static Matcher<HashCode> strongMachOSymbol(String name) {
-		return equalTo(machOSymbolHash(name, false));
+	static Matcher<ExportedSymbol> weakMachOSymbol(String name) {
+		return exportedSymbol(name, "isWeakBinding", true);
 	}
 
-	static Matcher<HashCode> weakMachOSymbol(String name) {
-		return equalTo(machOSymbolHash(name, true));
+	static Matcher<ExportedSymbol> namedPeSymbol(String name) {
+		return exportedSymbol(name);
 	}
 
-	private static HashCode machOSymbolHash(String name, boolean weak) {
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-		hasher.putString(name);
-		hasher.putBoolean(weak);
-		return hasher.hash();
-	}
-
-	static Matcher<HashCode> namedPeSymbol(String name) {
-		PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-		hasher.putString(name);
-		return equalTo(hasher.hash());
-	}
-
-	static Matcher<HashCode> ordinalOnlyPeSymbol(int ordinal) {
+	static Matcher<ExportedSymbol> ordinalOnlyPeSymbol(int ordinal) {
 		return namedPeSymbol("#" + ordinal);
+	}
+
+	private static Matcher<ExportedSymbol> exportedSymbol(String name) {
+		return new TypeSafeMatcher<ExportedSymbol>() {
+			@Override
+			protected boolean matchesSafely(ExportedSymbol symbol) {
+				return name.equals(symbol.getName());
+			}
+
+			@Override
+			public void describeTo(Description description) {
+				description.appendText("exported symbol ").appendValue(name);
+			}
+		};
+	}
+
+	private static Matcher<ExportedSymbol> exportedSymbol(String name, String attributeKey, Object attributeValue) {
+		return new TypeSafeMatcher<ExportedSymbol>() {
+			@Override
+			protected boolean matchesSafely(ExportedSymbol symbol) {
+				return name.equals(symbol.getName())
+					&& symbol instanceof Map
+					&& Objects.equals(((Map<?, ?>) symbol).get(attributeKey), attributeValue);
+			}
+
+			@Override
+			public void describeTo(Description description) {
+				description.appendText("exported symbol ").appendValue(name)
+					.appendText(" with ").appendText(attributeKey).appendText("=").appendValue(attributeValue);
+			}
+		};
 	}
 }

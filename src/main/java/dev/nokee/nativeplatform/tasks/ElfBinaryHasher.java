@@ -11,6 +11,7 @@ import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.AbstractMap;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -68,7 +69,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		int e_shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
 
 		if (e_shoff == 0 || e_shnum == 0 || e_shentsize == 0) {
-			return new ElfHashCode(null, null);
+			// No section headers: this reader resolves exports through them, so we cannot read the ABI.
+			throw new UnreadableSharedLibraryException("ELF shared library has no section headers");
 		}
 
 		long dynstrOff = -1, dynstrSize = -1;
@@ -125,9 +127,14 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			soname = extractSoname(channel, strtab, order, is64, dynamicOff, dynamicSize);
 		}
 
-		Set<ExportedSymbol> symbols = null;
-		if (dynsymOff >= 0 && strtab != null && dynsymEntsize > 0) {
+		Set<ExportedSymbol> symbols;
+		if (dynsymOff < 0) {
+			symbols = Collections.emptySet(); // no .dynsym: the library exports nothing dynamically
+		} else if (strtab != null && dynsymEntsize > 0) {
 			symbols = extractSymbols(channel, strtab, order, is64, dynsymOff, dynsymSize, dynsymEntsize);
+		} else {
+			// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
+			throw new UnreadableSharedLibraryException("ELF shared library .dynsym is unreadable");
 		}
 
 		return new ElfHashCode(soname, symbols);
@@ -224,6 +231,11 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		}
 
 		@Override
+		public Type type() {
+			return Type.DYNAMIC_LIB;
+		}
+
+		@Override
 		public @NotNull Set<Entry<String, Object>> entrySet() {
 			return entries;
 		}
@@ -231,6 +243,18 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		@Override
 		public Set<ExportedSymbol> getExportedSymbols() {
 			return (Set<ExportedSymbol>) get("symbols");
+		}
+
+		@Override
+		public HasExportSymbols narrowExports(Set<Object> allImports, Set<Object> unresolved) {
+			Set<ExportedSymbol> retained = new LinkedHashSet<>();
+			for (ExportedSymbol symbol : getExportedSymbols()) {
+				if (allImports.contains(symbol.getName())) {
+					retained.add(symbol);
+					unresolved.remove(symbol.getName());
+				}
+			}
+			return new ElfHashCode((String) get("soname"), retained);
 		}
 	}
 }

@@ -139,6 +139,11 @@ final class ElfImportReader implements AbiBinaryHasher, AbiObjectHasher {
 		}
 
 		@Override
+		public Type type() {
+			return Type.OBJECT_FILE;
+		}
+
+		@Override
 		public Set<Object> getImportedSymbols() {
 			return (Set<Object>) get("symbols");
 		}
