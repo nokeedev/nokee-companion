@@ -4,6 +4,7 @@ import dev.gradleplugins.runnerkit.GradleRunner;
 
 import java.io.File;
 import java.util.*;
+import java.util.function.UnaryOperator;
 
 public class GradleRunnerArguments implements Iterable<String> {
 	private final List<String> tasks;
@@ -13,7 +14,7 @@ public class GradleRunnerArguments implements Iterable<String> {
 	private final WelcomeMessage welcomeMessage;
 	private final BuildCache buildCache;
 
-	private GradleRunnerArguments(List<String> tasks, File gradleUserHomeDirectory, List<String> additionalArgs, DeprecationChecks deprecationChecks, WelcomeMessage welcomeMessage, BuildCache buildCache, Stacktrace stacktrace, Logging logging) {
+	private GradleRunnerArguments(List<String> tasks, File gradleUserHomeDirectory, List<String> additionalArgs, DeprecationChecks deprecationChecks, WelcomeMessage welcomeMessage, BuildCache buildCache, Stacktrace stacktrace, Logging logging, ConfigurationCache configurationCache) {
 		this.tasks = tasks;
 		this.gradleUserHomeDirectory = gradleUserHomeDirectory;
 		this.additionalArgs = additionalArgs;
@@ -22,21 +23,22 @@ public class GradleRunnerArguments implements Iterable<String> {
 		this.buildCache = buildCache;
 		this.stacktrace = stacktrace;
 		this.logging = logging;
+		this.configurationCache = configurationCache;
 	}
 
 	public static GradleRunnerArguments create() {
-		return new GradleRunnerArguments(Collections.emptyList(), null, Collections.emptyList(), DeprecationChecks.FAILS, WelcomeMessage.DISABLED, BuildCache.DISABLED, Stacktrace.SHOW, Logging.LIFECYCLE);
+		return new GradleRunnerArguments(Collections.emptyList(), null, Collections.emptyList(), DeprecationChecks.FAILS, WelcomeMessage.DISABLED, BuildCache.DISABLED, Stacktrace.SHOW, Logging.LIFECYCLE, null);
 	}
 
 	//region Flag `--info` configuration
 	private final Logging logging;
 
 	public GradleRunnerArguments withInfoLogging() {
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, Logging.INFO);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, Logging.INFO, configurationCache);
 	}
 
 	public GradleRunnerArguments withQuietLogging() {
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, Logging.QUIET);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, Logging.QUIET, configurationCache);
 	}
 
 	private enum Logging { LIFECYCLE, INFO, QUIET }
@@ -53,7 +55,7 @@ public class GradleRunnerArguments implements Iterable<String> {
 	 * @return a new {@link GradleRunnerArguments} instance configured with the specified Gradle user home directory, never null.
 	 */
 	public GradleRunnerArguments withGradleUserHomeDirectory(File gradleUserHomeDirectory) {
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 
 	/**
@@ -71,20 +73,20 @@ public class GradleRunnerArguments implements Iterable<String> {
 	//endregion
 
 	public GradleRunnerArguments withTasks(Object... tasks) {
-		return new GradleRunnerArguments(Arrays.stream(tasks).map(Object::toString).toList(), gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging);
+		return new GradleRunnerArguments(Arrays.stream(tasks).map(Object::toString).toList(), gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 
 	public GradleRunnerArguments append(String arg) {
 		List<String> additionalArgs = new ArrayList<>(this.additionalArgs);
 		additionalArgs.add(arg);
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 
 	//region
 	private final Stacktrace stacktrace;
 
 	public GradleRunnerArguments withStacktraceDisabled() {
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, Stacktrace.HIDE, logging);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, Stacktrace.HIDE, logging, configurationCache);
 	}
 
 	private enum Stacktrace {
@@ -94,7 +96,7 @@ public class GradleRunnerArguments implements Iterable<String> {
 
 	//region
 	public GradleRunnerArguments withoutDeprecationChecks() {
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, null, welcomeMessage, buildCache, stacktrace, logging);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, null, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 
 	private enum DeprecationChecks {
@@ -104,7 +106,7 @@ public class GradleRunnerArguments implements Iterable<String> {
 
 	//region
 	public GradleRunnerArguments withWelcomeMessageEnabled() {
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, WelcomeMessage.ENABLED, buildCache, stacktrace, logging);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, WelcomeMessage.ENABLED, buildCache, stacktrace, logging, configurationCache);
 	}
 
 	// See org.gradle.launcher.cli.DefaultCommandLineActionFactory#WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY
@@ -115,9 +117,44 @@ public class GradleRunnerArguments implements Iterable<String> {
 	}
 	//endregion
 
+	//region Flag --configuration-cache configuration
+	private final ConfigurationCache configurationCache;
+
+	public GradleRunnerArguments withConfigurationCacheEnabled() {
+		return withConfigurationCacheEnabled(UnaryOperator.identity());
+	}
+
+	public GradleRunnerArguments withConfigurationCacheEnabled(UnaryOperator<ConfigurationCacheProblems> action) {
+		ConfigurationCacheProblems problems = action.apply(ConfigurationCacheProblems.FAIL);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, new ArrayList<>() {{ addAll(additionalArgs); add("--configuration-cache-problems=" + problems.flagValue()); }}, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, ConfigurationCache.Enabled);
+	}
+
+	public enum ConfigurationCacheProblems {
+		FAIL {
+			String flagValue() {
+				return "fail";
+			}
+		}, WARN {
+			String flagValue() {
+				return "warn";
+			}
+		};
+
+		abstract String flagValue();
+
+		public ConfigurationCacheProblems withoutProblemsChecks() {
+			return WARN;
+		}
+	}
+
+	private enum ConfigurationCache {
+		Enabled, Disabled
+	}
+	//endregion
+
 	//region
 	public GradleRunnerArguments withBuildCacheEnabled() {
-		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, BuildCache.ENABLED, stacktrace, logging);
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, BuildCache.ENABLED, stacktrace, logging, configurationCache);
 	}
 
 	private enum BuildCache {
@@ -138,6 +175,9 @@ public class GradleRunnerArguments implements Iterable<String> {
 		if (welcomeMessage != null) result.add("-D" + WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY + "=" + (welcomeMessage == WelcomeMessage.ENABLED));
 		if (logging == Logging.INFO) result.add("--info");
 		if (logging == Logging.QUIET) result.add("--quiet");
+
+		if (configurationCache == ConfigurationCache.Enabled) result.add("--configuration-cache");
+		if (configurationCache == ConfigurationCache.Disabled) result.add("--no-configuration-cache");
 
 		result.addAll(tasks);
 		return result;
