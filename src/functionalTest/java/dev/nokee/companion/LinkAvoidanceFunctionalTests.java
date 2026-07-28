@@ -133,7 +133,7 @@ class LinkAvoidanceFunctionalTests {
 			@Override
 			public SourceFile getSourceFile() {
 				return sourceFile("impl2.cpp", """
-						int bye() { return 32; }
+						int foo() { return 32; }
 					""");
 			}
 		};
@@ -256,6 +256,46 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
+//		@Test
+//		void doesNotRelinkWhenExportedSymbolNotUsedByConsumerIsAdded() {
+//			var fixture = new Fixture();
+//			fixture.writeToProject(build);
+//			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+//
+//			// The consumer imports only greet(); an exported symbol it never references is not in the
+//			// narrowed ABI, so adding one leaves the consumer's snapshot unchanged.
+//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbol())));
+//
+//			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+//		}
+//
+//		@Test
+//		void doesNotRelinkWhenExportedSymbolNotUsedByConsumerChangesAbi() {
+//			var fixture = new Fixture();
+//			fixture.writeToProject(build);
+//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbol())));
+//			assertThat(theBuild(runner.withArguments(forTasks(":app:assemble"))), becomesUpToDate());
+//
+//			// Changing the ABI of an exported symbol the consumer does not import (unused()'s signature) is
+//			// absent from the narrowed ABI, so it must not relink.
+//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbolAbiChange())));
+//
+//			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+//		}
+//
+//		@Test
+//		void doesNotRelinkWhenExportedSymbolNotUsedByConsumerIsRemoved() {
+//			var fixture = new Fixture();
+//			fixture.writeToProject(build);
+//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbol())));
+//			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+//
+//			// Removing an exported symbol the consumer does not import leaves the narrowed ABI unchanged.
+//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // back to only greet()
+//
+//			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+//		}
+
 		@Test
 		void doesNotRelinkWhenStaticFunctionAdded() {
 			// A static function has internal linkage, i.e. private to its compilation unit, so it never
@@ -299,9 +339,12 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@Test
-		void relinkWhenInlineFunctionAdded() {
-			// Sentinel for the opposite boundary: an inline function keeps external linkage and is emitted
-			// as a weak (COMDAT) exported symbol, so it IS part of the ABI and adding one must relink.
+		void doesNotRelinkWhenUnusedInlineFunctionAdded() {
+			// An inline function keeps external linkage and is emitted as a weak (COMDAT) exported symbol, so
+			// under a whole-ABI snapshot it would relink. But it lives only in the library's implementation:
+			// the consumer has no declaration of it and never imports it, so narrowing drops it from the
+			// consumer's ABI and adding one must not relink. (An inline symbol the consumer sees would be
+			// emitted as the consumer's own weak copy, not imported either — so it never relinks the consumer.)
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -717,7 +760,7 @@ class LinkAvoidanceFunctionalTests {
 
 			@Override
 			public Element getMainElement() {
-				return ofSources(main);
+				return ofSources(SourceElement.ofElements(main, SourceFileElement.ofFile(sourceFile("other.cpp", "int foo() { return 45; }"))));
 			}
 		}
 
@@ -767,6 +810,19 @@ class LinkAvoidanceFunctionalTests {
 
 			public SourceFileElement withImplementationOnlyChange() {
 				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + externC("MYLIB_EXPORT int greet() { return 100; }")));
+			}
+
+			// The consumer only calls greet(), so unused() is a symbol the library exports but the consumer
+			// never imports. Narrowing keeps only the imported symbols in the consumer's snapshot, so adding,
+			// changing, or removing unused() must not relink the consumer. unused() has external linkage, so
+			// it genuinely reaches the exported symbol table (the debug variant is unoptimized).
+			public SourceFileElement withUnusedExportedSymbol() {
+				return ofFile(getSourceFile().withContent(__ -> externC("int greet() { return 32; }") + "\nint unused() { return 7; }"));
+			}
+
+			// Changes unused()'s ABI (its signature, i.e. its exported symbol) while leaving greet() intact.
+			public SourceFileElement withUnusedExportedSymbolAbiChange() {
+				return ofFile(getSourceFile().withContent(__ -> externC("int greet() { return 32; }") + "\nint unused(int value) { return value; }"));
 			}
 
 			// The following changes add a symbol that is private to this compilation unit (internal
@@ -840,7 +896,7 @@ class LinkAvoidanceFunctionalTests {
 				return sourceFile("main.cpp", EXPORT_DEFINES + """
 					%s
 					int main() {
-						return %s == 32 ? 0 : 1;
+						return (%s == 32 ? 0 : 1) + foo();
 					}
 					""".formatted(symbolDeclaration(), symbolUsage()));
 			}

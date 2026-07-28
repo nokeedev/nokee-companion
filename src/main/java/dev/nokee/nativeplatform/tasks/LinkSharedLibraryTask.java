@@ -22,6 +22,21 @@ import java.util.Collections;
 	}
 
 	@Override
+	public ConfigurableFileCollection getSource() {
+		return getLinkAbi().getSource();
+	}
+
+	@Override
+	public void setSource(FileCollection source) {
+		getSource().setFrom(source);
+	}
+
+	@Override
+	public void source(Object source) {
+		getSource().from(source);
+	}
+
+	@Override
 	@Internal
 	public ConfigurableFileCollection getLibs() {
 		return getLinkAbi().getLibs();
