@@ -7,13 +7,12 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.AbstractMap;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.*;
+import java.util.function.Consumer;
 
 import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
 
+// Care was taken to avoid as many condition and allocation as possible
 final class ElfBinaryHasher implements AbiBinaryHasher {
 	// for e_ident
 	private static final int EI_MAG0 = 0; // index in e_ident array
@@ -33,9 +32,11 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 	private static final byte ELFDATA2LSB = 1; // little endian value of e_ident[EI_DATA]
 
+	private static final int ET_REL = 1; // for e_type
 	private static final int ET_DYN = 3; // for e_type
-	private static final int SHT_DYNAMIC = 6;
-	private static final int SHT_DYNSYM = 11;
+	private static final int SHT_SYMTAB = 2; // for sh_type
+	private static final int SHT_DYNAMIC = 6; // for sh_type
+	private static final int SHT_DYNSYM = 11; // for sh_type
 	private static final long DT_SONAME = 14;
 	private static final long DT_NULL = 0;
 	private static final int STB_GLOBAL = 1;
@@ -58,147 +59,357 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		hdr.order(order);
 
 		int e_type = asUnsigned(hdr.getShort(16));
-		if (e_type != ET_DYN) {
-			throw new NotASharedLibraryException("ELF file is not a shared library (e_type=" + e_type + ")");
-		}
+		ElfFileChannel elf = (is64 ? new Elf64FileChannel(channel, order) : new Elf32FileChannel(channel, order));
 
-		long e_shoff = is64 ? hdr.getLong(40) : asUnsigned(hdr.getInt(32));
-		int e_shentsize = asUnsigned(hdr.getShort(is64 ? 58 : 46));
-		int e_shnum = asUnsigned(hdr.getShort(is64 ? 60 : 48));
-
-		if (e_shoff == 0 || e_shnum == 0 || e_shentsize == 0) {
-			// No section headers: this reader resolves exports through them, so we cannot read the ABI.
-			throw new UnreadableSharedLibraryException("ELF shared library has no section headers");
-		}
-
-		long dynstrOff = -1, dynstrSize = -1;
-		long dynamicOff = -1, dynamicSize = -1;
-		long dynsymOff = -1, dynsymSize = -1, dynsymEntsize = -1;
-		int dynsymLink = -1;
-
-		// Map the section header table: it is scanned in full (every entry, plus a lookup of the dynstr
-		// section), so a mapping turns those per-entry reads into memory accesses. Each entry i is at index
-		// i * e_shentsize into this mapping.
-		MappedByteBuffer sht = channel.map(FileChannel.MapMode.READ_ONLY, e_shoff, (long) e_shentsize * e_shnum);
-		sht.order(order);
-		for (int i = 0; i < e_shnum; i++) {
-			int sh = i * e_shentsize;
-			int sh_type = sht.getInt(sh + 4);
-			long sh_offset = is64 ? sht.getLong(sh + 24) : asUnsigned(sht.getInt(sh + 16));
-			long sh_size = is64 ? sht.getLong(sh + 32) : asUnsigned(sht.getInt(sh + 20));
-			int sh_link = is64 ? sht.getInt(sh + 40) : sht.getInt(sh + 24);
-			long sh_entsize = is64 ? sht.getLong(sh + 56) : asUnsigned(sht.getInt(sh + 36));
-
-			if (sh_type == SHT_DYNAMIC) { // only one section can exists
-				dynamicOff = sh_offset;
-				dynamicSize = sh_size;
-			} else if (sh_type == SHT_DYNSYM) {
-				dynsymOff = sh_offset;
-				dynsymSize = sh_size;
-				dynsymEntsize = sh_entsize;
-				dynsymLink = sh_link;
-			}
-		}
-
-		if (dynsymLink >= 0 && dynsymLink < e_shnum) {
-			int sh = dynsymLink * e_shentsize;
-			if (is64) {
-				dynstrOff = sht.getLong(sh + 24);
-				dynstrSize = sht.getLong(sh + 32);
-			} else {
-				dynstrOff = asUnsigned(sht.getInt(sh + 16));
-				dynstrSize = asUnsigned(sht.getInt(sh + 20));
-			}
-		}
-
-		// Map just the string table: it is the one section read at random (a lookup per exported symbol
-		// name), so a mapping turns those scattered reads into memory accesses paged in on demand, while
-		// the header, section headers and symbol entries keep streaming through the channel. Offsets into
-		// the table (st_name, DT_SONAME's value) are relative to its start, i.e. indices into this mapping.
-		MappedByteBuffer strtab = null;
-		if (dynstrOff >= 0 && dynstrSize > 0) {
-			strtab = channel.map(FileChannel.MapMode.READ_ONLY, dynstrOff, dynstrSize);
-		}
-
-		String soname = null;
-		if (dynamicOff >= 0 && strtab != null) {
-			soname = extractSoname(channel, strtab, order, is64, dynamicOff, dynamicSize);
-		}
-
-		Set<ExportedSymbol> symbols;
-		if (dynsymOff < 0) {
-			symbols = Collections.emptySet(); // no .dynsym: the library exports nothing dynamically
-		} else if (strtab != null && dynsymEntsize > 0) {
-			symbols = extractSymbols(channel, strtab, order, is64, dynsymOff, dynsymSize, dynsymEntsize);
-		} else {
-			// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
-			throw new UnreadableSharedLibraryException("ELF shared library .dynsym is unreadable");
-		}
-
-		return new ElfHashCode(soname, symbols);
+		if (e_type == ET_DYN) return elf.hash();
+		if (e_type == ET_REL) return elf.hashRel();
+		throw new IllegalStateException("ELF file is not parsable (e_type=" + e_type + ")");
 	}
 
-	private String extractSoname(FileChannel channel, MappedByteBuffer strtab, ByteOrder order, boolean is64,
-		long dynOff, long dynSize) throws IOException {
-		int entSize = is64 ? 16 : 8;
-		int count = (int) (dynSize / entSize);
-
-		// Map the dynamic table: it is scanned entry by entry (until DT_NULL/DT_SONAME), so a mapping turns
-		// those per-entry reads into memory accesses. Each entry i is at index i * entSize into this mapping.
-		MappedByteBuffer dynamic = channel.map(FileChannel.MapMode.READ_ONLY, dynOff, dynSize);
-		dynamic.order(order);
-
-		for (int i = 0; i < count; i++) {
-			int dyn = i * entSize;
-			long tag = is64 ? dynamic.getLong(dyn) : asUnsigned(dynamic.getInt(dyn));
-			long val = is64 ? dynamic.getLong(dyn + 8) : asUnsigned(dynamic.getInt(dyn + 4));
-			if (tag == DT_NULL) break;
-			if (tag == DT_SONAME) {
-				return BinaryUtils.readCString(strtab, (int) val, strtab.limit());
-			}
+	private final class Elf64FileChannel extends ElfFileChannel {
+		Elf64FileChannel(FileChannel channel, ByteOrder order) {
+			super(channel, order);
 		}
-		return null;
+
+		@Override
+		int dt_entsize() {
+			return 16;
+		}
+
+		@Override
+		long d_tag(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off));
+		}
+
+		@Override
+		long d_val(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 8));
+		}
+
+		@Override
+		int st_info(ByteBuffer buf, long off) {
+			return asUnsigned(buf.get(requireInt(off + 4)));
+		}
+
+		@Override
+		int st_shndx(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getShort(requireInt(off + 6)));
+		}
+
+		@Override
+		long e_shoff() {
+			return buffer.getLong(40);
+		}
+
+		@Override
+		int e_shentsize() {
+			return asUnsigned(buffer.getShort(58));
+		}
+
+		@Override
+		int e_shnum() {
+			return asUnsigned(buffer.getShort(60));
+		}
+
+		@Override
+		long sh_offset(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 24));
+		}
+
+		@Override
+		long sh_size(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 32));
+		}
+
+		@Override
+		int sh_link(ByteBuffer buf, long off) {
+			return buf.getInt(requireInt(off + 40));
+		}
+
+		@Override
+		long sh_entsize(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 56));
+		}
 	}
 
-	private Set<ExportedSymbol> extractSymbols(FileChannel channel, MappedByteBuffer strtab, ByteOrder order, boolean is64,
-		long symOff, long symSize, long symEntsize) throws IOException {
+	private final class Elf32FileChannel extends ElfFileChannel {
+		Elf32FileChannel(FileChannel channel, ByteOrder order) {
+			super(channel, order);
+		}
 
-		// Map the symbol table: it is scanned in full (one entry per symbol), so a mapping turns those
-		// per-entry reads into memory accesses. Each entry i is at index i * symEntsize into this mapping.
-		MappedByteBuffer symtab = channel.map(FileChannel.MapMode.READ_ONLY, symOff, symSize);
-		symtab.order(order);
+		@Override
+		int dt_entsize() {
+			return 8;
+		}
 
-		// Each symbol name is read at random from the mapped string table (indexed by st_name).
-		int strEnd = strtab.limit();
+		@Override
+		long d_tag(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off)));
+		}
 
-		int count = (int) (symSize / symEntsize);
-		Set<ExportedSymbol> result = new LinkedHashSet<>();
+		@Override
+		long d_val(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 4)));
+		}
 
-		for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
-			int sym = (int) (i * symEntsize);
-			int stName, stInfo, stShndx;
 
-			if (is64) {
-				stName = symtab.getInt(sym);
-				stInfo = asUnsigned(symtab.get(sym + 4));
-				stShndx = asUnsigned(symtab.getShort(sym + 6));
-			} else {
-				stName = symtab.getInt(sym);
-				stInfo = asUnsigned(symtab.get(sym + 12));
-				stShndx = asUnsigned(symtab.getShort(sym + 14));
+		@Override
+		int st_info(ByteBuffer buf, long off) {
+			return asUnsigned(buf.get(requireInt(off + 12)));
+		}
+
+		@Override
+		int st_shndx(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getShort(requireInt(off + 14)));
+		}
+
+		@Override
+		long e_shoff() {
+			return asUnsigned(buffer.getInt(32));
+		}
+
+		@Override
+		int e_shentsize() {
+			return asUnsigned(buffer.getShort(46));
+		}
+
+		@Override
+		int e_shnum() {
+			return asUnsigned(buffer.getShort(48));
+		}
+
+		@Override
+		long sh_offset(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 16)));
+		}
+
+		@Override
+		long sh_size(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 20)));
+		}
+
+		@Override
+		int sh_link(ByteBuffer buf, long off) {
+			return buf.getInt(requireInt(off + 24));
+		}
+
+		@Override
+		long sh_entsize(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 36)));
+		}
+	}
+
+	private static int requireInt(long l) {
+		if (l > 0xFFFFFFFFL) throw new IllegalArgumentException();
+		return (int) l;
+	}
+
+	private static abstract class ElfFileChannel {
+		private final FileChannel channel;
+		private final ByteOrder order;
+
+		abstract long e_shoff();
+		abstract int e_shentsize();
+		abstract int e_shnum();
+
+		abstract long sh_offset(ByteBuffer buf, long off);
+		abstract long sh_size(ByteBuffer buf, long off);
+		abstract int sh_link(ByteBuffer buf, long off);
+		abstract long sh_entsize(ByteBuffer buf, long off);
+
+		private final class SectionHeaderRef {
+			private final ByteBuffer sht;
+			private final int sh;
+
+			private SectionHeaderRef(ByteBuffer sht, int sh) {
+				this.sht = sht;
+				this.sh = sh;
 			}
 
-			int binding = stInfo >> 4;
+			long offset() { return sh_offset(sht, sh); }
+			long size() { return sh_size(sht, sh); }
+			int link() { return sh_link(sht, sh); }
+			long entsize() { return sh_entsize(sht, sh); }
+		}
 
-			if ((binding == STB_GLOBAL || binding == STB_WEAK) && stShndx != SHN_UNDEF) {
-				String name = BinaryUtils.readCString(strtab, stName & 0xFFFFFFFF, strEnd);
-				if (!name.isEmpty()) {
-					result.add(new ElfExportedSymbol(name, binding));
+		protected ElfFileChannel(FileChannel channel, ByteOrder order) {
+			this.channel = channel;
+			this.order = order;
+		}
+
+		private MappedByteBuffer loadDynstr(SectionHeaderRef ref) throws IOException {
+			int sh_link = ref.link();
+			if (sh_link >= 0) { // if we overflow, there will be an exception
+				int sh = sh_link * e_shentsize();
+				return channel.map(FileChannel.MapMode.READ_ONLY, sh_offset(ref.sht, sh), sh_size(ref.sht, sh));
+			}
+			return null;
+		}
+
+		private static final Set<Integer> dyn_types = new HashSet<>();
+		private static final Set<Integer> rel_types = Collections.singleton(SHT_SYMTAB);
+		static {
+			dyn_types.add(SHT_DYNAMIC);
+			dyn_types.add(SHT_DYNSYM);
+		}
+
+		public Map<Integer, SectionHeaderRef> hash(Set<Integer> types) throws IOException {
+			long e_shoff = e_shoff();
+			int e_shentsize = e_shentsize();
+			int e_shnum = e_shnum();
+
+			if (e_shoff == 0 || e_shnum == 0 || e_shentsize == 0) {
+				// No section headers: this reader resolves exports through them, so we cannot read the ABI.
+				throw new UnreadableSharedLibraryException("ELF shared library has no section headers");
+			}
+
+			Map<Integer, SectionHeaderRef> result = new HashMap<>();
+
+			ByteBuffer sht = channel.map(FileChannel.MapMode.READ_ONLY, e_shoff, (long) e_shentsize * e_shnum).order(order);
+			for (int i = 0; i < e_shnum || (result.size() != types.size()); i++) {
+				int sh = i * e_shentsize;
+				int sh_type = sht.getInt(sh + 4);
+
+				if (types.contains(sh_type)) {
+					result.put(sh_type, new SectionHeaderRef(sht, sh));
+				}
+			}
+
+			return result;
+		}
+
+		public AbiBinaryHashCode hash() throws IOException {
+			Map<Integer, SectionHeaderRef> shs = hash(dyn_types);
+
+			SectionHeaderRef dynamic = shs.get(SHT_DYNAMIC);
+			SectionHeaderRef dynsym = shs.get(SHT_DYNSYM);
+
+			MappedByteBuffer strtab = loadDynstr(dynsym);
+
+			String soname = null;
+			if (dynamic != null && strtab != null) {
+				soname = extractSoname(strtab, dynamic.offset(), dynamic.size());
+			}
+
+			Set<ExportedSymbol> symbols = new LinkedHashSet<>();
+			if (dynsym == null) {
+				// no exprted symbols
+			} else if (strtab != null) {
+				visitGlobalOrWeakSymbols(dynsym, sym -> {
+					if (sym.shndx() != SHN_UNDEF) {
+						String name = BinaryUtils.readCString(strtab, sym.name() & 0xFFFFFFFF);
+						if (!name.isEmpty()) {
+							symbols.add(new ElfExportedSymbol(name, sym.binding()));
+						}
+					}
+				});
+			} else {
+				// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
+				throw new UnreadableSharedLibraryException("ELF shared library .dynsym is unreadable");
+			}
+
+			return new ElfHashCode(soname, symbols);
+		}
+
+		public AbiBinaryHashCode hashRel() throws IOException {
+			Map<Integer, SectionHeaderRef> shs = hash(rel_types);
+
+			SectionHeaderRef symtab = shs.get(SHT_SYMTAB);
+
+			MappedByteBuffer strtab = loadDynstr(symtab);
+
+			Set<String> symbols = new LinkedHashSet<>();
+			if (symtab == null) {
+				// no import table
+			} else if (strtab != null) {
+				visitGlobalOrWeakSymbols(symtab, sym -> {
+					if (sym.shndx() == SHN_UNDEF) {
+						symbols.add(BinaryUtils.readCString(strtab, sym.name() & 0xFFFFFFFF));
+					}
+				});
+			} else {
+				// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
+				throw new UnreadableSharedLibraryException("ELF shared library .dynsym is unreadable");
+			}
+
+			return new ElfImportHashCode(symbols);
+		}
+
+		abstract int dt_entsize();
+		abstract long d_tag(ByteBuffer buf, long off);
+		abstract long d_val(ByteBuffer buf, long off);
+
+		private String extractSoname(MappedByteBuffer strtab, long dynOff, long dynSize) throws IOException {
+			int entSize = dt_entsize();
+			int count = (int) (dynSize / entSize);
+
+			// Map the dynamic table: it is scanned entry by entry (until DT_NULL/DT_SONAME), so a mapping turns
+			// those per-entry reads into memory accesses. Each entry i is at index i * entSize into this mapping.
+			MappedByteBuffer dynamic = channel.map(FileChannel.MapMode.READ_ONLY, dynOff, dynSize);
+			dynamic.order(order);
+
+			for (int i = 0; i < count; i++) {
+				int dyn = i * entSize;
+				long tag = d_tag(dynamic, dyn);
+				long val = d_val(dynamic, dyn);
+				if (tag == DT_NULL) break;
+				if (tag == DT_SONAME) {
+					return BinaryUtils.readCString(strtab, (int) val, strtab.limit());
+				}
+			}
+			return null;
+		}
+
+		int st_name(ByteBuffer buf, long off) {
+			return buf.getInt(requireInt(off));
+		}
+
+		abstract int st_info(ByteBuffer buf, long off);
+		abstract int st_shndx(ByteBuffer buf, long off);
+
+		private final class SymbolRef {
+			private final ByteBuffer symtab;
+			private long sym;
+
+			private SymbolRef(ByteBuffer symtab) {
+				this.symtab = symtab;
+			}
+
+			private SymbolRef reset(long sym) {
+				this.sym = sym;
+				return this;
+			}
+
+			public int name() {
+				return st_name(symtab, sym);
+			}
+
+			public int shndx() {
+				return st_shndx(symtab, sym);
+			}
+
+			public int binding() {
+				return st_info(symtab, sym) >> 4;
+			}
+		}
+
+		private void visitGlobalOrWeakSymbols(SectionHeaderRef sh, Consumer<? super SymbolRef> visitor) throws IOException {
+			long symSize = sh.size();
+			long symEntsize = sh.entsize();
+
+			ByteBuffer symtab = channel.map(FileChannel.MapMode.READ_ONLY, sh.offset(), symSize).order(order);
+			SymbolRef symbol = new SymbolRef(symtab);
+
+			int count = (int) (symSize / symEntsize);
+			for (int i = 1; i < count; i++) { // entry 0 is always STN_UNDEF
+				int sym = (int) (i * symEntsize);
+				int stInfo = st_info(symtab, sym);
+				int binding = stInfo >> 4;
+				if (binding == STB_GLOBAL || binding == STB_WEAK) {
+					visitor.accept(symbol.reset(sym));
 				}
 			}
 		}
-
-		return result;
 	}
 
 	private static final class ElfExportedSymbol extends AbstractMap<String, Object> implements ExportedSymbol {
@@ -253,6 +464,29 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 				}
 			}
 			return new ElfHashCode((String) get("soname"), retained);
+		}
+	}
+
+	private static final class ElfImportHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasImportSymbols {
+		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
+
+		ElfImportHashCode(Set<String> importedSymbols) {
+			entries.add(new SimpleEntry<>("symbols", importedSymbols));
+		}
+
+		@Override
+		public Type type() {
+			return Type.OBJECT_FILE;
+		}
+
+		@Override
+		public Set<Object> getImportedSymbols() {
+			return (Set<Object>) get("symbols");
+		}
+
+		@Override
+		public @NotNull Set<Entry<String, Object>> entrySet() {
+			return entries;
 		}
 	}
 }

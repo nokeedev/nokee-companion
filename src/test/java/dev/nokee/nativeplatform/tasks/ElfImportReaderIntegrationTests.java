@@ -22,7 +22,7 @@ import static org.hamcrest.Matchers.hasItem;
  * for the commands to produce them. ELF C symbols carry no leading underscore.
  */
 class ElfImportReaderIntegrationTests {
-	private static final ElfImportReader reader = new ElfImportReader();
+	private static final ElfBinaryHasher reader = new ElfBinaryHasher();
 
 	private static Set<Object> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {

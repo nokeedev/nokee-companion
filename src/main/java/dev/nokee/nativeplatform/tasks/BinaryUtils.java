@@ -37,12 +37,7 @@ final class BinaryUtils {
 	}
 
 	static String readCString(ByteBuffer buf, int offset) {
-		byte[] b = buf.array();
-		int length = 0;
-		for (int i = offset; i < buf.limit() && b[i] != 0; ++i) {
-			length++;
-		}
-		return new String(b, offset, length);
+		return readCString(buf, offset, buf.limit());
 	}
 
 	static int hashCString(PrimitiveHasher hasher, ByteBuffer buf, int offset) {
