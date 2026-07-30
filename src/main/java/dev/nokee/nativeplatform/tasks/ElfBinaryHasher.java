@@ -299,7 +299,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 					if (sym.shndx() != SHN_UNDEF) {
 						String name = BinaryUtils.readCString(strtab, sym.name() & 0xFFFFFFFF);
 						if (!name.isEmpty()) {
-							symbols.add(new ElfExportedSymbol(name, sym.binding()));
+							symbols.add(new ElfExportedSymbol(name.hashCode(), sym.binding()));
 						}
 					}
 				});
@@ -318,13 +318,13 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 			MappedByteBuffer strtab = loadDynstr(symtab);
 
-			Set<String> symbols = new LinkedHashSet<>();
+			Set<Object> symbols = new LinkedHashSet<>();
 			if (symtab == null) {
 				// no import table
 			} else if (strtab != null) {
 				visitGlobalOrWeakSymbols(symtab, sym -> {
 					if (sym.shndx() == SHN_UNDEF) {
-						symbols.add(BinaryUtils.readCString(strtab, sym.name() & 0xFFFFFFFF));
+						symbols.add(BinaryUtils.readCString(strtab, sym.name() & 0xFFFFFFFF).hashCode());
 					}
 				});
 			} else {
@@ -415,7 +415,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	private static final class ElfExportedSymbol extends AbstractMap<String, Object> implements ExportedSymbol {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
 
-		public ElfExportedSymbol(String name, int binding) {
+		public ElfExportedSymbol(Object name, int binding) {
 			entries.add(new SimpleEntry<>("name", name));
 			entries.add(new SimpleEntry<>("binding", binding));
 		}
@@ -470,7 +470,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	private static final class ElfImportHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasImportSymbols {
 		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
 
-		ElfImportHashCode(Set<String> importedSymbols) {
+		ElfImportHashCode(Set<Object> importedSymbols) {
 			entries.add(new SimpleEntry<>("symbols", importedSymbols));
 		}
 
