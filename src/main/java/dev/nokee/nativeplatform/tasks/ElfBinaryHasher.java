@@ -1,8 +1,5 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.internal.hash.HashCode;
-import org.gradle.internal.hash.Hashing;
-import org.gradle.internal.hash.PrimitiveHasher;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -13,8 +10,9 @@ import java.nio.channels.FileChannel;
 import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.Objects;
 import java.util.Set;
+
+import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
 
 final class ElfBinaryHasher implements AbiBinaryHasher {
 	// for e_ident
@@ -59,14 +57,14 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		ByteOrder order = hdr.get(EI_DATA) == ELFDATA2LSB ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 		hdr.order(order);
 
-		int e_type = hdr.getShort(16) & 0xFFFF;
+		int e_type = asUnsigned(hdr.getShort(16));
 		if (e_type != ET_DYN) {
 			throw new NotASharedLibraryException("ELF file is not a shared library (e_type=" + e_type + ")");
 		}
 
-		long e_shoff = is64 ? hdr.getLong(40) : (hdr.getInt(32) & 0xFFFFFFFFL);
-		int e_shentsize = hdr.getShort(is64 ? 58 : 46) & 0xFFFF;
-		int e_shnum = hdr.getShort(is64 ? 60 : 48) & 0xFFFF;
+		long e_shoff = is64 ? hdr.getLong(40) : asUnsigned(hdr.getInt(32));
+		int e_shentsize = asUnsigned(hdr.getShort(is64 ? 58 : 46));
+		int e_shnum = asUnsigned(hdr.getShort(is64 ? 60 : 48));
 
 		if (e_shoff == 0 || e_shnum == 0 || e_shentsize == 0) {
 			// No section headers: this reader resolves exports through them, so we cannot read the ABI.
@@ -86,10 +84,10 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		for (int i = 0; i < e_shnum; i++) {
 			int sh = i * e_shentsize;
 			int sh_type = sht.getInt(sh + 4);
-			long sh_offset = is64 ? sht.getLong(sh + 24) : sht.getInt(sh + 16) & 0xFFFFFFFFL;
-			long sh_size = is64 ? sht.getLong(sh + 32) : sht.getInt(sh + 20) & 0xFFFFFFFFL;
+			long sh_offset = is64 ? sht.getLong(sh + 24) : asUnsigned(sht.getInt(sh + 16));
+			long sh_size = is64 ? sht.getLong(sh + 32) : asUnsigned(sht.getInt(sh + 20));
 			int sh_link = is64 ? sht.getInt(sh + 40) : sht.getInt(sh + 24);
-			long sh_entsize = is64 ? sht.getLong(sh + 56) : sht.getInt(sh + 36) & 0xFFFFFFFFL;
+			long sh_entsize = is64 ? sht.getLong(sh + 56) : asUnsigned(sht.getInt(sh + 36));
 
 			if (sh_type == SHT_DYNAMIC) { // only one section can exists
 				dynamicOff = sh_offset;
@@ -108,8 +106,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 				dynstrOff = sht.getLong(sh + 24);
 				dynstrSize = sht.getLong(sh + 32);
 			} else {
-				dynstrOff = sht.getInt(sh + 16) & 0xFFFFFFFFL;
-				dynstrSize = sht.getInt(sh + 20) & 0xFFFFFFFFL;
+				dynstrOff = asUnsigned(sht.getInt(sh + 16));
+				dynstrSize = asUnsigned(sht.getInt(sh + 20));
 			}
 		}
 
@@ -152,8 +150,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 		for (int i = 0; i < count; i++) {
 			int dyn = i * entSize;
-			long tag = is64 ? dynamic.getLong(dyn) : (dynamic.getInt(dyn) & 0xFFFFFFFFL);
-			long val = is64 ? dynamic.getLong(dyn + 8) : (dynamic.getInt(dyn + 4) & 0xFFFFFFFFL);
+			long tag = is64 ? dynamic.getLong(dyn) : asUnsigned(dynamic.getInt(dyn));
+			long val = is64 ? dynamic.getLong(dyn + 8) : asUnsigned(dynamic.getInt(dyn + 4));
 			if (tag == DT_NULL) break;
 			if (tag == DT_SONAME) {
 				return BinaryUtils.readCString(strtab, (int) val, strtab.limit());
@@ -182,12 +180,12 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 			if (is64) {
 				stName = symtab.getInt(sym);
-				stInfo = symtab.get(sym + 4) & 0xFF;
-				stShndx = symtab.getShort(sym + 6) & 0xFFFF;
+				stInfo = asUnsigned(symtab.get(sym + 4));
+				stShndx = asUnsigned(symtab.getShort(sym + 6));
 			} else {
 				stName = symtab.getInt(sym);
-				stInfo = symtab.get(sym + 12) & 0xFF;
-				stShndx = symtab.getShort(sym + 14) & 0xFFFF;
+				stInfo = asUnsigned(symtab.get(sym + 12));
+				stShndx = asUnsigned(symtab.getShort(sym + 14));
 			}
 
 			int binding = stInfo >> 4;

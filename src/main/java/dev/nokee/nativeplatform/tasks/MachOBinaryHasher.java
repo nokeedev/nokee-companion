@@ -1,6 +1,5 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.hash.PrimitiveHasher;
 import org.jetbrains.annotations.NotNull;
@@ -12,6 +11,8 @@ import java.nio.channels.FileChannel;
 import java.util.AbstractMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
+
+import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
 
 final class MachOBinaryHasher implements AbiBinaryHasher {
 	private static final int MH_MAGIC = 0xFEEDFACE;
@@ -61,7 +62,7 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		// fat_arch[0]: cputype(4), cpusubtype(4), offset(4), size(4), align(4)
 		ByteBuffer arch0 = BinaryUtils.readAt(channel, 8, 20);
 		arch0.order(ByteOrder.BIG_ENDIAN);
-		long sliceOffset = arch0.getInt(8) & 0xFFFFFFFFL;
+		long sliceOffset = asUnsigned(arch0.getInt(8));
 		byte[] sliceHeader = BinaryUtils.readBytes(channel, sliceOffset, 4);
 		return extractSlice(channel, sliceOffset, sliceHeader);
 	}
@@ -115,9 +116,9 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			} else if (cmd == LC_SYMTAB) {
 				ByteBuffer st = BinaryUtils.readAt(channel, lcOffset, 24);
 				st.order(order);
-				symoff = st.getInt(8) & 0xFFFFFFFFL;
+				symoff = asUnsigned(st.getInt(8));
 				nsyms = st.getInt(12);
-				stroff = st.getInt(16) & 0xFFFFFFFFL;
+				stroff = asUnsigned(st.getInt(16));
 				strsize = st.getInt(20);
 			} else if (cmd == LC_DYSYMTAB) {
 				ByteBuffer dst = BinaryUtils.readAt(channel, lcOffset, 24);
@@ -153,7 +154,7 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		int endSym = Math.min(iextdefsym + nextdefsym, nsyms);
 
 		// Read each symbol name on demand from the string table instead of loading the whole table.
-		long strEnd = stroff + (strsize & 0xFFFFFFFFL);
+		long strEnd = stroff + asUnsigned(strsize);
 		ByteBuffer nameBuf = ByteBuffer.allocate(256);
 
 		// Reuse a single nlist-sized buffer across all symbols instead of allocating one per entry.
@@ -162,15 +163,15 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		for (int i = startSym; i < endSym; i++) {
 			BinaryUtils.readInto(channel, symoff + (long) i * nlistSize, sym, nlistSize);
 			int strx = sym.getInt(0);
-			int nType = sym.get(4) & 0xFF;
-			int nDesc = sym.getShort(6) & 0xFFFF;
+			int nType = asUnsigned(sym.get(4));
+			int nDesc = asUnsigned(sym.getShort(6));
 
 			if ((nType & N_STAB) != 0) continue;
 			if ((nType & N_EXT) == 0) continue;
 			if ((nType & N_TYPE) == N_UNDF) continue;
 
 			PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
-			String name = BinaryUtils.readCStringAt(channel, stroff + (strx & 0xFFFFFFFFL), strEnd);
+			String name = BinaryUtils.readCStringAt(channel, stroff + asUnsigned(strx), strEnd);
 			if (!name.isEmpty()) {
 				result.add(new MachOExportedSymbol(name, (nDesc & N_WEAK_DEF) != 0));
 			}

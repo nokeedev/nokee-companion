@@ -8,6 +8,7 @@ import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -43,7 +44,7 @@ final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
 		long symTableOffset = hdr.getInt(8) & 0xFFFFFFFFL;
 		int numberOfSymbols = hdr.getInt(12);
 		if (symTableOffset == 0 || numberOfSymbols <= 0) {
-			return new CoffImportHashCode(new LinkedHashSet<>());
+			return new CoffImportHashCode(Collections.emptySet());
 		}
 
 		long symBase = base + symTableOffset;

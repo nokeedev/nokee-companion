@@ -148,4 +148,16 @@ final class BinaryUtils {
 		}
 		return new String(out.toByteArray());
 	}
+
+	public static short asUnsigned(byte v) {
+		return (short) (v & 0xFF);
+	}
+
+	public static int asUnsigned(short v) {
+		return v & 0xFFFF;
+	}
+
+	public static long asUnsigned(int v) {
+		return v & 0xFFFFFFFFL;
+	}
 }
