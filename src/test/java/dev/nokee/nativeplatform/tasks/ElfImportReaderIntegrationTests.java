@@ -16,7 +16,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.hasItem;
 
 /**
- * Integration tests for ELF relocatable-object import extraction via {@link ElfImportReader}.
+ * Integration tests for ELF relocatable-object import extraction via {@link ElfBinaryHasher}.
  *
  * Prebuilt objects live in src/test/resources/fixtures/object-imports/. See that directory's BUILD file
  * for the commands to produce them. ELF C symbols carry no leading underscore.

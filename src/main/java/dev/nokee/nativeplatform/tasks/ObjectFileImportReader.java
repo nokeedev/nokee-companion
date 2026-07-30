@@ -15,12 +15,12 @@ final class ObjectFileImportReader implements AbiObjectHasher {
 	private static final byte ELFMAG2 = 'L';
 	private static final byte ELFMAG3 = 'F';
 
-	private final ElfImportReader elfReader;
+	private final ElfBinaryHasher elfReader;
 	private final MachOImportReader machOReader;
 	private final CoffImportReader coffReader;
 
 	ObjectFileImportReader() {
-		this.elfReader = new ElfImportReader();
+		this.elfReader = new ElfBinaryHasher();
 		this.machOReader = new MachOImportReader();
 		this.coffReader = new CoffImportReader();
 	}
@@ -32,7 +32,8 @@ final class ObjectFileImportReader implements AbiObjectHasher {
 		}
 		byte[] magic = BinaryUtils.readBytes(channel, base, 4);
 		if (isElfMagic(magic)) {
-			return elfReader.hash(channel, base, size);
+			channel.position(base);
+			return elfReader.hash(channel);
 		}
 		if (isMachOMagic(asInt(magic, 0))) {
 			return machOReader.hash(channel, base, size);
