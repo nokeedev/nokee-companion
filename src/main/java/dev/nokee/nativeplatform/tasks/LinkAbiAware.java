@@ -86,6 +86,7 @@ public interface LinkAbiAware extends Task {
 					AbiBinaryHasher.AbiBinaryHashCode hashcode = getAbiExtractor().hashObject(file.getAsFile().toPath());
 					result.add(hashcode);
 					if (hashcode instanceof AbiBinaryHasher.Unknown) {
+						System.out.println("Could not parse object file '" + file.getAsFile() + "'");
 						return result; // stop early
 					}
 				}
@@ -118,6 +119,7 @@ public interface LinkAbiAware extends Task {
 					// A file we could not classify might be an import source with unknown imports, so we can
 					// never narrow. Byte-snapshot it (when it is a library input) to stay correct.
 					if (code instanceof AbiBinaryHasher.Unknown) {
+						System.out.println("Snapshotting full ABI instead due to unknown object");
 						snapshotter = AbiSnapshotter.FULL_ABI;
 						if (code instanceof AbiBinaryHasher.HasLocation) {
 							result.add(((AbiBinaryHasher.HasLocation) code).location());
@@ -130,6 +132,7 @@ public interface LinkAbiAware extends Task {
 					// must not narrow.
 					if (snapshotter == AbiSnapshotter.NARROW_ABI && (code.type() == AbiBinaryHasher.Type.OBJECT_FILE || code.type() == AbiBinaryHasher.Type.STATIC_LIB)) {
 						if (!collectImports(code, allImports)) {
+							System.out.println("Snapshotting full ABI due to unable to collect imports");
 							snapshotter = AbiSnapshotter.FULL_ABI;
 						}
 					}
