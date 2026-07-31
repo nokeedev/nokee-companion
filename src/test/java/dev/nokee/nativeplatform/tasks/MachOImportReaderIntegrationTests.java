@@ -35,28 +35,28 @@ class MachOImportReaderIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractsUndefinedExternalFunctionsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), hasItems("_foo", "_bar"));
+		assertThat(imports(fixture(arch)), hasItems("_foo".hashCode(), "_bar".hashCode()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractsUndefinedExternalVariableAsImport(String arch) throws IOException {
 		// A data import is an undefined external too; the reader does not filter by function-vs-data type.
-		assertThat(imports(fixture(arch)), hasItem("_gvar"));
+		assertThat(imports(fixture(arch)), hasItem("_gvar".hashCode()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void doesNotReportDefinedExternalSymbolsAsImports(String arch) throws IOException {
 		Set<Object> imports = imports(fixture(arch));
-		assertThat(imports, not(hasItem("_entry")));
-		assertThat(imports, not(hasItem("_local_helper")));
+		assertThat(imports, not(hasItem("_entry".hashCode())));
+		assertThat(imports, not(hasItem("_local_helper").hashCode()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void doesNotReportInternalLinkageSymbolsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), not(hasItem("_secret")));
+		assertThat(imports(fixture(arch)), not(hasItem("_secret".hashCode())));
 	}
 
 	private static Path fixture(String arch) {

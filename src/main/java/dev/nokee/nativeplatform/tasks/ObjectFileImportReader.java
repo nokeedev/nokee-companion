@@ -32,8 +32,7 @@ final class ObjectFileImportReader implements AbiObjectHasher {
 		}
 		byte[] magic = BinaryUtils.readBytes(channel, base, 4);
 		if (isElfMagic(magic)) {
-			channel.position(base);
-			return elfReader.hash(channel);
+			return elfReader.hash(channel, base);
 		}
 		if (isMachOMagic(asInt(magic, 0))) {
 			return machOReader.hash(channel, base, size);

@@ -35,28 +35,28 @@ class ElfImportReaderIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void extractsUndefinedExternalFunctionsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), hasItems("foo", "bar"));
+		assertThat(imports(fixture(arch)), hasItems("foo".hashCode(), "bar".hashCode()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void extractsUndefinedExternalVariableAsImport(String arch) throws IOException {
 		// A data import is an undefined external too; the reader does not filter by function-vs-data type.
-		assertThat(imports(fixture(arch)), hasItem("gvar"));
+		assertThat(imports(fixture(arch)), hasItem("gvar".hashCode()));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void doesNotReportDefinedExternalSymbolsAsImports(String arch) throws IOException {
 		Set<Object> imports = imports(fixture(arch));
-		assertThat(imports, not(hasItem("entry")));
-		assertThat(imports, not(hasItem("local_helper")));
+		assertThat(imports, not(hasItem("entry".hashCode())));
+		assertThat(imports, not(hasItem("local_helper".hashCode())));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void doesNotReportInternalLinkageSymbolsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), not(hasItem("secret")));
+		assertThat(imports(fixture(arch)), not(hasItem("secret".hashCode())));
 	}
 
 	private static Path fixture(String arch) {
