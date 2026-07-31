@@ -122,13 +122,19 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 
 			return attachLocation(hasher.hash(channel), library);
 		} catch (UnreadableSharedLibraryException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
 			// A shared library we identified but could not parse: byte-snapshot the whole file, yet keep
 			// narrowing the other libraries — it is a shared library, not an import source.
 			return new CorruptSharedLibrary(library);
 		} catch (NotASharedLibraryException | IllegalArgumentException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
 			// Not the ABI we expected, or a member we could not read: conservatively treat as unknown.
 			return new UnknownHashCode(library);
 		} catch (IOException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
 			throw new UncheckedIOException(e);
 		}
 	}
@@ -138,9 +144,13 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
 			return objectImportReader().hash(channel, 0, channel.size());
 		} catch (IllegalArgumentException e) {
+			System.out.println("Exception for '" + library + "'");
 			// Object we could not parse: its imports are unknown, so narrowing must be disabled.
+			e.printStackTrace();
 			return new UnknownHashCode(library);
 		} catch (IOException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
 			throw new UncheckedIOException(e);
 		}
 	}
