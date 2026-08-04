@@ -30,6 +30,10 @@ public class GradleRunnerArguments implements Iterable<String> {
 		return new GradleRunnerArguments(Collections.emptyList(), null, Collections.emptyList(), DeprecationChecks.FAILS, WelcomeMessage.DISABLED, BuildCache.DISABLED, Stacktrace.SHOW, Logging.LIFECYCLE, null);
 	}
 
+	public static List<String> forTasks(Object... tasks) {
+		return create().withTasks(tasks).toList();
+	}
+
 	//region Flag `--info` configuration
 	private final Logging logging;
 

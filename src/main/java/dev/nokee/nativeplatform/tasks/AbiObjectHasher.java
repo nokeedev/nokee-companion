@@ -4,6 +4,7 @@ import dev.nokee.nativeplatform.tasks.AbiBinaryHasher.AbiBinaryHashCode;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.util.function.Consumer;
 
 /**
  * Hashes one object image occupying {@code [base, base + size)} of a channel — a standalone object file
@@ -14,4 +15,6 @@ import java.nio.channels.FileChannel;
  */
 interface AbiObjectHasher {
 	AbiBinaryHashCode hash(FileChannel channel, long base, long size) throws IOException;
+
+	void visitImports(FileChannel channel, long base, long size, Consumer<? super Object> visitor) throws IOException;
 }

@@ -9,6 +9,7 @@ import java.nio.channels.FileChannel;
 import java.util.AbstractMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Reads the undefined external symbols of a Mach-O object ({@code MH_OBJECT}) from its {@code LC_SYMTAB} —
@@ -62,6 +63,102 @@ final class MachOImportReader implements AbiBinaryHasher, AbiObjectHasher {
 		}
 
 		return new MachOImportHashCode(readImports(channel, sliceOffset, sliceMagic));
+	}
+
+	@Override
+	public void visitImports(FileChannel channel, long base, long size, Consumer<? super Object> visitor) throws IOException {
+		if (size < 4) {
+			throw new IllegalArgumentException("not a Mach-O file");
+		}
+		byte[] header = BinaryUtils.readBytes(channel, base, 4);
+		int m = asInt(header, 0);
+		if (!isMachOMagic(m)) {
+			throw new IllegalArgumentException("not a Mach-O file");
+		}
+
+		long sliceOffset = base;
+		int sliceMagic = m;
+		if (m == FAT_MAGIC || m == Integer.reverseBytes(FAT_MAGIC)) {
+			ByteBuffer fatHdr = BinaryUtils.readAt(channel, base, 8);
+			fatHdr.order(ByteOrder.BIG_ENDIAN); // fat header is always big-endian
+			int nfatArch = fatHdr.getInt(4);
+			if (nfatArch == 0) {
+				return;
+			}
+			ByteBuffer arch0 = BinaryUtils.readAt(channel, base + 8, 20);
+			arch0.order(ByteOrder.BIG_ENDIAN);
+			sliceOffset = base + (arch0.getInt(8) & 0xFFFFFFFFL);
+			sliceMagic = asInt(BinaryUtils.readBytes(channel, sliceOffset, 4), 0);
+		}
+
+		readImports(channel, sliceOffset, sliceMagic, visitor);
+	}
+
+	private void readImports(FileChannel channel, long offset, int m, Consumer<? super Object> visitor) throws IOException {
+		boolean is64;
+		ByteOrder order;
+		switch (m) {
+			case MH_MAGIC:    is64 = false; order = ByteOrder.BIG_ENDIAN;    break;
+			case MH_CIGAM:    is64 = false; order = ByteOrder.LITTLE_ENDIAN; break;
+			case MH_MAGIC_64: is64 = true;  order = ByteOrder.BIG_ENDIAN;    break;
+			case MH_CIGAM_64: is64 = true;  order = ByteOrder.LITTLE_ENDIAN; break;
+			default: throw new IllegalArgumentException("unknown Mach-O slice magic");
+		}
+
+		int hdrSize = is64 ? 32 : 28;
+		ByteBuffer hdr = BinaryUtils.readAt(channel, offset, hdrSize);
+		hdr.order(order);
+		int ncmds = hdr.getInt(16);
+		long lcOffset = offset + hdrSize;
+
+		// Symbol/string table offsets in a load command are relative to the Mach-O image (the slice) start.
+		long symoff = -1, stroff = -1;
+		int nsyms = 0, strsize = 0;
+		ByteBuffer lc = ByteBuffer.allocate(8);
+		lc.order(order);
+		for (int i = 0; i < ncmds; i++) {
+			BinaryUtils.readInto(channel, lcOffset, lc, 8);
+			int cmd = lc.getInt(0);
+			int cmdsize = lc.getInt(4);
+			if (cmdsize <= 0) break;
+
+			if (cmd == LC_SYMTAB) {
+				ByteBuffer st = BinaryUtils.readAt(channel, lcOffset, 24);
+				st.order(order);
+				symoff = offset + (st.getInt(8) & 0xFFFFFFFFL);
+				nsyms = st.getInt(12);
+				stroff = offset + (st.getInt(16) & 0xFFFFFFFFL);
+				strsize = st.getInt(20);
+			}
+
+			lcOffset += cmdsize;
+		}
+
+		if (symoff < 0 || stroff < 0 || nsyms <= 0) {
+			return; // no imports
+		}
+
+		int nlistSize = is64 ? 16 : 12;
+		long strEnd = stroff + (strsize & 0xFFFFFFFFL);
+		ByteBuffer sym = ByteBuffer.allocate(nlistSize);
+		sym.order(order);
+		for (int i = 0; i < nsyms; i++) {
+			BinaryUtils.readInto(channel, symoff + (long) i * nlistSize, sym, nlistSize);
+			int strx = sym.getInt(0);
+			int nType = sym.get(4) & 0xFF;
+			long nValue = is64 ? sym.getLong(8) : (sym.getInt(8) & 0xFFFFFFFFL);
+
+			if ((nType & N_STAB) != 0) continue;         // debug symbol
+			if ((nType & N_EXT) == 0) continue;          // not external
+			if ((nType & N_TYPE) != N_UNDF) continue;    // defined here, not an import
+			if (nValue != 0) continue;                   // common symbol (tentative definition), not an import
+			if (strx == 0) continue;
+
+			String name = BinaryUtils.readCStringAt(channel, stroff + (strx & 0xFFFFFFFFL), strEnd);
+			if (!name.isEmpty()) {
+				visitor.accept(name);
+			}
+		}
 	}
 
 	private Set<Object> readImports(FileChannel channel, long offset, int m) throws IOException {

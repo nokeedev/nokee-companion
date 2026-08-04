@@ -2,6 +2,7 @@ package dev.nokee.nativeplatform.tasks;
 
 import javax.inject.Inject;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 
 abstract /*final*/ class CachingNativeLibraryAbiExtractor implements NativeLibraryAbiExtractor {
 	private final LinkAbiCache cache;
@@ -19,5 +20,15 @@ abstract /*final*/ class CachingNativeLibraryAbiExtractor implements NativeLibra
 
 	public AbiBinaryHasher.AbiBinaryHashCode hashObject(Path library) {
 		return extractor.hashObject(library);
+	}
+
+	@Override
+	public void visitImports(Path library, Consumer<? super Object> visitor) {
+		extractor.visitImports(library, visitor);
+	}
+
+	@Override
+	public void visit(Path library, StaticOrSharedVisitor visitor) {
+		extractor.visit(library, visitor);
 	}
 }

@@ -2,6 +2,9 @@ package dev.nokee.nativeplatform.tasks;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.util.Arrays;
+import java.util.HexFormat;
+import java.util.function.Consumer;
 
 /**
  * Reads the imports of one object image by dispatching on its magic to the ELF, Mach-O or COFF import
@@ -39,6 +42,24 @@ final class ObjectFileImportReader implements AbiObjectHasher {
 		}
 		// COFF has no strong magic; the COFF reader validates the machine type and rejects anything else.
 		return coffReader.hash(channel, base, size);
+	}
+
+	@Override
+	public void visitImports(FileChannel channel, long base, long size, Consumer<? super Object> visitor) throws IOException {
+		if (size < 4) {
+			throw new IllegalArgumentException("object image too small to identify");
+		}
+		byte[] magic = BinaryUtils.readBytes(channel, base, 4);
+		if (isElfMagic(magic)) {
+			elfReader.hash(channel, base, visitor);
+		} else if (isMachOMagic(asInt(magic, 0))) {
+			machOReader.visitImports(channel, base, size, visitor);
+//			return machOReader.hash(channel, base, size);
+		} else {
+			// COFF has no strong magic; the COFF reader validates the machine type and rejects anything else.
+//		return coffReader.hash(channel, base, size);
+			throw new UnsupportedOperationException("magic " + Arrays.toString(magic));
+		}
 	}
 
 	private static boolean isElfMagic(byte[] h) {

@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Walks the members of a Unix {@code ar} archive once and applies an injected {@link AbiObjectHasher} to
@@ -63,6 +64,37 @@ final class ArchiveBinaryHasher implements AbiBinaryHasher {
 		}
 
 		return new ArchiveHashCode(members);
+	}
+
+	public void visitImports(FileChannel channel, Consumer<? super Object> visitor) throws IOException {
+		byte[] magic = BinaryUtils.readBytes(channel, 0, 8);
+		if (!isArMagic(magic)) {
+			throw new IllegalArgumentException("not an ar archive");
+		}
+
+		long size = channel.size();
+		long offset = 8; // skip !<arch>\n
+		while (offset + 60 <= size) {
+			byte[] hdr = BinaryUtils.readBytes(channel, offset, 60);
+			String name = parseArMemberName(hdr);
+			long memberSize = parseArMemberSize(hdr);
+			if (memberSize < 0) {
+				break;
+			}
+
+			long dataOffset = offset + 60;
+			offset = dataOffset + memberSize;
+			if (memberSize % 2 != 0) {
+				offset++;
+			}
+
+			// Skip only the archive's own members; "/N" is a long-named real object, not bookkeeping.
+			if (name.equals("/") || name.equals("//") || name.isEmpty()) {
+				continue;
+			}
+
+			memberHasher.visitImports(channel, dataOffset, memberSize, visitor);
+		}
 	}
 
 	private static boolean isArMagic(byte[] h) {

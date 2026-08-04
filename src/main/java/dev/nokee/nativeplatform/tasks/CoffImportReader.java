@@ -11,6 +11,7 @@ import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Reads the undefined external symbols of a COFF object ({@code .obj}) from its symbol table — the
@@ -72,6 +73,11 @@ final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
 			i += numberOfAuxSymbols; // auxiliary records follow their symbol and are not symbols themselves
 		}
 		return new CoffImportHashCode(imports);
+	}
+
+	@Override
+	public void visitImports(FileChannel channel, long base, long size, Consumer<? super Object> visitor) throws IOException {
+		throw new UnsupportedOperationException();
 	}
 
 	private static String readSymbolName(FileChannel channel, ByteBuffer symbol, long strBase, long endOffset) throws IOException {

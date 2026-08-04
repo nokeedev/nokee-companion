@@ -1,5 +1,8 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.gradle.internal.hash.HashCode;
+import org.gradle.internal.hash.Hashing;
+import org.gradle.internal.hash.PrimitiveHasher;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -51,6 +54,15 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	}
 
 	public AbiBinaryHashCode hash(FileChannel channel, long offset) throws IOException {
+		int e_type = asUnsigned(buffer.getShort(16));
+		ElfFileChannel elf = newChannel(channel, offset);
+
+		if (e_type == ET_DYN) return elf.hash();
+		if (e_type == ET_REL) return elf.hashRel();
+		throw new IllegalStateException("ELF file is not parsable (e_type=" + e_type + ")");
+	}
+
+	private ElfFileChannel newChannel(FileChannel channel, long offset) throws IOException {
 		// e_ident (first 16 bytes) is format-independent, so read the full 64-bit header size up front:
 		// a single read covers both the identification and the rest of the header, and the shorter
 		// 32-bit header (52 bytes) fits within these 64 bytes.
@@ -62,12 +74,12 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		ByteOrder order = hdr.get(EI_DATA) == ELFDATA2LSB ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 		hdr.order(order);
 
-		int e_type = asUnsigned(hdr.getShort(16));
 		ElfFileChannel elf = (is64 ? new Elf64FileChannel(channel, offset, order) : new Elf32FileChannel(channel, offset, order));
+		return elf;
+	}
 
-		if (e_type == ET_DYN) return elf.hash();
-		if (e_type == ET_REL) return elf.hashRel();
-		throw new IllegalStateException("ELF file is not parsable (e_type=" + e_type + ")");
+	public void hash(FileChannel channel, long offset, Consumer<? super Object> visitor) throws IOException {
+		newChannel(channel, offset).visitImports(visitor);
 	}
 
 	private final class Elf64FileChannel extends ElfFileChannel {
@@ -221,6 +233,27 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		abstract long sh_size(ByteBuffer buf, long off);
 		abstract int sh_link(ByteBuffer buf, long off);
 		abstract long sh_entsize(ByteBuffer buf, long off);
+
+		public void visitImports(Consumer<? super Object> visitor) throws IOException {
+			Map<Integer, SectionHeaderRef> shs = hash(rel_types);
+
+			SectionHeaderRef symtab = shs.get(SHT_SYMTAB);
+
+			MappedByteBuffer strtab = loadDynstr(symtab);
+
+			if (symtab == null) {
+				// no import table
+			} else if (strtab != null) {
+				visitGlobalOrWeakSymbols(symtab, sym -> {
+					if (sym.shndx() == SHN_UNDEF) {
+						visitor.accept(BinaryUtils.readCString(strtab, sym.name() & 0xFFFFFFFF).hashCode());
+					}
+				});
+			} else {
+				// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
+				throw new UnreadableSharedLibraryException("ELF shared library .dynsym is unreadable");
+			}
+		}
 
 		private final class SectionHeaderRef {
 			private final ByteBuffer sht;
@@ -431,6 +464,10 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			return get("name");
 		}
 
+		public int binding() {
+			return (int) get("binding");
+		}
+
 		@Override
 		public @NotNull Set<Entry<String, Object>> entrySet() {
 			return entries;
@@ -443,6 +480,11 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		public ElfHashCode(String soname, Set<ExportedSymbol> symbols) {
 			entries.add(new SimpleEntry<>("soname", soname));
 			entries.add(new SimpleEntry<>("symbols", symbols));
+		}
+
+		public ElfHashCode(String soname, HashCode hash) {
+			entries.add(new SimpleEntry<>("soname", soname));
+			entries.add(new SimpleEntry<>("symbols-hash", hash));
 		}
 
 		@Override
@@ -462,14 +504,15 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 		@Override
 		public HasExportSymbols narrowExports(Set<Object> allImports, Set<Object> unresolved) {
-			Set<ExportedSymbol> retained = new LinkedHashSet<>();
+			PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 			for (ExportedSymbol symbol : getExportedSymbols()) {
 				if (allImports.contains(symbol.getName())) {
-					retained.add(symbol);
+					hasher.putInt((Integer) symbol.getName());
+					hasher.putInt(((ElfExportedSymbol) symbol).binding());
 					unresolved.remove(symbol.getName());
 				}
 			}
-			return new ElfHashCode((String) get("soname"), retained);
+			return new ElfHashCode((String) get("soname"), hasher.hash());
 		}
 	}
 

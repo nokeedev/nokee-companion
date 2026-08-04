@@ -12,6 +12,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
+import java.util.function.Consumer;
 
 final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtractor {
 	private static final byte[] ELF_MAGIC = {0x7f, 0x45, 0x4c, 0x46};
@@ -155,6 +156,63 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 		}
 	}
 
+	@Override
+	public void visitImports(Path library, Consumer<? super Object> visitor) {
+		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
+			objectImportReader().visitImports(channel, 0, channel.size(), visitor);
+		} catch (IllegalArgumentException e) {
+			System.out.println("Exception for '" + library + "'");
+			// Object we could not parse: its imports are unknown, so narrowing must be disabled.
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		} catch (IOException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		}
+	}
+
+	@Override
+	public void visit(Path library, StaticOrSharedVisitor visitor) {
+		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
+			if (channel.size() < 8) {
+				visitor.visitUnknownLib(library);
+			}
+			byte[] header = BinaryUtils.readInto(channel, 0, buffer, 8).array();
+
+			AbiBinaryHasher hasher;
+			if (isElfMagic(header)) {
+				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) elfHasher().hash(channel));
+			} else if (isMachOMagic(header)) {
+				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) machOHasher().hash(channel));
+			} else if (isArMagic(header)) {
+				archiveHasher().visitImports(channel, visitor::visitImports);
+				visitor.visitStaticLib(library);
+				// TODO: If cannot read static lib bail to wide ABI link snapshot
+			} else {
+				visitor.visitUnknownLib(library);
+			}
+
+//			return attachLocation(hasher.hash(channel), library);
+		} catch (UnreadableSharedLibraryException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
+			// A shared library we identified but could not parse: byte-snapshot the whole file, yet keep
+			// narrowing the other libraries — it is a shared library, not an import source.
+			visitor.visitUnknownLib(library);
+		} catch (NotASharedLibraryException | IllegalArgumentException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
+			// Not the ABI we expected, or a member we could not read: conservatively treat as unknown.
+//			return new UnknownHashCode(library);
+			throw e;
+		} catch (IOException e) {
+			System.out.println("Exception for '" + library + "'");
+			e.printStackTrace();
+			throw new UncheckedIOException(e);
+		}
+	}
+
 	// Archives are byte-snapshotted, so they must carry their location; export/import symbol models do not.
 	private static AbiBinaryHashCode attachLocation(AbiBinaryHashCode model, Path library) {
 		if (model instanceof HasMembers) {
@@ -177,7 +235,7 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 		return machOHasher;
 	}
 
-	private AbiBinaryHasher archiveHasher() {
+	private ArchiveBinaryHasher archiveHasher() {
 		if (archiveHasher == null) {
 			archiveHasher = new ArchiveBinaryHasher(objectImportReader());
 		}

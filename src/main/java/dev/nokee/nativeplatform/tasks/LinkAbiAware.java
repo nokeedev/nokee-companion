@@ -9,10 +9,7 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.reflect.TypeOf;
-import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.InputFiles;
-import org.gradle.api.tasks.Internal;
-import org.gradle.api.tasks.Nested;
+import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
 
 import javax.inject.Inject;
@@ -53,20 +50,32 @@ public interface LinkAbiAware extends Task {
 		}
 
 		private static final class Result {
-			private final List<Object> values;
+			private final Collection<AbiBinaryHasher.HasExportSymbols> values;
+			private final List<Path> filesToSnapshot;
 			private final Set<Object> unresolvedImports;
 
-			private Result(List<Object> values, Set<Object> unresolvedImports) {
+			private Result(Collection<AbiBinaryHasher.HasExportSymbols> values, List<Path> filesToSnapshot, Set<Object> unresolvedImports) {
 				this.values = values;
+				this.filesToSnapshot = filesToSnapshot;
 				this.unresolvedImports = unresolvedImports;
-			}
-
-			public List<Object> get() {
-				return values;
 			}
 
 			public Set<Object> unresolvedImports() {
 				return unresolvedImports;
+			}
+		}
+
+		private static final class ImportAndLib {
+			private final List<Path> filesToSnapshot;
+			private final Set<Object> allImports;
+			private final Set<AbiBinaryHasher.HasExportSymbols> result;
+			private final AbiSnapshotter snapshotter;
+
+			public ImportAndLib(List<Path> filesToSnapshot, Set<Object> allImports, Set<AbiBinaryHasher.HasExportSymbols> result, AbiSnapshotter snapshotter) {
+				this.filesToSnapshot = filesToSnapshot;
+				this.allImports = allImports;
+				this.result = result;
+				this.snapshotter = snapshotter;
 			}
 		}
 
@@ -77,88 +86,83 @@ public interface LinkAbiAware extends Task {
 			linkLibInputs = objects.setProperty(Object.class);
 
 			final Provider<Boolean> useAbi = getUseNormalizedAbi().orElse(false);
-			SetProperty<Object> abiBin = objects.setProperty(Object.class);
-			abiBin.addAll(getSource().getElements().map(elements -> {
-				if (!useAbi.get()) return Collections.emptyList();
 
-				Set<AbiBinaryHasher.AbiBinaryHashCode> result = new LinkedHashSet<>();
+			SetProperty<Object> objImports = objects.setProperty(Object.class);
+			objImports.set(getSource().getElements().map(elements -> {
+				if (!useAbi.get()) return null;
+
+				Set<Object> result = new LinkedHashSet<>();
 				for (FileSystemLocation file : elements) {
-					AbiBinaryHasher.AbiBinaryHashCode hashcode = getAbiExtractor().hashObject(file.getAsFile().toPath());
-					result.add(hashcode);
-					if (hashcode instanceof AbiBinaryHasher.Unknown) {
+					try {
+						getAbiExtractor().visitImports(file.getAsFile().toPath(), result::add);
+					} catch (Throwable t) {
 						System.out.println("Could not parse object file '" + file.getAsFile() + "'");
-						return result; // stop early
+						return null; // stop early without imports
 					}
 				}
 				return result;
 			}));
-			abiBin.addAll(getLibs().getElements().map(elements -> {
-				if (!useAbi.get()) return elements;
+			objImports.disallowChanges();
+			objImports.finalizeValueOnRead();
 
-				Set<AbiBinaryHasher.AbiBinaryHashCode> result = new LinkedHashSet<>();
-				for (FileSystemLocation file : elements) {
-					result.add(getAbiExtractor().hash(file.getAsFile().toPath()));
+			Property<ImportAndLib> abiBin = objects.property(ImportAndLib.class);
+			abiBin.set(objImports.zip(getLibs().getElements(), (allImports, elements) -> {
+				if (!useAbi.get()) return null;
+
+				class Visitor implements StaticOrSharedVisitor {
+					AbiSnapshotter snapshotter = AbiSnapshotter.NARROW_ABI;
+					List<Path> filesToSnapshot = new ArrayList<>();
+					Set<AbiBinaryHasher.HasExportSymbols> result = new LinkedHashSet<>();
+
+					@Override
+					public void visitImports(Object symbol) {
+						if (snapshotter == AbiSnapshotter.NARROW_ABI) {
+							allImports.add(symbol);
+						}
+					}
+
+					@Override
+					public void visitStaticLib(Path path) {
+						filesToSnapshot.add(path);
+					}
+
+					@Override
+					public void visitBrokenStaticLib(Path path) {
+						snapshotter = AbiSnapshotter.FULL_ABI;
+						allImports.clear();
+					}
+
+					@Override
+					public void visitUnknownLib(Path path) {
+						filesToSnapshot.add(path);
+					}
+
+					@Override
+					public void visitSharedLib(AbiBinaryHasher.HasExportSymbols hashcode) {
+						result.add(hashcode);
+					}
 				}
-				return result;
+				Visitor visitor = new Visitor();
+				for (FileSystemLocation file : elements) {
+					getAbiExtractor().visit(file.getAsFile().toPath(), visitor);
+				}
+				return new ImportAndLib(visitor.filesToSnapshot, allImports, visitor.result, visitor.snapshotter);
 			}));
 			abiBin.disallowChanges();
 			abiBin.finalizeValueOnRead();
 
 			Property<Result> snap = objects.property(Result.class);
 			snap.set(abiBin.map(codes -> {
-				AbiSnapshotter snapshotter = AbiSnapshotter.NARROW_ABI;
-				List<Object> result = new ArrayList<>();
-				Set<Object> allImports = new HashSet<>();
-				for (Object c : codes) {
-					if (!(c instanceof AbiBinaryHasher.AbiBinaryHashCode)) {
-						result.add(c);
-						continue;
-					}
-					AbiBinaryHasher.AbiBinaryHashCode code = (AbiBinaryHasher.AbiBinaryHashCode) c;
-
-					// A file we could not classify might be an import source with unknown imports, so we can
-					// never narrow. Byte-snapshot it (when it is a library input) to stay correct.
-					if (code instanceof AbiBinaryHasher.Unknown) {
-						System.out.println("Snapshotting full ABI instead due to unknown object");
-						snapshotter = AbiSnapshotter.FULL_ABI;
-						if (code instanceof AbiBinaryHasher.HasLocation) {
-							result.add(((AbiBinaryHasher.HasLocation) code).location());
-						}
-						continue;
-					}
-
-					// Import sources (object files, static-lib members) donate the names narrowing keeps.
-					// If any importer's imports cannot be determined, the import set is incomplete and we
-					// must not narrow.
-					if (snapshotter == AbiSnapshotter.NARROW_ABI && (code.type() == AbiBinaryHasher.Type.OBJECT_FILE || code.type() == AbiBinaryHasher.Type.STATIC_LIB)) {
-						if (!collectImports(code, allImports)) {
-							System.out.println("Snapshotting full ABI due to unable to collect imports");
-							snapshotter = AbiSnapshotter.FULL_ABI;
-						}
-					}
-					if (code.type() == AbiBinaryHasher.Type.STATIC_LIB) {
-						result.add(((AbiBinaryHasher.HasLocation) code).location());
-					} else if (code.type() == AbiBinaryHasher.Type.DYNAMIC_LIB) {
-						if (code instanceof AbiBinaryHasher.HasExportSymbols) {
-							result.add(code);
-						} else {
-							result.add(((AbiBinaryHasher.HasLocation) code).location());
-						}
-					}
-					// An OBJECT_FILE contributes imports only; it is tracked as task source, not a snapshot input.
-				}
-
 				// found all imports, narrowing the ABI
-				Set<Object> unresolvedImports = new LinkedHashSet<>(allImports);
-				if (snapshotter == AbiSnapshotter.NARROW_ABI) {
-					result = result.stream().map(it -> {
-						if (it instanceof AbiBinaryHasher.HasExportSymbols) {
-							return ((AbiBinaryHasher.HasExportSymbols) it).narrowExports(allImports, unresolvedImports);
-						}
-						return it;
+				if (codes.snapshotter == AbiSnapshotter.NARROW_ABI) {
+					Set<Object> unresolvedImports = new LinkedHashSet<>(codes.allImports);
+					List<AbiBinaryHasher.HasExportSymbols> result = codes.result.stream().map(it -> {
+						return it.narrowExports(codes.allImports, unresolvedImports);
 					}).collect(Collectors.toList());
+					System.out.println("STATS " + codes.allImports.size() + " -- " + unresolvedImports.size() + " -- " + codes.snapshotter);
+					return new Result(result, codes.filesToSnapshot, unresolvedImports);
 				}
-				return new Result(result, unresolvedImports);
+				return new Result(codes.result, codes.filesToSnapshot, Collections.emptySet());
 			}));
 			snap.disallowChanges();
 			snap.finalizeValueOnRead();
@@ -166,25 +170,15 @@ public interface LinkAbiAware extends Task {
 			getUnresolvedImports().set(snap.map(it -> it.unresolvedImports()));
 
 
-			getLibraryFiles().from(getLinkLibInputs().map(it -> {
-				return it.stream().flatMap(t -> {
-					if (t instanceof File || t instanceof FileSystemLocation || t instanceof Path) {
-						return Stream.of(t);
-					}
-					return Stream.empty();
-				}).collect(Collectors.toList());
+			getLibraryFiles().from(snap.map(it -> {
+				return it.filesToSnapshot;
 			}));
-			getLibraryAbiModels().set(getLinkLibInputs().map(it -> {
-				return it.stream().flatMap(t -> {
-					if (t instanceof AbiBinaryHasher.AbiBinaryHashCode) {
-						return Stream.of((AbiBinaryHasher.AbiBinaryHashCode) t);
-					}
-					return Stream.empty();
-				}).collect(Collectors.toList());
+			getLibraryAbiModels().set(snap.map(it -> {
+				return (Collection) it.values;
 			}));
 			getLibraryAbiModels().disallowChanges();
 			getLibraryAbiModels().finalizeValueOnRead();
-			getLinkLibInputs().set(snap.map(it -> it.get()));
+//			getLinkLibInputs().set(snap.map(it -> it.values));
 //			getLinkLibInputs().set(getLibs().getElements().map(libs -> {
 //				if (useAbi.get()) {
 //					NativeLibraryAbiExtractor extractor = getAbiExtractor();
