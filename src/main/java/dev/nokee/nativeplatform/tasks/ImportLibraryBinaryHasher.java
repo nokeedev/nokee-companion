@@ -21,21 +21,21 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 	private static final int IMPORT_ORDINAL = 0;
 
 	@Override
-	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
-		byte[] magic = BinaryUtils.readBytes(channel, 0, 8);
+	public AbiBinaryHashCode hash(BSource source) throws IOException {
+		byte[] magic = BinaryUtils.readBytes(source, 0, 8);
 		if (!isArMagic(magic)) {
 			throw new IllegalArgumentException("not an ar archive");
 		}
-		if (!isWindowsImportLibrary(channel)) {
+		if (!isWindowsImportLibrary(source)) {
 			throw new NotASharedLibraryException("ar archive is not a Windows import library");
 		}
-		return parse(channel);
+		return parse(source);
 	}
 
-	private boolean isWindowsImportLibrary(FileChannel channel) throws IOException {
+	private boolean isWindowsImportLibrary(BSource source) throws IOException {
 		long offset = 8; // skip !<arch>\n
-		while (offset + 60 <= channel.size()) {
-			byte[] hdrBytes = BinaryUtils.readBytes(channel, offset, 60);
+		while (offset + 60 <= source.size()) {
+			byte[] hdrBytes = BinaryUtils.readBytes(source, offset, 60);
 			String name = parseArMemberName(hdrBytes);
 			long size = parseArMemberSize(hdrBytes);
 			if (size < 0) break;
@@ -46,21 +46,21 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 
 			if (name.startsWith("/")) continue; // skip linker and long name members
 
-			if (dataOffset + 4 > channel.size()) break;
-			byte[] sig = BinaryUtils.readBytes(channel, dataOffset, 4);
+			if (dataOffset + 4 > source.size()) break;
+			byte[] sig = BinaryUtils.readBytes(source, dataOffset, 4);
 			// IMPORT_OBJECT_HEADER: Sig1=0x0000, Sig2=0xFFFF
 			return sig[0] == 0x00 && sig[1] == 0x00 && (sig[2] & 0xFF) == 0xFF && (sig[3] & 0xFF) == 0xFF;
 		}
 		return false;
 	}
 
-	private AbiBinaryHashCode parse(FileChannel channel) throws IOException {
+	private AbiBinaryHashCode parse(BSource source) throws IOException {
 		long offset = 8; // skip !<arch>\n
 		String dllName = null;
 		Set<ExportedSymbol> symbols = new LinkedHashSet<>();
 
-		while (offset + 60 <= channel.size()) {
-			byte[] hdrBytes = BinaryUtils.readBytes(channel, offset, 60);
+		while (offset + 60 <= source.size()) {
+			byte[] hdrBytes = BinaryUtils.readBytes(source, offset, 60);
 			String memberName = parseArMemberName(hdrBytes);
 			long memberSize = parseArMemberSize(hdrBytes);
 			if (memberSize < 0) break;
@@ -72,21 +72,21 @@ final class ImportLibraryBinaryHasher implements AbiBinaryHasher {
 			if (memberName.startsWith("/")) continue; // skip linker/long-name members
 			if (memberSize < 20) continue;
 
-			byte[] sig = BinaryUtils.readBytes(channel, dataOffset, 4);
+			byte[] sig = BinaryUtils.readBytes(source, dataOffset, 4);
 			if (sig[0] != 0x00 || sig[1] != 0x00 || (sig[2] & 0xFF) != 0xFF || (sig[3] & 0xFF) != 0xFF) {
 				continue; // not a short import record
 			}
 
-			ByteBuffer importHdr = BinaryUtils.readAt(channel, dataOffset, 20);
+			ByteBuffer importHdr = BinaryUtils.readAt(source, dataOffset, 20);
 			importHdr.order(ByteOrder.LITTLE_ENDIAN);
 			int sizeOfData = importHdr.getInt(12);
 			int ordinalOrHint = importHdr.getShort(16) & 0xFFFF;
 			int typeWord = importHdr.getShort(18) & 0xFFFF;
 			int nameType = (typeWord >> 2) & 0x7;
 
-			if (sizeOfData <= 0 || dataOffset + 20 + sizeOfData > channel.size()) continue;
+			if (sizeOfData <= 0 || dataOffset + 20 + sizeOfData > source.size()) continue;
 
-			ByteBuffer strData = BinaryUtils.readAt(channel, dataOffset + 20, sizeOfData); // TODO: Use mmap
+			ByteBuffer strData = BinaryUtils.readAt(source, dataOffset + 20, sizeOfData); // TODO: Use mmap
 
 			if (nameType == IMPORT_ORDINAL) {
 				// data = dll_name\0 (no symbol name)

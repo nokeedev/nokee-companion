@@ -26,16 +26,11 @@ final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
 	private static final int SYMBOL_SIZE = 18;
 
 	@Override
-	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
-		return hash(channel, 0, channel.size());
-	}
-
-	@Override
-	public AbiBinaryHashCode hash(FileChannel channel, long base, long size) throws IOException {
-		if (size < 20) {
+	public AbiBinaryHashCode hash(BSource source) throws IOException {
+		if (source.size() < 20) {
 			throw new IllegalArgumentException("not a COFF object");
 		}
-		ByteBuffer hdr = BinaryUtils.readAt(channel, base, 20);
+		ByteBuffer hdr = BinaryUtils.readAt(source, 0, 20);
 		hdr.order(ByteOrder.LITTLE_ENDIAN);
 		int machine = hdr.getShort(0) & 0xFFFF;
 		if (!isKnownMachine(machine)) {
@@ -48,15 +43,15 @@ final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
 			return new CoffImportHashCode(Collections.emptySet());
 		}
 
-		long symBase = base + symTableOffset;
+		long symBase = symTableOffset;
 		long strBase = symBase + (long) numberOfSymbols * SYMBOL_SIZE;
-		long memberEnd = base + size;
+		long memberEnd = source.size();
 
 		Set<Object> imports = new LinkedHashSet<>();
 		ByteBuffer sym = ByteBuffer.allocate(SYMBOL_SIZE);
 		sym.order(ByteOrder.LITTLE_ENDIAN);
 		for (int i = 0; i < numberOfSymbols; i++) {
-			BinaryUtils.readInto(channel, symBase + (long) i * SYMBOL_SIZE, sym, SYMBOL_SIZE);
+			BinaryUtils.readInto(source, symBase + (long) i * SYMBOL_SIZE, sym, SYMBOL_SIZE);
 			int value = sym.getInt(8);
 			int sectionNumber = sym.getShort(12); // signed; 0 == IMAGE_SYM_UNDEFINED
 			int storageClass = sym.get(16) & 0xFF;
@@ -64,7 +59,7 @@ final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
 
 			// Undefined external with value 0 is an import; value != 0 is a common symbol (tentative definition).
 			if (sectionNumber == IMAGE_SYM_UNDEFINED && storageClass == IMAGE_SYM_CLASS_EXTERNAL && value == 0) {
-				String name = readSymbolName(channel, sym, strBase, memberEnd);
+				String name = readSymbolName(source, sym, strBase, memberEnd);
 				if (!name.isEmpty()) {
 					imports.add(name);
 				}
@@ -76,16 +71,16 @@ final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
 	}
 
 	@Override
-	public void visitImports(FileChannel channel, long base, long size, Consumer<? super Object> visitor) throws IOException {
+	public void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException {
 		throw new UnsupportedOperationException();
 	}
 
-	private static String readSymbolName(FileChannel channel, ByteBuffer symbol, long strBase, long endOffset) throws IOException {
+	private static String readSymbolName(BSource source, ByteBuffer symbol, long strBase, long endOffset) throws IOException {
 		// The 8-byte name is either an inline (NUL-padded) short name, or, when its first 4 bytes are zero,
 		// a 4-byte offset into the string table that follows the symbol table.
 		if (symbol.getInt(0) == 0) {
 			long offset = symbol.getInt(4) & 0xFFFFFFFFL;
-			return BinaryUtils.readCStringAt(channel, strBase + offset, endOffset);
+			return BinaryUtils.readCStringAt(source, strBase + offset, endOffset);
 		}
 		byte[] name = new byte[8];
 		int length = 0;

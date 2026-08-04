@@ -108,7 +108,8 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			if (channel.size() < 8) {
 				return new UnknownHashCode(library);
 			}
-			byte[] header = BinaryUtils.readInto(channel, 0, buffer, 8).array();
+			BSource source = new BSource(channel);
+			byte[] header = BinaryUtils.readInto(source, 0, buffer, 8).array();
 
 			AbiBinaryHasher hasher;
 			if (isElfMagic(header)) {
@@ -121,7 +122,7 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 				return new UnknownHashCode(library);
 			}
 
-			return attachLocation(hasher.hash(channel), library);
+			return attachLocation(hasher.hash(source), library);
 		} catch (UnreadableSharedLibraryException e) {
 			System.out.println("Exception for '" + library + "'");
 			e.printStackTrace();
@@ -143,7 +144,8 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 	@Override
 	public AbiBinaryHashCode hashObject(Path library) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
-			return objectImportReader().hash(channel, 0, channel.size());
+			BSource source = new BSource(channel);
+			return objectImportReader().hash(source);
 		} catch (IllegalArgumentException e) {
 			System.out.println("Exception for '" + library + "'");
 			// Object we could not parse: its imports are unknown, so narrowing must be disabled.
@@ -159,7 +161,8 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 	@Override
 	public void visitImports(Path library, Consumer<? super Object> visitor) {
 		try (FileChannel channel = FileChannel.open(library, StandardOpenOption.READ)) {
-			objectImportReader().visitImports(channel, 0, channel.size(), visitor);
+			BSource source = new BSource(channel);
+			objectImportReader().visitImports(source, visitor);
 		} catch (IllegalArgumentException e) {
 			System.out.println("Exception for '" + library + "'");
 			// Object we could not parse: its imports are unknown, so narrowing must be disabled.
@@ -178,15 +181,16 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			if (channel.size() < 8) {
 				visitor.visitUnknownLib(library);
 			}
-			byte[] header = BinaryUtils.readInto(channel, 0, buffer, 8).array();
+			BSource source = new BSource(channel);
+			byte[] header = BinaryUtils.readInto(source, 0, buffer, 8).array();
 
 			AbiBinaryHasher hasher;
 			if (isElfMagic(header)) {
-				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) elfHasher().hash(channel));
+				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) elfHasher().hash(source));
 			} else if (isMachOMagic(header)) {
-				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) machOHasher().hash(channel));
+				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) machOHasher().hash(source));
 			} else if (isArMagic(header)) {
-				archiveHasher().visitImports(channel, visitor::visitImports);
+				archiveHasher().visitImports(source, visitor::visitImports);
 				visitor.visitStaticLib(library);
 				// TODO: If cannot read static lib bail to wide ABI link snapshot
 			} else {

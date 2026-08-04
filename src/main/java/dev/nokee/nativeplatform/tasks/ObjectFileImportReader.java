@@ -29,31 +29,31 @@ final class ObjectFileImportReader implements AbiObjectHasher {
 	}
 
 	@Override
-	public AbiBinaryHasher.AbiBinaryHashCode hash(FileChannel channel, long base, long size) throws IOException {
-		if (size < 4) {
+	public AbiBinaryHasher.AbiBinaryHashCode hash(BSource source) throws IOException {
+		if (source.size() < 4) {
 			throw new IllegalArgumentException("object image too small to identify");
 		}
-		byte[] magic = BinaryUtils.readBytes(channel, base, 4);
+		byte[] magic = BinaryUtils.readBytes(source, 0, 4);
 		if (isElfMagic(magic)) {
-			return elfReader.hash(channel, base);
+			return elfReader.hash(source);
 		}
 		if (isMachOMagic(asInt(magic, 0))) {
-			return machOReader.hash(channel, base, size);
+			return machOReader.hash(source);
 		}
 		// COFF has no strong magic; the COFF reader validates the machine type and rejects anything else.
-		return coffReader.hash(channel, base, size);
+		return coffReader.hash(source);
 	}
 
 	@Override
-	public void visitImports(FileChannel channel, long base, long size, Consumer<? super Object> visitor) throws IOException {
-		if (size < 4) {
+	public void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException {
+		if (source.size() < 4) {
 			throw new IllegalArgumentException("object image too small to identify");
 		}
-		byte[] magic = BinaryUtils.readBytes(channel, base, 4);
+		byte[] magic = BinaryUtils.readBytes(source, 0, 4);
 		if (isElfMagic(magic)) {
-			elfReader.hash(channel, base, visitor);
+			elfReader.hash(source, visitor);
 		} else if (isMachOMagic(asInt(magic, 0))) {
-			machOReader.visitImports(channel, base, size, visitor);
+			machOReader.visitImports(source, visitor);
 //			return machOReader.hash(channel, base, size);
 		} else {
 			// COFF has no strong magic; the COFF reader validates the machine type and rejects anything else.

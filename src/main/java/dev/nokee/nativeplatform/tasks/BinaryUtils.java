@@ -10,8 +10,8 @@ import java.nio.channels.FileChannel;
 final class BinaryUtils {
 	private BinaryUtils() {}
 
-	static ByteBuffer readAt(FileChannel channel, long offset, int length) throws IOException {
-		return readInto(channel, offset, ByteBuffer.allocate(length), length);
+	static ByteBuffer readAt(BSource source, long offset, int length) throws IOException {
+		return readInto(source, offset, ByteBuffer.allocate(length), length);
 	}
 
 	/**
@@ -19,12 +19,12 @@ final class BinaryUtils {
 	 * allocating a new one. The buffer's byte order is preserved. Intended for tight loops where a fresh buffer
 	 * would otherwise be allocated per iteration; callers must not retain the buffer's contents across calls.
 	 */
-	static ByteBuffer readInto(FileChannel channel, long offset, ByteBuffer buf, int length) throws IOException {
+	static ByteBuffer readInto(BSource source, long offset, ByteBuffer buf, int length) throws IOException {
 		buf.clear();
 		buf.limit(length);
 		long pos = offset;
 		while (buf.hasRemaining()) {
-			int n = channel.read(buf, pos);
+			int n = source.read(buf, pos);
 			if (n == -1) throw new IOException("Unexpected end of file at offset " + pos);
 			pos += n;
 		}
@@ -32,8 +32,8 @@ final class BinaryUtils {
 		return buf;
 	}
 
-	static byte[] readBytes(FileChannel channel, long offset, int length) throws IOException {
-		return readAt(channel, offset, length).array();
+	static byte[] readBytes(BSource source, long offset, int length) throws IOException {
+		return readAt(source, offset, length).array();
 	}
 
 	static String readCString(ByteBuffer buf, int offset) {
@@ -122,14 +122,14 @@ final class BinaryUtils {
 	 * Reads the NUL-terminated string at {@code offset} directly from the channel, without loading the
 	 * enclosing string table. Reads are bounded by {@code endOffset} (the string table end).
 	 */
-	static String readCStringAt(FileChannel channel, long offset, long endOffset) throws IOException {
+	static String readCStringAt(BSource source, long offset, long endOffset) throws IOException {
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		ByteBuffer buf = ByteBuffer.allocate(256);
 		long pos = offset;
 		while (pos < endOffset) {
 			buf.clear();
 			buf.limit((int) Math.min(buf.capacity(), endOffset - pos));
-			int n = channel.read(buf, pos);
+			int n = source.read(buf, pos);
 			if (n <= 0) break;
 			byte[] b = buf.array();
 			for (int i = 0; i < n; i++) {

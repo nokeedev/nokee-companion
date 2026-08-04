@@ -13,7 +13,7 @@ import java.util.Set;
  * the right format but exports no shared-library ABI.
  */
 interface AbiBinaryHasher {
-	AbiBinaryHashCode hash(FileChannel channel) throws IOException;
+	AbiBinaryHashCode hash(BSource source) throws IOException;
 
 	interface HasExportSymbols {
 		/**

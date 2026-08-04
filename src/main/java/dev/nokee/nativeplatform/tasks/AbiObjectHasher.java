@@ -14,7 +14,7 @@ import java.util.function.Consumer;
  * and what to extract from it.
  */
 interface AbiObjectHasher {
-	AbiBinaryHashCode hash(FileChannel channel, long base, long size) throws IOException;
+	AbiBinaryHashCode hash(BSource source) throws IOException;
 
-	void visitImports(FileChannel channel, long base, long size, Consumer<? super Object> visitor) throws IOException;
+	void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException;
 }

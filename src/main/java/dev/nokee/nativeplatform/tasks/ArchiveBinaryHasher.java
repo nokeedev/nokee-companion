@@ -3,6 +3,7 @@ package dev.nokee.nativeplatform.tasks;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
@@ -59,17 +60,17 @@ final class ArchiveBinaryHasher implements AbiBinaryHasher {
 	}
 
 	@Override
-	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
+	public AbiBinaryHashCode hash(BSource source) throws IOException {
 		Set<AbiBinaryHashCode> members = new LinkedHashSet<>();
-		for (Member member : membersOf(channel)) {
-			members.add(memberHasher.hash(channel, member.dataOffset, member.size));
+		for (Member member : membersOf(source)) {
+			members.add(memberHasher.hash(source.slice(member.dataOffset, member.size)));
 		}
 		return new ArchiveHashCode(members);
 	}
 
-	public void visitImports(FileChannel channel, Consumer<? super Object> visitor) throws IOException {
-		for (Member member : membersOf(channel)) {
-			memberHasher.visitImports(channel, member.dataOffset, member.size, visitor);
+	public void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException {
+		for (Member member : membersOf(source)) {
+			memberHasher.visitImports(source.slice(member.dataOffset, member.size), visitor);
 		}
 	}
 
@@ -91,20 +92,20 @@ final class ArchiveBinaryHasher implements AbiBinaryHasher {
 	 * removed. Walking stops at the first malformed header rather than throwing, so a truncated archive still
 	 * yields the members that precede the damage.
 	 */
-	private static List<Member> membersOf(FileChannel channel) throws IOException {
-		byte[] magic = BinaryUtils.readBytes(channel, 0, AR_MAGIC.length);
+	private static List<Member> membersOf(BSource source) throws IOException {
+		byte[] magic = BinaryUtils.readBytes(source, 0, AR_MAGIC.length);
 		if (!isArMagic(magic)) {
 			throw new IllegalArgumentException("not an ar archive");
 		}
 
-		long fileSize = channel.size();
+		long fileSize = source.size();
 		List<Member> members = new ArrayList<>();
 		// The long-name table precedes the members referencing it, so a single pass can resolve every name.
 		byte[] longNames = null;
 
 		long offset = AR_MAGIC.length; // skip !<arch>\n
 		while (offset + HEADER_SIZE <= fileSize) {
-			byte[] hdr = BinaryUtils.readBytes(channel, offset, HEADER_SIZE);
+			byte[] hdr = BinaryUtils.readBytes(source, offset, HEADER_SIZE);
 			String name = parseArMemberName(hdr);
 			long memberSize = parseArMemberSize(hdr);
 			if (memberSize < 0) {
@@ -121,7 +122,7 @@ final class ArchiveBinaryHasher implements AbiBinaryHasher {
 			}
 
 			if (name.equals(GNU_LONG_NAME_TABLE)) {
-				longNames = readLongNameTable(channel, dataOffset, memberSize);
+				longNames = readLongNameTable(source, dataOffset, memberSize);
 				continue;
 			}
 			if (name.equals(GNU_SYMBOL_TABLE) || name.equals(GNU_SYMBOL_TABLE_64) || name.isEmpty()) {
@@ -134,7 +135,7 @@ final class ArchiveBinaryHasher implements AbiBinaryHasher {
 				if (nameLength < 0 || nameLength > memberSize) {
 					continue; // malformed extended name; there is no object to read
 				}
-				name = trimNulls(BinaryUtils.readBytes(channel, dataOffset, (int) nameLength));
+				name = trimNulls(BinaryUtils.readBytes(source, dataOffset, (int) nameLength));
 				dataOffset += nameLength;
 				memberSize -= nameLength;
 			} else if (longNames != null && name.length() > 1 && name.charAt(0) == '/') {
@@ -158,11 +159,11 @@ final class ArchiveBinaryHasher implements AbiBinaryHasher {
 		return members;
 	}
 
-	private static byte[] readLongNameTable(FileChannel channel, long dataOffset, long size) throws IOException {
+	private static byte[] readLongNameTable(BSource source, long dataOffset, long size) throws IOException {
 		if (size <= 0 || size > Integer.MAX_VALUE) {
 			return null;
 		}
-		return BinaryUtils.readBytes(channel, dataOffset, (int) size);
+		return BinaryUtils.readBytes(source, dataOffset, (int) size);
 	}
 
 	/** Reads a GNU string table entry, which runs to a {@code "/\n"} (or bare newline) terminator. */

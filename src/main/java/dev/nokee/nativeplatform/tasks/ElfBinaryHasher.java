@@ -49,24 +49,20 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	private final ByteBuffer buffer = ByteBuffer.allocate(64); // this buffer gets allocated once
 
 	@Override
-	public AbiBinaryHashCode hash(FileChannel channel) throws IOException {
-		return hash(channel, 0);
-	}
-
-	public AbiBinaryHashCode hash(FileChannel channel, long offset) throws IOException {
+	public AbiBinaryHashCode hash(BSource source) throws IOException {
+		ElfFileChannel elf = newChannel(source);
 		int e_type = asUnsigned(buffer.getShort(16));
-		ElfFileChannel elf = newChannel(channel, offset);
 
 		if (e_type == ET_DYN) return elf.hash();
 		if (e_type == ET_REL) return elf.hashRel();
 		throw new IllegalStateException("ELF file is not parsable (e_type=" + e_type + ")");
 	}
 
-	private ElfFileChannel newChannel(FileChannel channel, long offset) throws IOException {
+	private ElfFileChannel newChannel(BSource source) throws IOException {
 		// e_ident (first 16 bytes) is format-independent, so read the full 64-bit header size up front:
 		// a single read covers both the identification and the rest of the header, and the shorter
 		// 32-bit header (52 bytes) fits within these 64 bytes.
-		ByteBuffer hdr = BinaryUtils.readInto(channel, offset, buffer, 64);
+		ByteBuffer hdr = BinaryUtils.readInto(source, 0, buffer, 64);
 		if (!(hdr.get(EI_MAG0) == ELFMAG0 && hdr.get(EI_MAG1) == ELFMAG1 && hdr.get(EI_MAG2) == ELFMAG2 && hdr.get(EI_MAG3) == ELFMAG3)) {
 			throw new IllegalArgumentException("not an ELF file");
 		}
@@ -74,17 +70,17 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		ByteOrder order = hdr.get(EI_DATA) == ELFDATA2LSB ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 		hdr.order(order);
 
-		ElfFileChannel elf = (is64 ? new Elf64FileChannel(channel, offset, order) : new Elf32FileChannel(channel, offset, order));
+		ElfFileChannel elf = (is64 ? new Elf64FileChannel(source, order) : new Elf32FileChannel(source, order));
 		return elf;
 	}
 
-	public void hash(FileChannel channel, long offset, Consumer<? super Object> visitor) throws IOException {
-		newChannel(channel, offset).visitImports(visitor);
+	public void hash(BSource source, Consumer<? super Object> visitor) throws IOException {
+		newChannel(source).visitImports(visitor);
 	}
 
 	private final class Elf64FileChannel extends ElfFileChannel {
-		Elf64FileChannel(FileChannel channel, long offset, ByteOrder order) {
-			super(channel, offset, order);
+		Elf64FileChannel(BSource source, ByteOrder order) {
+			super(source, order);
 		}
 
 		@Override
@@ -149,8 +145,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	}
 
 	private final class Elf32FileChannel extends ElfFileChannel {
-		Elf32FileChannel(FileChannel channel, long offset, ByteOrder order) {
-			super(channel, offset, order);
+		Elf32FileChannel(BSource source, ByteOrder order) {
+			super(source, order);
 		}
 
 		@Override
@@ -221,8 +217,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	}
 
 	private static abstract class ElfFileChannel {
-		private final FileChannel channel;
-		private final long offset;
+		private final BSource source;
 		private final ByteOrder order;
 
 		abstract long e_shoff();
@@ -270,9 +265,8 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			long entsize() { return sh_entsize(sht, sh); }
 		}
 
-		protected ElfFileChannel(FileChannel channel, long offset, ByteOrder order) {
-			this.channel = channel;
-			this.offset = offset;
+		protected ElfFileChannel(BSource source, ByteOrder order) {
+			this.source = source;
 			this.order = order;
 		}
 
@@ -280,7 +274,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			int sh_link = ref.link();
 			if (sh_link >= 0) { // if we overflow, there will be an exception
 				int sh = sh_link * e_shentsize();
-				return channel.map(FileChannel.MapMode.READ_ONLY, offset + sh_offset(ref.sht, sh), sh_size(ref.sht, sh));
+				return source.mmap(sh_offset(ref.sht, sh), sh_size(ref.sht, sh));
 			}
 			return null;
 		}
@@ -304,7 +298,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 			Map<Integer, SectionHeaderRef> result = new HashMap<>();
 
-			ByteBuffer sht = channel.map(FileChannel.MapMode.READ_ONLY, offset + e_shoff, (long) e_shentsize * e_shnum).order(order);
+			ByteBuffer sht = source.mmap(e_shoff, (long) e_shentsize * e_shnum).order(order);
 			for (int i = 0; i < e_shnum || (result.size() != types.size()); i++) {
 				int sh = i * e_shentsize;
 				int sh_type = sht.getInt(sh + 4);
@@ -384,7 +378,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 
 			// Map the dynamic table: it is scanned entry by entry (until DT_NULL/DT_SONAME), so a mapping turns
 			// those per-entry reads into memory accesses. Each entry i is at index i * entSize into this mapping.
-			MappedByteBuffer dynamic = channel.map(FileChannel.MapMode.READ_ONLY, offset + dynOff, dynSize);
+			MappedByteBuffer dynamic = source.mmap(dynOff, dynSize);
 			dynamic.order(order);
 
 			for (int i = 0; i < count; i++) {
@@ -436,7 +430,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 			long symSize = sh.size();
 			long symEntsize = sh.entsize();
 
-			ByteBuffer symtab = channel.map(FileChannel.MapMode.READ_ONLY, offset + sh.offset(), symSize).order(order);
+			ByteBuffer symtab = source.mmap(sh.offset(), symSize).order(order);
 			SymbolRef symbol = new SymbolRef(symtab);
 
 			int count = (int) (symSize / symEntsize);
