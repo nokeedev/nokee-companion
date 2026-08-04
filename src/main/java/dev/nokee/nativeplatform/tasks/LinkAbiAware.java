@@ -1,5 +1,6 @@
 package dev.nokee.nativeplatform.tasks;
 
+import dev.nokee.commons.gradle.provider.ZipProvider;
 import org.gradle.api.Task;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileSystemLocation;
@@ -106,7 +107,7 @@ public interface LinkAbiAware extends Task {
 			objImports.finalizeValueOnRead();
 
 			Property<ImportAndLib> abiBin = objects.property(ImportAndLib.class);
-			abiBin.set(objImports.zip(getLibs().getElements(), (allImports, elements) -> {
+			abiBin.set(objects.newInstance(ZipProvider.Factory.class).zip(objImports, getLibs().getElements(), (allImports, elements) -> {
 				if (!useAbi.get()) return null;
 
 				class Visitor implements StaticOrSharedVisitor {
