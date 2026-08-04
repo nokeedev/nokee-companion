@@ -16,17 +16,17 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
 /**
- * Integration tests for Mach-O object import extraction via {@link MachOImportReader}.
+ * Integration tests for Mach-O object import extraction, the import side of {@link MachOBinaryHasher}.
  *
  * Prebuilt objects live in src/test/resources/fixtures/object-imports/. See that directory's BUILD file
  * for the commands to produce them. Mach-O C symbols carry a leading underscore.
  */
 class MachOImportReaderIntegrationTests {
-	private static final MachOImportReader reader = new MachOImportReader();
+	private static final MachOBinaryHasher reader = new MachOBinaryHasher();
 
 	private static Set<Object> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(channel);
+			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(channel, 0, channel.size());
 			assertThat(model.type(), is(AbiBinaryHasher.Type.OBJECT_FILE));
 			return ((AbiBinaryHasher.HasImportSymbols) model).getImportedSymbols();
 		}
@@ -61,8 +61,7 @@ class MachOImportReaderIntegrationTests {
 
 	private static Path fixture(String arch) {
 		try {
-			return Paths.get(MachOImportReaderIntegrationTests.class
-				.getResource("/fixtures/object-imports/macho/" + arch + "/imports.o").toURI());
+			return Paths.get(MachOImportReaderIntegrationTests.class.getResource("/fixtures/object-imports/macho/" + arch + "/imports.o").toURI());
 		} catch (Exception e) {
 			throw new RuntimeException("Fixture not found for " + arch + " — build it per the BUILD file", e);
 		}

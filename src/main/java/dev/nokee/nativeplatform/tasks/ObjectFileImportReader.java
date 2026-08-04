@@ -19,12 +19,12 @@ final class ObjectFileImportReader implements AbiObjectHasher {
 	private static final byte ELFMAG3 = 'F';
 
 	private final ElfBinaryHasher elfReader;
-	private final MachOImportReader machOReader;
+	private final MachOBinaryHasher machOReader;
 	private final CoffImportReader coffReader;
 
 	ObjectFileImportReader() {
 		this.elfReader = new ElfBinaryHasher();
-		this.machOReader = new MachOImportReader();
+		this.machOReader = new MachOBinaryHasher();
 		this.coffReader = new CoffImportReader();
 	}
 
