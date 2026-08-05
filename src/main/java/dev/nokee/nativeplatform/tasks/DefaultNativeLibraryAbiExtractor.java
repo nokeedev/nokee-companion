@@ -15,9 +15,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtractor {
-	private static final byte[] ELF_MAGIC = {0x7f, 0x45, 0x4c, 0x46};
-	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
-
 	private ElfBinaryHasher elfHasher;
 	private MachOBinaryHasher machOHasher;
 	private ArchiveBinaryHasher archiveHasher;
@@ -112,11 +109,11 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			byte[] header = BinaryUtils.readInto(source, 0, buffer, 8).array();
 
 			AbiBinaryHasher hasher;
-			if (isElfMagic(header)) {
+			if (ElfBlob.isElfMagic(header)) {
 				hasher = elfHasher();
-			} else if (isMachOMagic(header)) {
+			} else if (MachOBlob.isMachOMagic(header)) {
 				hasher = machOHasher();
-			} else if (isArMagic(header)) {
+			} else if (ArchiveBlob.isArMagic(header)) {
 				hasher = archiveHasher();
 			} else {
 				return new UnknownHashCode(library);
@@ -185,11 +182,11 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			byte[] header = BinaryUtils.readInto(source, 0, buffer, 8).array();
 
 			AbiBinaryHasher hasher;
-			if (isElfMagic(header)) {
+			if (ElfBlob.isElfMagic(header)) {
 				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) elfHasher().hash(source));
-			} else if (isMachOMagic(header)) {
+			} else if (MachOBlob.isMachOMagic(header)) {
 				visitor.visitSharedLib((AbiBinaryHasher.HasExportSymbols) machOHasher().hash(source));
-			} else if (isArMagic(header)) {
+			} else if (ArchiveBlob.isArMagic(header)) {
 				archiveHasher().visitImports(source, visitor::visitImports);
 				visitor.visitStaticLib(library);
 				// TODO: If cannot read static lib bail to wide ABI link snapshot
@@ -251,29 +248,5 @@ final class DefaultNativeLibraryAbiExtractor implements NativeLibraryAbiExtracto
 			objectImportReader = new ObjectFileImportReader();
 		}
 		return objectImportReader;
-	}
-
-	private static boolean isElfMagic(byte[] h) {
-		return h[0] == ELF_MAGIC[0] && h[1] == ELF_MAGIC[1]
-			&& h[2] == ELF_MAGIC[2] && h[3] == ELF_MAGIC[3];
-	}
-
-	private static boolean isMachOMagic(byte[] h) {
-		int m = asInt(h, 0);
-		return m == 0xFEEDFACE || m == 0xCEFAEDFE
-			|| m == 0xFEEDFACF || m == 0xCFFAEDFE
-			|| m == 0xCAFEBABE || m == Integer.reverseBytes(0xCAFEBABE);
-	}
-
-	private static boolean isArMagic(byte[] h) {
-		for (int i = 0; i < AR_MAGIC.length; i++) {
-			if (h[i] != AR_MAGIC[i]) return false;
-		}
-		return true;
-	}
-
-	private static int asInt(byte[] b, int offset) {
-		return ((b[offset] & 0xFF) << 24) | ((b[offset + 1] & 0xFF) << 16)
-			| ((b[offset + 2] & 0xFF) << 8) | (b[offset + 3] & 0xFF);
 	}
 }

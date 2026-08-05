@@ -37,7 +37,7 @@ class ObjectFileImportReaderIntegrationTests {
 	})
 	void dispatchesByMagicAndExtractsImports(String relativePath, String firstImport, String secondImport) throws IOException {
 		try (FileChannel channel = FileChannel.open(fixture(relativePath))) {
-			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(channel, 0, channel.size());
+			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(new BSource(channel));
 			assertThat(model.type(), is(AbiBinaryHasher.Type.OBJECT_FILE));
 			Set<Object> imports = ((AbiBinaryHasher.HasImportSymbols) model).getImportedSymbols();
 			assertThat(imports, hasItems(firstImport.hashCode(), secondImport.hashCode()));
@@ -56,7 +56,7 @@ class ObjectFileImportReaderIntegrationTests {
 	void extractsImportsFromEachMemberOfAStaticLibrary(String relativePath, String firstImport, String secondImport) throws IOException {
 		AbiBinaryHasher archiveReader = new ArchiveBinaryHasher(reader);
 		try (FileChannel channel = FileChannel.open(fixture(relativePath))) {
-			AbiBinaryHasher.AbiBinaryHashCode model = archiveReader.hash(channel);
+			AbiBinaryHasher.AbiBinaryHashCode model = archiveReader.hash(new BSource(channel));
 			assertThat(model.type(), is(AbiBinaryHasher.Type.STATIC_LIB));
 
 			Set<AbiBinaryHasher.AbiBinaryHashCode> members = ((AbiBinaryHasher.HasMembers) model).getMembers();

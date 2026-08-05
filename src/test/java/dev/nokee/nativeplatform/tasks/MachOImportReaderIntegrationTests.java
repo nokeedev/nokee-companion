@@ -26,7 +26,7 @@ class MachOImportReaderIntegrationTests {
 
 	private static Set<Object> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(channel, 0, channel.size());
+			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(new BSource(channel));
 			assertThat(model.type(), is(AbiBinaryHasher.Type.OBJECT_FILE));
 			return ((AbiBinaryHasher.HasImportSymbols) model).getImportedSymbols();
 		}

@@ -24,7 +24,7 @@ class MachOAbiExtractorIntegrationTests {
 
 	private static AbiBinaryHasher.AbiBinaryHashCode extract(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			return reader.hash(channel);
+			return reader.hash(new BSource(channel));
 		}
 	}
 
