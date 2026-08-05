@@ -155,4 +155,9 @@ final class BinaryUtils {
 	public static long asUnsigned(int v) {
 		return v & 0xFFFFFFFFL;
 	}
+
+	public static int requireInt(long l) {
+		if (l > 0xFFFFFFFFL) throw new IllegalArgumentException();
+		return (int) l;
+	}
 }

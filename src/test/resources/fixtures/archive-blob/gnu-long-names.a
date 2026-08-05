@@ -1,0 +1,10 @@
+!<arch>
+//                                              48        `
+a-17-chars-file.t/
+another-long-file-name.txt/
+
+/0              0           0     0     644     29        `
+a one char too long filename
+
+/19             0           0     0     644     22        `
+another long filename
