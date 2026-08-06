@@ -82,7 +82,7 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol symbol) {
-				return symbol.getName().equals(name.hashCode());
+				return symbol.getName().equals(name);
 			}
 
 			@Override
@@ -96,7 +96,7 @@ final class AbiMatchers {
 		return new TypeSafeMatcher<ExportedSymbol>() {
 			@Override
 			protected boolean matchesSafely(ExportedSymbol symbol) {
-				return symbol.getName().equals(name.hashCode())
+				return symbol.getName().equals(name)
 					&& symbol instanceof Map
 					&& Objects.equals(((Map<?, ?>) symbol).get(attributeKey), attributeValue);
 			}

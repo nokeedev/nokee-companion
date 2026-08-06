@@ -204,10 +204,10 @@ abstract class ElfBlob {
 	}
 
 	public static final class ElfStringTable {
-		private final MappedByteBuffer strtab;
+		private final ByteBuffer strtab;
 
 		public ElfStringTable(ElfSectionHeader section) {
-			strtab = section.owner().blob.source.mmap(section.offset(), section.size());
+			strtab = section.owner().blob.source.mmap(section.offset(), section.size()).order(section.owner().blob.order);
 		}
 
 		public String get(long offset) {
@@ -217,13 +217,13 @@ abstract class ElfBlob {
 	}
 
 	public static final class ElfSymbolTable implements Iterable<ElfSymbol> {
-		private final MappedByteBuffer symtab;
+		private final ByteBuffer symtab;
 		private final long size;
 		private final long entsize;
 		private final ElfBlob blob;
 
 		public ElfSymbolTable(ElfSectionHeader section) {
-			this.symtab = section.owner().blob.source.mmap(section.offset(), section.size());
+			this.symtab = section.owner().blob.source.mmap(section.offset(), section.size()).order(section.owner().blob.order);
 			this.size = section.size() / section.entsize();
 			this.entsize = section.entsize();
 			this.blob = section.owner().blob;

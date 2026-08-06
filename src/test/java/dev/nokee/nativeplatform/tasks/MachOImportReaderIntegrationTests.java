@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -26,37 +27,37 @@ class MachOImportReaderIntegrationTests {
 
 	private static Set<Object> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(new BSource(channel));
-			assertThat(model.type(), is(AbiBinaryHasher.Type.OBJECT_FILE));
-			return ((AbiBinaryHasher.HasImportSymbols) model).getImportedSymbols();
+			Set<Object> result = new LinkedHashSet<>();
+			reader.visitImports(new BSource(channel), result::add);
+			return result;
 		}
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractsUndefinedExternalFunctionsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), hasItems("_foo".hashCode(), "_bar".hashCode()));
+		assertThat(imports(fixture(arch)), hasItems("_foo", "_bar"));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractsUndefinedExternalVariableAsImport(String arch) throws IOException {
 		// A data import is an undefined external too; the reader does not filter by function-vs-data type.
-		assertThat(imports(fixture(arch)), hasItem("_gvar".hashCode()));
+		assertThat(imports(fixture(arch)), hasItem("_gvar"));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void doesNotReportDefinedExternalSymbolsAsImports(String arch) throws IOException {
 		Set<Object> imports = imports(fixture(arch));
-		assertThat(imports, not(hasItem("_entry".hashCode())));
-		assertThat(imports, not(hasItem("_local_helper").hashCode()));
+		assertThat(imports, not(hasItem("_entry")));
+		assertThat(imports, not(hasItem("_local_helper")));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void doesNotReportInternalLinkageSymbolsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), not(hasItem("_secret".hashCode())));
+		assertThat(imports(fixture(arch)), not(hasItem("_secret")));
 	}
 
 	private static Path fixture(String arch) {

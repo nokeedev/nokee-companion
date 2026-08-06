@@ -1,302 +1,625 @@
 package dev.nokee.nativeplatform.tasks;
 
-import java.io.IOException;
+import org.jetbrains.annotations.NotNull;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.function.Consumer;
+import java.util.Iterator;
 
 import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
+import static dev.nokee.nativeplatform.tasks.BinaryUtils.requireInt;
 
 /**
- * Reads both sides of a Mach-O image's ABI from its {@code LC_SYMTAB}: the external symbols a dylib
- * <em>defines</em> ({@code MH_DYLIB}, {@code MH_DYLIB_STUB}) and the undefined external symbols an object
- * <em>references</em> — what a linker resolves against. Which side is read follows the image's filetype,
- * so the same walk of the header and load commands serves a shared library and an object file.
+ * Reads a Mach-O blob down to what an ABI is made of: the symbols an image's {@code LC_SYMTAB} holds — the
+ * undefined ones an object file <em>references</em>, the external ones a dylib <em>defines</em> — and the
+ * install name its {@code LC_ID_DYLIB} carries. Nothing else of the format is modelled; which side of the
+ * symbol table to read, and what makes a symbol interesting, is left to the reader.
  *
- * <p>Reads the image at {@code [base, base + size)} rather than the whole channel, so a standalone object
- * and an archive member are handled the same way. A fat binary is resolved to its first architecture.
+ * <p>{@link #parse(BSource)} dispatches on the magic and returns one of the two shapes a Mach-O blob takes:
+ *
+ * <ul>
+ *   <li>a {@link MachOUniversalBlob}, which has no image of its own — only a table of the
+ *       {@link MachOUniversalBlob#architectures() architectures} it holds, each an image parsed back through
+ *       this same method, so an image nested in a fat binary reads exactly as the standalone file of that
+ *       architecture would;</li>
+ *   <li>a {@link MachOImageBlob}, one architecture-specific image. Its 32- and 64-bit forms are read the same
+ *       way; only the header size and the shape of an {@code nlist} entry differ.</li>
+ * </ul>
+ *
+ * <p>Everything is read relative to the {@link BSource}, never to the enclosing channel, so a standalone file,
+ * an archive member and a slice of a fat binary are all handled the same way.
  */
-final class MachOBlob {
+// Care was taken to avoid as many condition and allocation as possible
+abstract class MachOBlob {
 	private static final int MH_MAGIC = 0xFEEDFACE;
 	private static final int MH_CIGAM = 0xCEFAEDFE;
 	private static final int MH_MAGIC_64 = 0xFEEDFACF;
 	private static final int MH_CIGAM_64 = 0xCFFAEDFE;
 	private static final int FAT_MAGIC = 0xCAFEBABE;
-
-	private static final int MH_DYLIB = 6;
-	private static final int MH_DYLIB_STUB = 9;
+	private static final int FAT_CIGAM = 0xBEBAFECA;
+	private static final int FAT_MAGIC_64 = 0xCAFEBABF;
+	private static final int FAT_CIGAM_64 = 0xBFBAFECA;
 
 	private static final int LC_SYMTAB = 0x2;
 	private static final int LC_DYSYMTAB = 0xB;
 	private static final int LC_ID_DYLIB = 0xD;
 
-	private static final int N_STAB = 0xe0;
-	private static final int N_EXT = 0x01;
-	private static final int N_TYPE = 0x0e;
-	private static final int N_UNDF = 0x00;
-	private static final int N_WEAK_DEF = 0x0080;
+	private static final int FAT_HEADER_SIZE = 8; // in bytes
+	private static final int FAT_ARCH_SIZE = 20; // in bytes
+	private static final int FAT_ARCH_64_SIZE = 32; // in bytes
+	private static final int MACH_HEADER_SIZE = 28; // in bytes
+	private static final int MACH_HEADER_64_SIZE = 32; // in bytes
+	private static final int LOAD_COMMAND_SIZE = 8; // in bytes, the cmd/cmdsize pair every load command starts with
+	private static final int NLIST_SIZE = 12; // in bytes
+	private static final int NLIST_64_SIZE = 16; // in bytes
 
 	public static boolean isMachOMagic(byte[] h) {
 		return isMachOMagic(asInt(h, 0));
 	}
 
-	public static MachOBlob parse(BSource blob) {
-		throw new UnsupportedOperationException();
-	}
-
-//	/** Reads a whole file, which is expected to be a shared library. */
-//	@Override
-//	public AbiBinaryHashCode hash(BSource source) throws IOException {
-//		long sliceOffset = sliceOffsetOf(source);
-//		if (sliceOffset < 0) {
-//			throw new NotASharedLibraryException("Mach-O fat binary has no architectures");
-//		}
-//		Slice slice = readSlice(source, sliceOffset);
-//		if (slice == null) {
-//			throw new NotASharedLibraryException("unknown Mach-O slice magic");
-//		}
-//		if (!slice.isDylib()) {
-//			throw new NotASharedLibraryException("Mach-O file is not a dylib (filetype=" + slice.filetype + ")");
-//		}
-//		return exportsOf(source, slice);
-//	}
-
-//	/**
-//	 * Reads one image — a standalone object file ({@code base == 0}) or an archive member — and returns the
-//	 * side of its ABI that its filetype calls for: a dylib's exports, anything else's imports.
-//	 */
-//	@Override
-//	public AbiBinaryHashCode hash(BSource source) throws IOException {
-//		requireIdentifiable(source.size());
-//		long sliceOffset = sliceOffsetOf(source);
-//		if (sliceOffset < 0) {
-//			return new MachOImportHashCode(new LinkedHashSet<>());
-//		}
-//		Slice slice = requireSlice(source, sliceOffset);
-//		if (slice.isDylib()) {
-//			return exportsOf(source, slice);
-//		}
-//
-//		Set<Object> imports = new LinkedHashSet<>();
-//		visitImports(source, slice, imports::add);
-//		return new MachOImportHashCode(imports);
-//	}
-
-//	@Override
-//	public void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException {
-//		requireIdentifiable(source.size());
-//		long sliceOffset = sliceOffsetOf(source);
-//		if (sliceOffset < 0) {
-//			return;
-//		}
-//		visitImports(source, requireSlice(source, sliceOffset), visitor);
-//	}
-
-	private static void requireIdentifiable(long size) {
-		if (size < 4) {
+	/**
+	 * Reads the magic at the start of the source and returns the blob it calls for: a universal container, or the
+	 * single image the source holds. The magic also fixes the byte order every later read uses — a byte-swapped
+	 * magic ({@code MH_CIGAM}, {@code FAT_CIGAM}) is what says the fields that follow are little-endian.
+	 */
+	public static MachOBlob parse(BSource source) {
+		// The largest header we may need is a 64-bit mach_header (32 bytes); a fat header (8 bytes) and a 32-bit
+		// mach_header (28 bytes) both fit within it, so a single read covers every form the magic may select.
+		ByteBuffer hdr = source.read(MACH_HEADER_64_SIZE);
+		if (hdr.limit() < FAT_HEADER_SIZE) {
 			throw new IllegalArgumentException("not a Mach-O file");
+		}
+
+		// The magic constants are spelled as the bytes appear on disk, hence the big-endian read: the buffer's
+		// order is only fixed once the magic says which order the blob is written in.
+		switch (hdr.getInt(0)) {
+			case FAT_MAGIC:    return new Fat32Blob(hdr, source, ByteOrder.BIG_ENDIAN);
+			case FAT_CIGAM:    return new Fat32Blob(hdr, source, ByteOrder.LITTLE_ENDIAN);
+			case FAT_MAGIC_64: return new Fat64Blob(hdr, source, ByteOrder.BIG_ENDIAN);
+			case FAT_CIGAM_64: return new Fat64Blob(hdr, source, ByteOrder.LITTLE_ENDIAN);
+			case MH_MAGIC:     return new MachO32Blob(hdr, source, ByteOrder.BIG_ENDIAN);
+			case MH_CIGAM:     return new MachO32Blob(hdr, source, ByteOrder.LITTLE_ENDIAN);
+			case MH_MAGIC_64:  return new MachO64Blob(hdr, source, ByteOrder.BIG_ENDIAN);
+			case MH_CIGAM_64:  return new MachO64Blob(hdr, source, ByteOrder.LITTLE_ENDIAN);
+			default: throw new IllegalArgumentException("not a Mach-O file");
 		}
 	}
 
 	/**
-	 * Resolves the image to read: the one at {@code base}, or the first architecture of a fat binary.
-	 * Returns {@code -1} when a fat binary declares no architectures — there is nothing to read, which the
-	 * callers report in the terms their own contract calls for.
+	 * A universal ("fat") binary: a container that has no header, load command or symbol of its own, only a table
+	 * of the images it holds. Reading an ABI out of one means picking one of its
+	 * {@link #architectures() architectures} and reading that image.
 	 */
-	private static long sliceOffsetOf(BSource source) throws IOException {
-		int m = asInt(BinaryUtils.readBytes(source, 0, 4), 0);
-		if (!isMachOMagic(m)) {
-			throw new IllegalArgumentException("not a Mach-O file");
-		}
-		if (m != FAT_MAGIC && m != Integer.reverseBytes(FAT_MAGIC)) {
-			return 0;
+	public static abstract class MachOUniversalBlob extends MachOBlob {
+		MachOUniversalBlob(ByteBuffer hdr, BSource source, ByteOrder order) {
+			super(hdr.order(order), source, order);
 		}
 
-		ByteBuffer fatHdr = BinaryUtils.readAt(source, 0, 8);
-		fatHdr.order(ByteOrder.BIG_ENDIAN); // a fat header is always big-endian
-		if (fatHdr.getInt(4) == 0) {
-			return -1;
+		public MachOArchitectureTable architectures() {
+			return new MachOArchitectureTable(this);
 		}
-		// fat_arch[0]: cputype(4), cpusubtype(4), offset(4), size(4), align(4)
-		ByteBuffer arch0 = BinaryUtils.readAt(source, 8, 20);
-		arch0.order(ByteOrder.BIG_ENDIAN);
-		return asUnsigned(arch0.getInt(8));
-	}
 
-	private static Slice requireSlice(BSource source, long offset) throws IOException {
-		Slice slice = readSlice(source, offset);
-		if (slice == null) {
-			throw new IllegalArgumentException("unknown Mach-O slice magic");
+		/** Number of architectures the container declares ({@code nfat_arch}). */
+		public int nfat_arch() {
+			return hdr.getInt(4);
 		}
-		return slice;
+
+		/** Size of one entry of the architecture table. */
+		protected abstract int fa_entsize();
+
+		protected abstract long fa_offset(ByteBuffer buf, long off);
+		protected abstract long fa_size(ByteBuffer buf, long off);
 	}
 
 	/**
-	 * Reads a slice's header and walks its load commands once, collecting everything either side of the ABI
-	 * needs. Returns {@code null} when the magic is not one of the four Mach-O forms.
+	 * The images a universal binary holds, one per architecture. An entry is nothing but the range of the source
+	 * its image occupies, so it is handed back as the image itself: the range becomes a slice, and the slice is
+	 * parsed through {@link MachOBlob#parse(BSource)} exactly as the standalone file of that architecture would be.
 	 */
-	private static Slice readSlice(BSource source, long offset) throws IOException {
-		boolean is64;
-		ByteOrder order;
-		switch (asInt(BinaryUtils.readBytes(source, offset, 4), 0)) {
-			case MH_MAGIC:    is64 = false; order = ByteOrder.BIG_ENDIAN;    break;
-			case MH_CIGAM:    is64 = false; order = ByteOrder.LITTLE_ENDIAN; break;
-			case MH_MAGIC_64: is64 = true;  order = ByteOrder.BIG_ENDIAN;    break;
-			case MH_CIGAM_64: is64 = true;  order = ByteOrder.LITTLE_ENDIAN; break;
-			default: return null;
+	public static final class MachOArchitectureTable implements Iterable<MachOImageBlob> {
+		private final MachOUniversalBlob blob;
+		private final int nfat_arch;
+		private final int fa_entsize;
+		private ByteBuffer fat = null;
+
+		public MachOArchitectureTable(MachOUniversalBlob blob) {
+			this.blob = blob;
+			this.nfat_arch = blob.nfat_arch();
+			this.fa_entsize = blob.fa_entsize();
 		}
 
-		int hdrSize = is64 ? 32 : 28;
-		ByteBuffer hdr = BinaryUtils.readAt(source, offset, hdrSize);
-		hdr.order(order);
+		public MachOUniversalBlob owner() {
+			return blob;
+		}
 
-		Slice slice = new Slice(offset, is64, order, hdr.getInt(12));
-		int ncmds = hdr.getInt(16);
-		long lcOffset = offset + hdrSize;
+		public long size() {
+			return nfat_arch;
+		}
 
-		// Reuse a single buffer for the per-command header peek instead of allocating one per load command.
-		ByteBuffer lc = ByteBuffer.allocate(8);
-		lc.order(order);
-		for (int i = 0; i < ncmds; i++) {
-			BinaryUtils.readInto(source, lcOffset, lc, 8);
-			int cmd = lc.getInt(0);
-			int cmdsize = lc.getInt(4);
-			if (cmdsize <= 0) break;
+		private ByteBuffer fat() {
+			if (fat == null) {
+				// The table sits right after the fat header and is walked entry by entry, so a single mapping
+				// turns every per-entry read into a memory access.
+				fat = blob.source.mmap(FAT_HEADER_SIZE, (long) fa_entsize * nfat_arch).order(blob.order);
+			}
 
-			if (cmd == LC_ID_DYLIB) {
-				ByteBuffer dylibCmd = BinaryUtils.readAt(source, lcOffset, cmdsize);
-				dylibCmd.order(order);
-				int nameOffset = dylibCmd.getInt(8);
-				if (nameOffset < cmdsize) {
-					slice.installName = BinaryUtils.readCString(dylibCmd, nameOffset);
+			return fat;
+		}
+
+		public MachOImageBlob get(int index) {
+			return image(fat(), (long) index * fa_entsize);
+		}
+
+		@Override
+		public Iterator<MachOImageBlob> iterator() {
+			final ByteBuffer fat = fat();
+			return new Iterator<MachOImageBlob>() {
+				private int i = 0;
+
+				@Override
+				public boolean hasNext() {
+					return i < nfat_arch;
 				}
-			} else if (cmd == LC_SYMTAB) {
-				ByteBuffer st = BinaryUtils.readAt(source, lcOffset, 24);
-				st.order(order);
-				// Table offsets in a load command are relative to the Mach-O image (the slice) start.
-				slice.symoff = offset + asUnsigned(st.getInt(8));
-				slice.nsyms = st.getInt(12);
-				slice.stroff = offset + asUnsigned(st.getInt(16));
-				slice.strsize = st.getInt(20);
-				slice.hasSymtab = true;
-			} else if (cmd == LC_DYSYMTAB) {
-				ByteBuffer dst = BinaryUtils.readAt(source, lcOffset, 24);
-				dst.order(order);
-				slice.iextdefsym = dst.getInt(16);
-				slice.nextdefsym = dst.getInt(20);
-				slice.hasDysymtab = true;
-			}
 
-			lcOffset += cmdsize;
+				@Override
+				public MachOImageBlob next() {
+					return image(fat, (long) i++ * fa_entsize);
+				}
+			};
 		}
 
-		return slice;
-	}
-
-//	/** Collects the external symbols the dylib defines — the exports a dependent link resolves against. */
-//	private static AbiBinaryHashCode exportsOf(BSource source, Slice slice) throws IOException {
-//		if (!slice.hasSymtab || slice.nsyms <= 0) {
-//			// No symbol table to read: we cannot determine the dylib's exports.
-//			throw new UnreadableSharedLibraryException("Mach-O dylib has no readable symbol table");
-//		}
-//
-//		Set<ExportedSymbol> symbols = new LinkedHashSet<>();
-//
-//		// LC_DYSYMTAB groups the externally defined symbols into one run; without it, scan them all.
-//		int start = slice.hasDysymtab ? slice.iextdefsym : 0;
-//		int end = slice.hasDysymtab ? Math.min(slice.iextdefsym + slice.nextdefsym, slice.nsyms) : slice.nsyms;
-//
-//		int nlistSize = slice.nlistSize();
-//		long strEnd = slice.strEnd();
-//		// Reuse a single nlist-sized buffer across all symbols instead of allocating one per entry.
-//		ByteBuffer sym = ByteBuffer.allocate(nlistSize);
-//		sym.order(slice.order);
-//		for (int i = start; i < end; i++) {
-//			BinaryUtils.readInto(source, slice.symoff + (long) i * nlistSize, sym, nlistSize);
-//			int strx = sym.getInt(0);
-//			int nType = asUnsigned(sym.get(4));
-//			int nDesc = asUnsigned(sym.getShort(6));
-//
-//			if ((nType & N_STAB) != 0) continue;         // debug symbol
-//			if ((nType & N_EXT) == 0) continue;          // not external
-//			if ((nType & N_TYPE) == N_UNDF) continue;    // referenced here, not defined
-//
-//			// Read each name on demand from the string table instead of loading the whole table.
-//			String name = BinaryUtils.readCStringAt(source, slice.stroff + asUnsigned(strx), strEnd);
-//			if (!name.isEmpty()) {
-//				symbols.add(new MachOExportedSymbol(name, (nDesc & N_WEAK_DEF) != 0));
-//			}
-//		}
-//
-//		return new MachOHashCode(slice.installName, symbols);
-//	}
-
-	/** Visits the undefined external symbols the image references — the imports a link must resolve. */
-	private static void visitImports(BSource source, Slice slice, Consumer<? super Object> visitor) throws IOException {
-		if (!slice.hasSymtab || slice.nsyms <= 0) {
-			return; // no imports
-		}
-
-		int nlistSize = slice.nlistSize();
-		long strEnd = slice.strEnd();
-		ByteBuffer sym = ByteBuffer.allocate(nlistSize);
-		sym.order(slice.order);
-		for (int i = 0; i < slice.nsyms; i++) {
-			BinaryUtils.readInto(source, slice.symoff + (long) i * nlistSize, sym, nlistSize);
-			int strx = sym.getInt(0);
-			int nType = asUnsigned(sym.get(4));
-			long nValue = slice.is64 ? sym.getLong(8) : asUnsigned(sym.getInt(8));
-
-			if ((nType & N_STAB) != 0) continue;         // debug symbol
-			if ((nType & N_EXT) == 0) continue;          // not external
-			if ((nType & N_TYPE) != N_UNDF) continue;    // defined here, not an import
-			if (nValue != 0) continue;                   // common symbol (tentative definition), not an import
-			if (strx == 0) continue;
-
-			String name = BinaryUtils.readCStringAt(source, slice.stroff + asUnsigned(strx), strEnd);
-			if (!name.isEmpty()) {
-				visitor.accept(name);
-			}
+		/** Parses the image the entry at {@code arch} points at; a universal binary never nests another one. */
+		private MachOImageBlob image(ByteBuffer fat, long arch) {
+			return (MachOImageBlob) parse(blob.source.slice(blob.fa_offset(fat, arch), blob.fa_size(fat, arch)));
 		}
 	}
 
-	/** One Mach-O image: its header facts plus what its load commands pointed at. */
-	private static final class Slice {
-		private final long offset;
-		private final boolean is64;
-		private final ByteOrder order;
-		private final int filetype;
-
-		private String installName;
-		private boolean hasSymtab;
-		private long symoff = -1, stroff = -1;
-		private int nsyms, strsize;
-		private boolean hasDysymtab;
-		private int iextdefsym, nextdefsym;
-
-		private Slice(long offset, boolean is64, ByteOrder order, int filetype) {
-			this.offset = offset;
-			this.is64 = is64;
-			this.order = order;
-			this.filetype = filetype;
+	/**
+	 * One architecture-specific Mach-O image, read through its header and the load commands that follow it.
+	 * Only the header size and the shape of an {@code nlist} entry separate the 32- and 64-bit forms.
+	 */
+	public static abstract class MachOImageBlob extends MachOBlob {
+		MachOImageBlob(ByteBuffer hdr, BSource source, ByteOrder order) {
+			super(hdr.order(order), source, order);
 		}
 
-		private boolean isDylib() {
-			return filetype == MH_DYLIB || filetype == MH_DYLIB_STUB;
+		public MachOHeader header() {
+			return new MachOHeader();
 		}
 
-		private int nlistSize() {
-			return is64 ? 16 : 12;
+		public MachOLoadCommandTable loadCommands() {
+			return new MachOLoadCommandTable(this);
 		}
 
-		private long strEnd() {
-			return stroff + asUnsigned(strsize);
+		public final class MachOHeader {
+			/** What the image is — {@code MH_OBJECT}, {@code MH_DYLIB}, {@code MH_DYLIB_STUB}, and so on. */
+			public int filetype() {
+				return MachOImageBlob.this.filetype();
+			}
 		}
+
+		protected int filetype() {
+			return hdr.getInt(12);
+		}
+
+		/** Number of load commands that follow the header. */
+		protected int ncmds() {
+			return hdr.getInt(16);
+		}
+
+		/** Size in bytes of all the load commands taken together. */
+		protected long sizeofcmds() {
+			return asUnsigned(hdr.getInt(20));
+		}
+
+		/** Size of the header, which is also the offset of the first load command. */
+		protected abstract int headerSize();
+
+		/** Size of one {@code nlist} entry of the symbol table. */
+		protected abstract int nlistSize();
+
+		protected long n_strx(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off)));
+		}
+
+		protected int n_type(ByteBuffer buf, long off) {
+			return asUnsigned(buf.get(requireInt(off + 4)));
+		}
+
+		protected int n_desc(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getShort(requireInt(off + 6)));
+		}
+
+		protected abstract long n_value(ByteBuffer buf, long off);
+	}
+
+	/**
+	 * The load commands of an image, in the order they appear. A load command carries its own size rather than
+	 * belonging to a fixed-size table, so the commands are reachable only by walking them from the first.
+	 */
+	public static final class MachOLoadCommandTable implements Iterable<MachOLoadCommand> {
+		private final MachOImageBlob blob;
+		private final int ncmds;
+		private final long sizeofcmds;
+		private ByteBuffer lc = null;
+
+		public MachOLoadCommandTable(MachOImageBlob blob) {
+			this.blob = blob;
+			this.ncmds = blob.ncmds();
+			this.sizeofcmds = blob.sizeofcmds();
+		}
+
+		public MachOImageBlob owner() {
+			return blob;
+		}
+
+		public long size() {
+			return ncmds;
+		}
+
+		private ByteBuffer lc() {
+			if (lc == null) {
+				// Every command is read out of this region — the walk itself, then whatever fields a reader asks
+				// for — so it is mapped once rather than read command by command.
+				lc = blob.source.mmap(blob.headerSize(), sizeofcmds).order(blob.order);
+			}
+
+			return lc;
+		}
+
+		@Override
+		public Iterator<MachOLoadCommand> iterator() {
+			final ByteBuffer lc = lc();
+			return new Iterator<MachOLoadCommand>() {
+				private int i = 0;
+				private long off = 0;
+
+				@Override
+				public boolean hasNext() {
+					if (i >= ncmds || off + LOAD_COMMAND_SIZE > sizeofcmds) return false;
+
+					// A cmdsize that would not advance, or would walk past the commands, ends the walk: what
+					// follows cannot be read as a load command.
+					long cmdsize = asUnsigned(lc.getInt(requireInt(off + 4)));
+					return cmdsize >= LOAD_COMMAND_SIZE && off + cmdsize <= sizeofcmds;
+				}
+
+				@Override
+				public MachOLoadCommand next() {
+					MachOLoadCommand command = command(lc, off);
+					i++;
+					off += command.cmdsize();
+					return command;
+				}
+			};
+		}
+
+		/** Returns the command at {@code off} as whatever its {@code cmd} makes it, or a plain command otherwise. */
+		private MachOLoadCommand command(ByteBuffer lc, long off) {
+			switch (lc.getInt(requireInt(off))) {
+				case LC_SYMTAB:   return new MachOSymtabCommand(this, lc, off);
+				case LC_DYSYMTAB: return new MachODysymtabCommand(this, lc, off);
+				case LC_ID_DYLIB: return new MachODylibCommand(this, lc, off);
+				default:          return new MachOLoadCommand(this, lc, off);
+			}
+		}
+	}
+
+	public static class MachOLoadCommand {
+		private final MachOLoadCommandTable owner;
+		/** The mapped load command region, shared by every command of the image. */
+		private final ByteBuffer lc;
+		/** Base offset of this load command within that region. */
+		private final long off;
+
+		MachOLoadCommand(MachOLoadCommandTable owner, ByteBuffer lc, long off) {
+			this.owner = owner;
+			this.lc = lc;
+			this.off = off;
+		}
+
+		public MachOLoadCommandTable owner() {
+			return owner;
+		}
+
+		public int cmd() {
+			return lc.getInt(requireInt(off));
+		}
+
+		public long cmdsize() {
+			return asUnsigned(lc.getInt(requireInt(off + 4)));
+		}
+
+		protected int int32(int field) {
+			return lc.getInt(requireInt(off + field));
+		}
+
+		protected long uint32(int field) {
+			return asUnsigned(lc.getInt(requireInt(off + field)));
+		}
+
+		/**
+		 * Reads the {@code lc_str} at {@code field}: an offset from the start of the command to a string that runs
+		 * to the end of the command. Returns {@literal null} when the offset points outside the command.
+		 */
+		protected String string(int field) {
+			long strOffset = uint32(field);
+			long cmdsize = cmdsize();
+			if (strOffset >= cmdsize) return null;
+			return BinaryUtils.readCString(lc, requireInt(off + strOffset), requireInt(off + cmdsize));
+		}
+	}
+
+	/**
+	 * {@code LC_SYMTAB}: where the image's symbol table and its string table live. Both are offsets from the start
+	 * of the image, which is what the blob's source is anchored on.
+	 */
+	public static final class MachOSymtabCommand extends MachOLoadCommand {
+		MachOSymtabCommand(MachOLoadCommandTable owner, ByteBuffer lc, long off) {
+			super(owner, lc, off);
+		}
+
+		private long symoff() {
+			return uint32(8);
+		}
+
+		private int nsyms() {
+			return int32(12);
+		}
+
+		private long stroff() {
+			return uint32(16);
+		}
+
+		private long strsize() {
+			return uint32(20);
+		}
+
+		public MachOSymbolTable symbols() {
+			return new MachOSymbolTable(this);
+		}
+
+		public MachOStringTable strings() {
+			return new MachOStringTable(this);
+		}
+	}
+
+	/**
+	 * {@code LC_DYSYMTAB}: the runs the symbol table is grouped into. The symbols an image defines externally —
+	 * a dylib's exports — are the {@code nextdefsym} entries starting at {@code iextdefsym}.
+	 */
+	public static final class MachODysymtabCommand extends MachOLoadCommand {
+		MachODysymtabCommand(MachOLoadCommandTable owner, ByteBuffer lc, long off) {
+			super(owner, lc, off);
+		}
+
+		public int iextdefsym() {
+			return int32(16);
+		}
+
+		public int nextdefsym() {
+			return int32(20);
+		}
+	}
+
+	/** {@code LC_ID_DYLIB}: the install name a dylib records for itself. */
+	public static final class MachODylibCommand extends MachOLoadCommand {
+		MachODylibCommand(MachOLoadCommandTable owner, ByteBuffer lc, long off) {
+			super(owner, lc, off);
+		}
+
+		/** The install name, or {@literal null} when the command does not hold one. */
+		public String name() {
+			return string(8);
+		}
+	}
+
+	public static final class MachOSymbolTable implements Iterable<MachOSymbol> {
+		private final MachOImageBlob blob;
+		private final ByteBuffer symtab;
+		private final int nsyms;
+		private final int nlistSize;
+
+		public MachOSymbolTable(MachOSymtabCommand command) {
+			this.blob = command.owner().owner();
+			this.nlistSize = blob.nlistSize();
+			this.nsyms = command.nsyms();
+			this.symtab = blob.source.mmap(command.symoff(), (long) nsyms * nlistSize).order(blob.order);
+		}
+
+		public long size() {
+			return nsyms;
+		}
+
+		/** The entry at {@code index}, which is how a {@code LC_DYSYMTAB} run is read without walking the rest. */
+		public MachOSymbol get(int index) {
+			return symbol((long) index * nlistSize);
+		}
+
+		@Override
+		public Iterator<MachOSymbol> iterator() {
+			return new Iterator<MachOSymbol>() {
+				private int i = 0;
+
+				@Override
+				public boolean hasNext() {
+					return i < nsyms;
+				}
+
+				@Override
+				public MachOSymbol next() {
+					return symbol((long) i++ * nlistSize);
+				}
+			};
+		}
+
+		private MachOSymbol symbol(long sym) {
+			return new MachOSymbol() {
+				@Override
+				public long strx() {
+					return blob.n_strx(symtab, sym);
+				}
+
+				@Override
+				public int type() {
+					return blob.n_type(symtab, sym);
+				}
+
+				@Override
+				public int desc() {
+					return blob.n_desc(symtab, sym);
+				}
+
+				@Override
+				public long value() {
+					return blob.n_value(symtab, sym);
+				}
+			};
+		}
+
+		public Iterable<MachOSymbol> range(int fromIndex, int toIndex) {
+			// TODO: Check within bounds
+			return new Iterable<MachOSymbol>() {
+				@Override
+				public Iterator<MachOSymbol> iterator() {
+					return new Iterator<MachOSymbol>() {
+						private int i = fromIndex;
+
+						@Override
+						public boolean hasNext() {
+							return i < toIndex;
+						}
+
+						@Override
+						public MachOSymbol next() {
+							return symbol((long) i++ * nlistSize);
+						}
+					};
+				}
+			};
+		}
+	}
+
+	/** One {@code nlist} entry; its name is the {@link #strx() index} into the {@link MachOStringTable}. */
+	public interface MachOSymbol {
+		long strx();
+		int type();
+		int desc();
+		long value();
+	}
+
+	public static final class MachOStringTable {
+		private final ByteBuffer strtab;
+
+		public MachOStringTable(MachOSymtabCommand command) {
+			MachOImageBlob blob = command.owner().owner();
+			this.strtab = blob.source.mmap(command.stroff(), command.strsize());
+		}
+
+		public String get(long offset) {
+			return BinaryUtils.readCString(strtab, requireInt(offset));
+		}
+	}
+
+	/** A universal binary whose table is made of {@code fat_arch_64} entries, with 64-bit offset and size. */
+	private static final class Fat64Blob extends MachOUniversalBlob {
+		Fat64Blob(ByteBuffer hdr, BSource source, ByteOrder order) {
+			super(hdr, source, order);
+		}
+
+		@Override
+		protected int fa_entsize() {
+			return FAT_ARCH_64_SIZE;
+		}
+
+		@Override
+		protected long fa_offset(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 8));
+		}
+
+		@Override
+		protected long fa_size(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 16));
+		}
+	}
+
+	/** A universal binary whose table is made of {@code fat_arch} entries, with 32-bit offset and size. */
+	private static final class Fat32Blob extends MachOUniversalBlob {
+		Fat32Blob(ByteBuffer hdr, BSource source, ByteOrder order) {
+			super(hdr, source, order);
+		}
+
+		@Override
+		protected int fa_entsize() {
+			return FAT_ARCH_SIZE;
+		}
+
+		@Override
+		protected long fa_offset(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 8)));
+		}
+
+		@Override
+		protected long fa_size(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 12)));
+		}
+	}
+
+	private static final class MachO64Blob extends MachOImageBlob {
+		MachO64Blob(ByteBuffer hdr, BSource source, ByteOrder order) {
+			super(hdr, source, order);
+		}
+
+		@Override
+		protected int headerSize() {
+			return MACH_HEADER_64_SIZE;
+		}
+
+		@Override
+		protected int nlistSize() {
+			return NLIST_64_SIZE;
+		}
+
+		@Override
+		protected long n_value(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 8));
+		}
+	}
+
+	private static final class MachO32Blob extends MachOImageBlob {
+		MachO32Blob(ByteBuffer hdr, BSource source, ByteOrder order) {
+			super(hdr, source, order);
+		}
+
+		@Override
+		protected int headerSize() {
+			return MACH_HEADER_SIZE;
+		}
+
+		@Override
+		protected int nlistSize() {
+			return NLIST_SIZE;
+		}
+
+		@Override
+		protected long n_value(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 8)));
+		}
+	}
+
+	protected final ByteBuffer hdr;
+	/*private*/ final BSource source;
+	/*private*/ final ByteOrder order;
+
+	protected MachOBlob(ByteBuffer hdr, BSource source, ByteOrder order) {
+		this.hdr = hdr;
+		this.source = source;
+		this.order = order;
 	}
 
 	private static boolean isMachOMagic(int m) {
 		return m == MH_MAGIC || m == MH_CIGAM || m == MH_MAGIC_64 || m == MH_CIGAM_64
-			|| m == FAT_MAGIC || m == Integer.reverseBytes(FAT_MAGIC);
+			|| m == FAT_MAGIC || m == FAT_CIGAM || m == FAT_MAGIC_64 || m == FAT_CIGAM_64;
 	}
 
 	private static int asInt(byte[] b, int offset) {

@@ -7,13 +7,11 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.*;
 
 /**
  * Integration tests for ELF relocatable-object import extraction via {@link ElfBinaryHasher}.
@@ -26,37 +24,37 @@ class ElfImportReaderIntegrationTests {
 
 	private static Set<Object> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(new BSource(channel));
-			assertThat(model.type(), is(AbiBinaryHasher.Type.OBJECT_FILE));
-			return ((AbiBinaryHasher.HasImportSymbols) model).getImportedSymbols();
+			Set<Object> result = new LinkedHashSet<>();
+			reader.visitImports(ElfBlob.parse(new BSource(channel)), result::add);
+			return result;
 		}
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void extractsUndefinedExternalFunctionsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), hasItems("foo".hashCode(), "bar".hashCode()));
+		assertThat(imports(fixture(arch)), hasItems("foo", "bar"));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void extractsUndefinedExternalVariableAsImport(String arch) throws IOException {
 		// A data import is an undefined external too; the reader does not filter by function-vs-data type.
-		assertThat(imports(fixture(arch)), hasItem("gvar".hashCode()));
+		assertThat(imports(fixture(arch)), hasItem("gvar"));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void doesNotReportDefinedExternalSymbolsAsImports(String arch) throws IOException {
 		Set<Object> imports = imports(fixture(arch));
-		assertThat(imports, not(hasItem("entry".hashCode())));
-		assertThat(imports, not(hasItem("local_helper".hashCode())));
+		assertThat(imports, not(hasItem("entry")));
+		assertThat(imports, not(hasItem("local_helper")));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void doesNotReportInternalLinkageSymbolsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), not(hasItem("secret".hashCode())));
+		assertThat(imports(fixture(arch)), not(hasItem("secret")));
 	}
 
 	private static Path fixture(String arch) {

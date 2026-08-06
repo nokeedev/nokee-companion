@@ -85,7 +85,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 				if (sym.shndx() != SHN_UNDEF) {
 					String name = strtab.get(sym.name() & 0xFFFFFFFF);
 					if (!name.isEmpty()) {
-						symbols.add(new ElfExportedSymbol(name.hashCode(), sym.binding()));
+						symbols.add(new ElfExportedSymbol(name, sym.binding()));
 					}
 				}
 			});
@@ -110,7 +110,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		} else if (strtab != null) {
 			visitGlobalOrWeakSymbols(symtab, sym -> {
 				if (sym.shndx() == SHN_UNDEF) {
-					symbols.add(strtab.get(sym.name() & 0xFFFFFFFF).hashCode());
+					symbols.add(strtab.get(sym.name() & 0xFFFFFFFF));
 				}
 			});
 		} else {
@@ -133,7 +133,10 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		} else if (strtab != null) {
 			visitGlobalOrWeakSymbols(symtab, sym -> {
 				if (sym.shndx() == SHN_UNDEF) {
-					visitor.accept(strtab.get(sym.name() & 0xFFFFFFFF).hashCode());
+					String name = strtab.get(sym.name() & 0xFFFFFFFF);
+					if (!name.isEmpty()) {
+						visitor.accept(name);
+					}
 				}
 			});
 		} else {

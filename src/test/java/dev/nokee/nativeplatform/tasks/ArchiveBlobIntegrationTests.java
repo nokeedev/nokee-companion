@@ -97,6 +97,9 @@ class ArchiveBlobIntegrationTests {
 		});
 	}
 
+	// TODO: Add test for proper static library (with object files)
+	//   Test win, macos, linux style
+
 	private static String toString(BSource s) {
 		ByteBuffer buf = ByteBuffer.allocate((int) s.size());
 		s.read(buf);

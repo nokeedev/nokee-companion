@@ -6,9 +6,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.util.AbstractMap;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 
 import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
@@ -22,6 +20,7 @@ import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
  * <p>Reads the image at {@code [base, base + size)} rather than the whole channel, so a standalone object
  * and an archive member are handled the same way. A fat binary is resolved to its first architecture.
  */
+// TODO: migrate this as premade walker/reader/visitor for what we need (object file -> import, dylib -> exports)
 final class MachOBinaryHasher implements AbiBinaryHasher, AbiObjectHasher {
 	private static final int MH_MAGIC = 0xFEEDFACE;
 	private static final int MH_CIGAM = 0xCEFAEDFE;
@@ -45,18 +44,80 @@ final class MachOBinaryHasher implements AbiBinaryHasher, AbiObjectHasher {
 	/** Reads a whole file, which is expected to be a shared library. */
 	@Override
 	public AbiBinaryHashCode hash(BSource source) throws IOException {
-		long sliceOffset = sliceOffsetOf(source);
-		if (sliceOffset < 0) {
-			throw new NotASharedLibraryException("Mach-O fat binary has no architectures");
+		MachOBlob blob = MachOBlob.parse(source);
+
+		List<String> installNames = new ArrayList<>();
+		Set<ExportedSymbol> exports = new LinkedHashSet<>();
+		if (blob instanceof MachOBlob.MachOUniversalBlob) {
+			for (MachOBlob.MachOImageBlob architecture : ((MachOBlob.MachOUniversalBlob) blob).architectures()) {
+				hash(architecture, new ExportOrInstallNameVisitor() {
+					@Override
+					public void visitInstallName(String installName) {
+						installNames.add(installName);
+					}
+
+					@Override
+					public void visitExportSymbol(ExportedSymbol obj) {
+						exports.add(obj);
+					}
+				});
+			}
+		} else if (blob instanceof MachOBlob.MachOImageBlob) {
+			hash((MachOBlob.MachOImageBlob) blob, new ExportOrInstallNameVisitor() {
+				@Override
+				public void visitInstallName(String installName) {
+					installNames.add(installName);
+				}
+
+				@Override
+				public void visitExportSymbol(ExportedSymbol obj) {
+					exports.add(obj);
+				}
+			});
 		}
-		Slice slice = readSlice(source, sliceOffset);
-		if (slice == null) {
-			throw new NotASharedLibraryException("unknown Mach-O slice magic");
+
+		return new MachOHashCode(String.join("\0", installNames), exports);
+	}
+
+	interface ExportOrInstallNameVisitor {
+		void visitInstallName(String installName);
+		void visitExportSymbol(ExportedSymbol obj);
+	}
+
+	private void hash(MachOBlob.MachOImageBlob image, ExportOrInstallNameVisitor visitor) {
+		MachOBlob.MachOSymtabCommand symtab = null;
+		MachOBlob.MachODysymtabCommand dysymtab = null;
+		for (MachOBlob.MachOLoadCommand loadCommand : image.loadCommands()) {
+			if (loadCommand instanceof MachOBlob.MachODylibCommand) {
+				visitor.visitInstallName(((MachOBlob.MachODylibCommand) loadCommand).name());
+			} else if (loadCommand instanceof MachOBlob.MachOSymtabCommand) {
+				symtab = (MachOBlob.MachOSymtabCommand) loadCommand;
+			} else if (loadCommand instanceof MachOBlob.MachODysymtabCommand) {
+				dysymtab = (MachOBlob.MachODysymtabCommand) loadCommand;
+			}
+
+			if (symtab != null && dysymtab != null) {
+				break;
+			}
 		}
-		if (!slice.isDylib()) {
-			throw new NotASharedLibraryException("Mach-O file is not a dylib (filetype=" + slice.filetype + ")");
+
+		assert symtab != null;
+		assert dysymtab != null;
+
+		MachOBlob.MachOStringTable strtab = symtab.strings();
+
+		for (MachOBlob.MachOSymbol symbol : symtab.symbols().range(dysymtab.iextdefsym(), dysymtab.iextdefsym() + dysymtab.nextdefsym())) {
+			int nType = symbol.type();
+			if ((nType & N_STAB) != 0) continue;         // debug symbol
+			if ((nType & N_EXT) == 0) continue;          // not external
+			if ((nType & N_TYPE) == N_UNDF) continue;    // referenced here, not defined
+
+			// Read each name on demand from the string table instead of loading the whole table.
+			String name = strtab.get(symbol.strx());
+			if (!name.isEmpty()) {
+				visitor.visitExportSymbol(new MachOExportedSymbol(name, (symbol.desc() & N_WEAK_DEF) != 0));
+			}
 		}
-		return exportsOf(source, slice);
 	}
 
 //	/**
@@ -82,12 +143,54 @@ final class MachOBinaryHasher implements AbiBinaryHasher, AbiObjectHasher {
 
 	@Override
 	public void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException {
-		requireIdentifiable(source.size());
-		long sliceOffset = sliceOffsetOf(source);
-		if (sliceOffset < 0) {
-			return;
+		MachOBlob blob = MachOBlob.parse(source);
+
+		if (blob instanceof MachOBlob.MachOUniversalBlob) {
+			for (MachOBlob.MachOImageBlob architecture : ((MachOBlob.MachOUniversalBlob) blob).architectures()) {
+				visitImports(architecture, visitor);
+			}
+		} else if (blob instanceof MachOBlob.MachOImageBlob) {
+			visitImports((MachOBlob.MachOImageBlob) blob, visitor);
 		}
-		visitImports(source, requireSlice(source, sliceOffset), visitor);
+	}
+
+	private void visitImports(MachOBlob.MachOImageBlob image, Consumer<? super Object> visitor) {
+		MachOBlob.MachOSymtabCommand symtab = null;
+		MachOBlob.MachODysymtabCommand dysymtab = null;
+		for (MachOBlob.MachOLoadCommand loadCommand : image.loadCommands()) {
+			if (loadCommand instanceof MachOBlob.MachOSymtabCommand) {
+				symtab = (MachOBlob.MachOSymtabCommand) loadCommand;
+			} else if (loadCommand instanceof MachOBlob.MachODysymtabCommand) {
+				dysymtab = (MachOBlob.MachODysymtabCommand) loadCommand;
+			}
+
+			if (symtab != null && dysymtab != null) {
+				break;
+			}
+		}
+
+		assert symtab != null;
+		assert dysymtab != null;
+
+		MachOBlob.MachOStringTable strtab = symtab.strings();
+
+		for (MachOBlob.MachOSymbol symbol : symtab.symbols()) {
+
+			int nType = symbol.type();
+			long nValue = symbol.value();
+
+			if ((nType & N_STAB) != 0) continue;         // debug symbol
+			if ((nType & N_EXT) == 0) continue;          // not external
+			if ((nType & N_TYPE) != N_UNDF) continue;    // defined here, not an import
+			if (nValue != 0) continue;                   // common symbol (tentative definition), not an import
+//			if (strx == 0) continue;
+
+			// Read each name on demand from the string table instead of loading the whole table.
+			String name = strtab.get(symbol.strx());
+			if (!name.isEmpty()) {
+				visitor.accept(name);
+			}
+		}
 	}
 
 	private static void requireIdentifiable(long size) {

@@ -88,6 +88,31 @@ public interface LinkAbiAware extends Task {
 
 			final Provider<Boolean> useAbi = getUseNormalizedAbi().orElse(false);
 
+			// == Step 1
+			// transform all source into:
+			//   - extract all import symbols
+			//   -> warns on static lib
+			//   -> bail out on shared lib -> fucking weird, should not do this (revert to snapshot everything like before)
+			// transform all libs into:
+			//   - extract all import symbols from obj/static lib
+			//   - each object file, add path in list of file to snapshot
+			//   - each static lib, hash each object in the archive by static lib name
+			//   - each shared lib, track a list of shared lib
+			//   - bail out on any failure to parse -> wide ABI link snapshot
+
+			// == Step 2
+			//  - wrap import symbols into trackable set
+			//  - for each shared lib -> narrow exported ABI (mark used import symbols) -> generate HashCode for the shared lib
+			//  - for failed shared lib parsing -> snapshot the whole file
+			//  - drop any used import symbols to keep unused symbols
+
+			// == Step 3
+			// split the data into:
+			//  - @Input map of relative path to static lib to HashCode of object files
+			//  - @Input set of unresolved symbols
+			//  - @InputFiles set of failed parsed shared libs
+			//  - @Input map of relative path to shared lib to HashCode of link ABI
+
 			SetProperty<Object> objImports = objects.setProperty(Object.class);
 			objImports.set(getSource().getElements().map(elements -> {
 				if (!useAbi.get()) return null;
