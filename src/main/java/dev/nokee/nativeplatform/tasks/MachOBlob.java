@@ -40,6 +40,10 @@ abstract class MachOBlob {
 	private static final int FAT_MAGIC_64 = 0xCAFEBABF;
 	private static final int FAT_CIGAM_64 = 0xBFBAFECA;
 
+	public static final int MH_OBJECT = 1;
+	public static final int MH_DYLIB = 6;
+	public static final int MH_DYLIB_STUB = 9;
+
 	private static final int LC_SYMTAB = 0x2;
 	private static final int LC_DYSYMTAB = 0xB;
 	private static final int LC_ID_DYLIB = 0xD;

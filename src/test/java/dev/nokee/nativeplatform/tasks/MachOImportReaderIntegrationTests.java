@@ -25,10 +25,10 @@ import static org.hamcrest.Matchers.not;
 class MachOImportReaderIntegrationTests {
 	private static final MachOBinaryHasher reader = new MachOBinaryHasher();
 
-	private static Set<Object> imports(Path path) throws IOException {
+	private static Set<String> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			Set<Object> result = new LinkedHashSet<>();
-			reader.visitImports(new BSource(channel), result::add);
+			Set<String> result = new LinkedHashSet<>();
+			reader.visitImports(MachOBlob.parse(new BSource(channel)), result::add);
 			return result;
 		}
 	}
@@ -49,7 +49,7 @@ class MachOImportReaderIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void doesNotReportDefinedExternalSymbolsAsImports(String arch) throws IOException {
-		Set<Object> imports = imports(fixture(arch));
+		Set<String> imports = imports(fixture(arch));
 		assertThat(imports, not(hasItem("_entry")));
 		assertThat(imports, not(hasItem("_local_helper")));
 	}

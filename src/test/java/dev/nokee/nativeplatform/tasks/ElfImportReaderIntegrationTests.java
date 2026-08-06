@@ -22,9 +22,9 @@ import static org.hamcrest.Matchers.*;
 class ElfImportReaderIntegrationTests {
 	private static final ElfBinaryHasher reader = new ElfBinaryHasher();
 
-	private static Set<Object> imports(Path path) throws IOException {
+	private static Set<String> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			Set<Object> result = new LinkedHashSet<>();
+			Set<String> result = new LinkedHashSet<>();
 			reader.visitImports(ElfBlob.parse(new BSource(channel)), result::add);
 			return result;
 		}
@@ -46,7 +46,7 @@ class ElfImportReaderIntegrationTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64" })
 	void doesNotReportDefinedExternalSymbolsAsImports(String arch) throws IOException {
-		Set<Object> imports = imports(fixture(arch));
+		Set<String> imports = imports(fixture(arch));
 		assertThat(imports, not(hasItem("entry")));
 		assertThat(imports, not(hasItem("local_helper")));
 	}

@@ -40,7 +40,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		dyn_types.add(SHT_DYNSYM);
 	}
 
-	private ElfBlob.ElfStringTable loadDynstr(ElfBlob.ElfSectionHeader ref) throws IOException {
+	private ElfBlob.ElfStringTable loadDynstr(ElfBlob.ElfSectionHeader ref) {
 		int sh_link = ref.link();
 		if (sh_link >= 0) { // if we overflow, there will be an exception
 			return new ElfBlob.ElfStringTable(ref.owner().get(sh_link));
@@ -48,7 +48,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		return null;
 	}
 
-	public Map<Integer, ElfBlob.ElfSectionHeader> hash(ElfBlob blob, Set<Integer> types) throws IOException {
+	public Map<Integer, ElfBlob.ElfSectionHeader> hash(ElfBlob blob, Set<Integer> types) {
 		ElfBlob.ElfSectionTable sections = blob.sections();
 		Map<Integer, ElfBlob.ElfSectionHeader> result = new HashMap<>();
 
@@ -121,7 +121,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 		return new ElfImportHashCode(symbols);
 	}
 
-	public void visitImports(ElfBlob blob, Consumer<? super Object> visitor) throws IOException {
+	public void visitImports(ElfBlob blob, Consumer<? super String> visitor) {
 		Map<Integer, ElfBlob.ElfSectionHeader> shs = hash(blob, rel_types);
 
 		ElfBlob.ElfSectionHeader symtab = shs.get(SHT_SYMTAB);
@@ -136,6 +136,40 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 					String name = strtab.get(sym.name() & 0xFFFFFFFF);
 					if (!name.isEmpty()) {
 						visitor.accept(name);
+					}
+				}
+			});
+		} else {
+			// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
+			throw new UnreadableSharedLibraryException("ELF shared library .dynsym is unreadable");
+		}
+	}
+
+	public interface SonameAndExportVisitor {
+		void visitSoname(String soname);
+		void visitExport(String name, int binding);
+	}
+
+	public void visitSharedLib(ElfBlob blob, SonameAndExportVisitor visitor) throws IOException {
+		Map<Integer, ElfBlob.ElfSectionHeader> shs = hash(blob, dyn_types);
+
+		ElfBlob.ElfSectionHeader dynamic = shs.get(SHT_DYNAMIC);
+		ElfBlob.ElfSectionHeader dynsym = shs.get(SHT_DYNSYM);
+
+		ElfBlob.ElfStringTable strtab = loadDynstr(dynsym);
+
+		if (dynamic != null && strtab != null) {
+			visitor.visitSoname(extractSoname(blob, strtab, dynamic.offset(), dynamic.size()));
+		}
+
+		if (dynsym == null) {
+			// no exprted symbols
+		} else if (strtab != null) {
+			visitGlobalOrWeakSymbols(dynsym, sym -> {
+				if (sym.shndx() != SHN_UNDEF) {
+					String name = strtab.get(sym.name() & 0xFFFFFFFF);
+					if (!name.isEmpty()) {
+						visitor.visitExport(name, sym.binding());
 					}
 				}
 			});
@@ -167,7 +201,7 @@ final class ElfBinaryHasher implements AbiBinaryHasher {
 	}
 
 
-	private void visitGlobalOrWeakSymbols(ElfBlob.ElfSectionHeader sh, Consumer<? super ElfBlob.ElfSymbol> visitor) throws IOException {
+	private void visitGlobalOrWeakSymbols(ElfBlob.ElfSectionHeader sh, Consumer<? super ElfBlob.ElfSymbol> visitor) {
 		ElfBlob.ElfSymbolTable symtab = new ElfBlob.ElfSymbolTable(sh);
 		for (ElfBlob.ElfSymbol sym : symtab) { // entry 0 is always STN_UNDEF
 			int binding = sym.binding();

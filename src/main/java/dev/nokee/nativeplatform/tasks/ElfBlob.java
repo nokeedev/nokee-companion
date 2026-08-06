@@ -28,8 +28,8 @@ abstract class ElfBlob {
 
 	private static final byte ELFDATA2LSB = 1; // little endian value of e_ident[EI_DATA]
 
-	private static final int ET_REL = 1; // for e_type
-	private static final int ET_DYN = 3; // for e_type
+	public static final int ET_REL = 1; // for e_type
+	public static final int ET_DYN = 3; // for e_type
 	private static final int SHT_SYMTAB = 2; // for sh_type
 	private static final int SHT_DYNAMIC = 6; // for sh_type
 	private static final int SHT_DYNSYM = 11; // for sh_type
