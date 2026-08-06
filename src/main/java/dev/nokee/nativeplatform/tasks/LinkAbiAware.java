@@ -36,7 +36,6 @@ public interface LinkAbiAware extends Task {
 		if (!getExt_linkAbi().isPresent()) { // safe as we control the lifecycle
 			ObjectFactory objects = getProject().getObjects();
 			LinkAbiExtension extension = objects.newInstance(LinkAbiExtension.class);
-			extension.getLinkAbiCache().set(getProject().getGradle().getSharedServices().registerIfAbsent("link-abi-cache", LinkAbiCache.class));
 			getExt_linkAbi().set(extension);
 		}
 
@@ -44,10 +43,6 @@ public interface LinkAbiAware extends Task {
 	}
 
 	abstract /*final*/ class LinkAbiExtension {
-		@Internal
-		protected abstract Property<LinkAbiCache> getLinkAbiCache();
-
-//		private SetProperty<Object> linkLibInputs;
 		private SetProperty<Object> unresolved;
 		private SetProperty<Object> hashes;
 

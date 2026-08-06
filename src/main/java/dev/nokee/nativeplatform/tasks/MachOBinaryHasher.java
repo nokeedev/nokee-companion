@@ -3,12 +3,9 @@ package dev.nokee.nativeplatform.tasks;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.*;
-import java.util.function.Consumer;
 
-import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
+import static dev.nokee.nativeplatform.tasks.MachOBlob.*;
 
 /**
  * Reads both sides of a Mach-O image's ABI from its {@code LC_SYMTAB}: the external symbols a dylib
@@ -20,21 +17,7 @@ import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
  * and an archive member are handled the same way. A fat binary is resolved to its first architecture.
  */
 // TODO: migrate this as premade walker/reader/visitor for what we need (object file -> import, dylib -> exports)
-final class MachOBinaryHasher implements AbiBinaryHasher, AbiObjectHasher {
-	private static final int MH_MAGIC = 0xFEEDFACE;
-	private static final int MH_CIGAM = 0xCEFAEDFE;
-	private static final int MH_MAGIC_64 = 0xFEEDFACF;
-	private static final int MH_CIGAM_64 = 0xCFFAEDFE;
-	private static final int FAT_MAGIC = 0xCAFEBABE;
-
-	private static final int MH_OBJECT = 1;
-	private static final int MH_DYLIB = 6;
-	private static final int MH_DYLIB_STUB = 9;
-
-	private static final int LC_SYMTAB = 0x2;
-	private static final int LC_DYSYMTAB = 0xB;
-	private static final int LC_ID_DYLIB = 0xD;
-
+final class MachOBinaryHasher implements AbiBinaryHasher {
 	private static final int N_STAB = 0xe0;
 	private static final int N_EXT = 0x01;
 	private static final int N_TYPE = 0x0e;
@@ -116,11 +99,6 @@ final class MachOBinaryHasher implements AbiBinaryHasher, AbiObjectHasher {
 				visitor.visitExportSymbol(name, (symbol.desc() & N_WEAK_DEF) != 0);
 			}
 		}
-	}
-
-	@Override
-	public void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException {
-		visitImports(MachOBlob.parse(source), visitor::accept);
 	}
 
 	public void visitImports(MachOBlob blob, ImportVisitor visitor) {

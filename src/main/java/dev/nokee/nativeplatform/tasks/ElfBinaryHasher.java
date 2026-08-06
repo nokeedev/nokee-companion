@@ -10,10 +10,11 @@ import java.nio.MappedByteBuffer;
 import java.util.*;
 import java.util.function.Consumer;
 
+import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_DYN;
+import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_REL;
+
 // Care was taken to avoid as many condition and allocation as possible
 final class ElfBinaryHasher implements AbiBinaryHasher {
-	private static final int ET_REL = 1; // for e_type
-	private static final int ET_DYN = 3; // for e_type
 	private static final int SHT_SYMTAB = 2; // for sh_type
 	private static final int SHT_DYNAMIC = 6; // for sh_type
 	private static final int SHT_DYNSYM = 11; // for sh_type

@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * {@link IllegalArgumentException}. Reads the object image at {@code [base, base + size)} so a standalone
  * object and an archive member are handled the same way. COFF is always little-endian.
  */
-final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
+final class CoffImportReader implements AbiBinaryHasher {
 	private static final int IMAGE_SYM_UNDEFINED = 0;
 	private static final int IMAGE_SYM_CLASS_EXTERNAL = 2;
 	private static final int SYMBOL_SIZE = 18;
@@ -68,11 +68,6 @@ final class CoffImportReader implements AbiBinaryHasher, AbiObjectHasher {
 			i += numberOfAuxSymbols; // auxiliary records follow their symbol and are not symbols themselves
 		}
 		return new CoffImportHashCode(imports);
-	}
-
-	@Override
-	public void visitImports(BSource source, Consumer<? super Object> visitor) throws IOException {
-		throw new UnsupportedOperationException();
 	}
 
 	private static String readSymbolName(BSource source, ByteBuffer symbol, long strBase, long endOffset) throws IOException {
