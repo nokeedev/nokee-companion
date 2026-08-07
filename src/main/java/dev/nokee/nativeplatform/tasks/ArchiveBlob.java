@@ -124,6 +124,7 @@ final class ArchiveBlob {
 								if (lntOffset != -1) {
 									return lnt.read(requireInt(lntOffset));
 								} else if (extendedSize == 0) {
+									// TODO: Do not use hdr in case keep a copy of the object, note that all object cannot survive the FileChannel being closed
 									return newString(hdr.array(), 0, gnutrim(hdr.array(), 0, NAME_LENGTH));
 								} else {
 									return readExtName(requireInt(extendedSize));
