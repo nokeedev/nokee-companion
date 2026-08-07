@@ -1,10 +1,5 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.jetbrains.annotations.NotNull;
-
-import java.io.IOException;
-import java.util.*;
-
 import static dev.nokee.nativeplatform.tasks.MachOBlob.*;
 
 /**
@@ -17,32 +12,12 @@ import static dev.nokee.nativeplatform.tasks.MachOBlob.*;
  * and an archive member are handled the same way. A fat binary is resolved to its first architecture.
  */
 // TODO: migrate this as premade walker/reader/visitor for what we need (object file -> import, dylib -> exports)
-final class MachOBinaryHasher implements AbiBinaryHasher {
+final class MachOBinaryHasher {
 	private static final int N_STAB = 0xe0;
 	private static final int N_EXT = 0x01;
 	private static final int N_TYPE = 0x0e;
 	private static final int N_UNDF = 0x00;
 	private static final int N_WEAK_DEF = 0x0080;
-
-	/** Reads a whole file, which is expected to be a shared library. */
-	@Override
-	public AbiBinaryHashCode hash(BSource source) throws IOException {
-		MachOBlob blob = MachOBlob.parse(source);
-		List<String> installNames = new ArrayList<>();
-		Set<ExportedSymbol> exports = new LinkedHashSet<>();
-		visitSharedLib(blob, new ExportOrInstallNameVisitor() {
-			@Override
-			public void visitInstallName(String installName) {
-				installNames.add(installName);
-			}
-
-			@Override
-			public void visitExportSymbol(String name, boolean weakBinding) {
-				exports.add(new MachOExportedSymbol(name, weakBinding));
-			}
-		});
-		return new MachOHashCode(String.join("\0", installNames), exports);
-	}
 
 	public void visitSharedLib(MachOBlob blob, ExportOrInstallNameVisitor visitor) {
 		if (blob instanceof MachOBlob.MachOUniversalBlob) {
@@ -142,86 +117,6 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 			if (!name.isEmpty()) {
 				visitor.visitImportSymbol(name);
 			}
-		}
-	}
-
-	private static final class MachOExportedSymbol extends AbstractMap<String, Object> implements ExportedSymbol {
-		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
-
-		public MachOExportedSymbol(String name, boolean isWeakBinding) {
-			entries.add(new SimpleEntry<>("name", name));
-			entries.add(new SimpleEntry<>("isWeakBinding", isWeakBinding));
-		}
-
-		@Override
-		public Object getName() {
-			return get("name");
-		}
-
-		@Override
-		public @NotNull Set<Entry<String, Object>> entrySet() {
-			return entries;
-		}
-	}
-
-	private static final class MachOHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasExportSymbols {
-		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
-
-		public MachOHashCode(String installName, Set<ExportedSymbol> symbols) {
-			entries.add(new SimpleEntry<>("installName", installName));
-			entries.add(new SimpleEntry<>("symbols", symbols));
-		}
-
-		@Override
-		public Type type() {
-			return Type.DYNAMIC_LIB;
-		}
-
-		@Override
-		public @NotNull Set<Entry<String, Object>> entrySet() {
-			return entries;
-		}
-
-		@Override
-		@SuppressWarnings("unchecked")
-		public Set<ExportedSymbol> getExportedSymbols() {
-			return (Set<ExportedSymbol>) get("symbols");
-		}
-
-		@Override
-		public HasExportSymbols narrowExports(Set<Object> allImports, Set<Object> unresolved) {
-			Set<ExportedSymbol> retained = new LinkedHashSet<>();
-			for (ExportedSymbol symbol : getExportedSymbols()) {
-				if (allImports.contains(symbol.getName())) {
-					retained.add(symbol);
-					unresolved.remove(symbol.getName());
-				}
-			}
-			return new MachOHashCode((String) get("installName"), retained);
-		}
-	}
-
-	private static final class MachOImportHashCode extends AbstractMap<String, Object> implements AbiBinaryHashCode, HasImportSymbols {
-		private final Set<Entry<String, Object>> entries = new LinkedHashSet<>();
-
-		MachOImportHashCode(Set<Object> importedSymbols) {
-			entries.add(new SimpleEntry<>("symbols", importedSymbols));
-		}
-
-		@Override
-		public Type type() {
-			return Type.OBJECT_FILE;
-		}
-
-		@Override
-		@SuppressWarnings("unchecked")
-		public Set<Object> getImportedSymbols() {
-			return (Set<Object>) get("symbols");
-		}
-
-		@Override
-		public @NotNull Set<Entry<String, Object>> entrySet() {
-			return entries;
 		}
 	}
 }

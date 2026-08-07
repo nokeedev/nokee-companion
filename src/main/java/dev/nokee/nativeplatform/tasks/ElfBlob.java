@@ -105,7 +105,7 @@ abstract class ElfBlob {
 				// TODO: Do we need this?
 				if (e_shoff == 0 || e_shnum == 0 || e_shentsize == 0) {
 					// No section headers: this reader resolves exports through them, so we cannot read the ABI.
-					throw new UnreadableSharedLibraryException("ELF shared library has no section headers");
+					throw new RuntimeException("ELF shared library has no section headers");
 				}
 
 				sht = blob.source.mmap(e_shoff, (long) e_shentsize * e_shnum).order(blob.order);

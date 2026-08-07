@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 import static dev.nokee.commons.hamcrest.gradle.ThrowableMatchers.throwsException;
 import static dev.nokee.nativeplatform.tasks.AbiMatchers.*;
@@ -22,40 +25,54 @@ import static org.hamcrest.Matchers.*;
 class MachOAbiExtractorIntegrationTests {
 	private static final MachOBinaryHasher reader = new MachOBinaryHasher();
 
-	private static AbiBinaryHasher.AbiBinaryHashCode extract(Path path) throws IOException {
+	private static Collection<ExportedSymbol> extract(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			return reader.hash(new BSource(channel));
+			List<ExportedSymbol> result = new ArrayList<>();
+			reader.visitSharedLib(MachOBlob.parse(new BSource(channel)), new MachOBinaryHasher.ExportOrInstallNameVisitor() {
+				@Override
+				public void visitInstallName(String installName) {
+
+				}
+
+				@Override
+				public void visitExportSymbol(String name, boolean weakBinding) {
+					var symbol = new MyExportedSymbol(name);
+					symbol.put("isWeakBinding", weakBinding);
+					result.add(symbol);
+				}
+			});
+			return result;
 		}
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibWithNamedExports(String arch) throws IOException {
-		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
-		assertThat(model, is(sharedLibrary(hasItems(
+		Collection<ExportedSymbol> model = extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
+		assertThat(model, containsInAnyOrder(
 			strongMachOSymbol("_compute"),
 			strongMachOSymbol("_greet"),
 			strongMachOSymbol("_value")
-		))));
+		));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibWithNoExports(String arch) throws IOException {
-		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("no-exports/" + arch + "/libno_exports.dylib"));
-		assertThat(model, is(emptySharedLibrary()));
+		Collection<ExportedSymbol> model = extract(fixture("no-exports/" + arch + "/libno_exports.dylib"));
+		assertThat(model, emptyIterable());
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractDylibDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
-		assertThat(model, is(sharedLibrary(hasItems(
+		Collection<ExportedSymbol> model = extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
+		assertThat(model, containsInAnyOrder(
 			strongMachOSymbol("_strong_func"),
 			strongMachOSymbol("_strong_var"),
 			weakMachOSymbol("_weak_func"),
 			weakMachOSymbol("_weak_var")
-		))));
+		));
 	}
 
 	@ParameterizedTest

@@ -7,56 +7,57 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.*;
 
-/**
- * Integration tests for COFF object import extraction via {@link CoffImportReader}.
- *
- * Prebuilt objects live in src/test/resources/fixtures/object-imports/. See that directory's BUILD file
- * for the commands to produce them. 64-bit COFF C symbols carry no leading underscore.
- */
 class CoffImportReaderIntegrationTests {
-	private static final CoffImportReader reader = new CoffImportReader();
-
-	private static Set<Object> imports(Path path) throws IOException {
+	private static List<String> imports(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			AbiBinaryHasher.AbiBinaryHashCode model = reader.hash(new BSource(channel));
-			assertThat(model.type(), is(AbiBinaryHasher.Type.OBJECT_FILE));
-			return ((AbiBinaryHasher.HasImportSymbols) model).getImportedSymbols();
+			List<String> result = new ArrayList<>();
+			var coff = (CoffBlob.CoffObjectBlob) CoffBlob.parse(new BSource(channel));
+			CoffBlob.CoffStringTable strtab = coff.strings();
+			for (CoffBlob.CoffSymbol symbol : coff.symbols()) {
+				if (symbol.sectionNumber() == 0 && symbol.storageClass() == 2 && symbol.value() == 0) {
+					if (symbol.strx() == -1) {
+						result.add(symbol.name());
+					} else {
+						result.add(strtab.get(symbol.strx()));
+					}
+				}
+			}
+			return result;
 		}
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractsUndefinedExternalFunctionsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), hasItems("foo".hashCode(), "bar".hashCode()));
+		assertThat(imports(fixture(arch)), hasItems("foo", "bar"));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void extractsUndefinedExternalVariableAsImport(String arch) throws IOException {
 		// A data import is an undefined external too; the reader does not filter by function-vs-data type.
-		assertThat(imports(fixture(arch)), hasItem("gvar".hashCode()));
+		assertThat(imports(fixture(arch)), hasItem("gvar"));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void doesNotReportDefinedExternalSymbolsAsImports(String arch) throws IOException {
-		Set<Object> imports = imports(fixture(arch));
-		assertThat(imports, not(hasItem("entry".hashCode())));
-		assertThat(imports, not(hasItem("local_helper".hashCode())));
+		Collection<String> imports = imports(fixture(arch));
+		assertThat(imports, not(hasItem("entry")));
+		assertThat(imports, not(hasItem("local_helper")));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "arm64", "x86_64" })
 	void doesNotReportInternalLinkageSymbolsAsImports(String arch) throws IOException {
-		assertThat(imports(fixture(arch)), not(hasItem("secret".hashCode())));
+		assertThat(imports(fixture(arch)), not(hasItem("secret")));
 	}
 
 	private static Path fixture(String arch) {

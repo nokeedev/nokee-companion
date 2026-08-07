@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 import static dev.nokee.commons.hamcrest.gradle.ThrowableMatchers.throwsException;
 import static dev.nokee.nativeplatform.tasks.AbiMatchers.*;
@@ -22,40 +25,54 @@ import static org.hamcrest.Matchers.*;
 class ElfAbiExtractorIntegrationTests {
 	private static final ElfBinaryHasher reader = new ElfBinaryHasher();
 
-	private static AbiBinaryHasher.AbiBinaryHashCode extract(Path path) throws IOException {
+	private static Collection<ExportedSymbol> extract(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			return reader.hash(new BSource(channel));
+			List<ExportedSymbol> result = new ArrayList<>();
+			reader.visitSharedLib(ElfBlob.parse(new BSource(channel)), new ElfBinaryHasher.SonameAndExportVisitor() {
+				@Override
+				public void visitSoname(String soname) {
+
+				}
+
+				@Override
+				public void visitExport(String name, int binding) {
+					var symbol = new MyExportedSymbol(name);
+					symbol.put("binding", binding);
+					result.add(symbol);
+				}
+			});
+			return result;
 		}
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryWithNamedExports(String arch) throws IOException {
-		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("named-exports/" + arch + "/libnamed.so"));
-		assertThat(model, is(sharedLibrary(hasItems(
+		Collection<ExportedSymbol> model = extract(fixture("named-exports/" + arch + "/libnamed.so"));
+		assertThat(model, containsInAnyOrder(
 			strongElfSymbol("greet"),
 			strongElfSymbol("value"),
 			strongElfSymbol("compute")
-		))));
+		));
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryWithNoExports(String arch) throws IOException {
-		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("no-exports/" + arch + "/libno_exports.so"));
-		assertThat(model, is(emptySharedLibrary()));
+		Collection<ExportedSymbol> model = extract(fixture("no-exports/" + arch + "/libno_exports.so"));
+		assertThat(model, emptyIterable());
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = { "aarch64", "x86_64"})
 	void extractSharedLibraryDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		AbiBinaryHasher.AbiBinaryHashCode model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
-		assertThat(model, is(sharedLibrary(hasItems(
+		Collection<ExportedSymbol> model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
+		assertThat(model, containsInAnyOrder(
 			weakElfSymbol("weak_var"),
 			strongElfSymbol("strong_var"),
 			strongElfSymbol("strong_func"),
 			weakElfSymbol("weak_func")
-		))));
+		));
 	}
 
 	@ParameterizedTest
