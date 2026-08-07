@@ -67,7 +67,7 @@ public interface LinkAbiAware extends Task {
 					Path path = element.getAsFile().toPath();
 					try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
 						BSource source = new BSource(channel);
-						source.read(hdr);
+						source.read(hdr.clear());
 						if (ElfBlob.isElfMagic(hdr.array())) {
 							visitElf(path, ElfBlob.parse(source), visitor);
 						} else if (MachOBlob.isMachOMagic(hdr.array())) {
@@ -202,7 +202,7 @@ public interface LinkAbiAware extends Task {
 				ByteBuffer hdr = ByteBuffer.allocate(8);
 				for (ArchiveBlob.ArchiveMember member : blob.members()) {
 					BSource source = member.file();
-					source.read(hdr);
+					source.read(hdr.clear());
 					if (member.identifier().equals("symbol table")) {
 						// ignore symbol table
 					} else if (ElfBlob.isElfMagic(hdr.array())) {
