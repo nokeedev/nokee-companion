@@ -75,7 +75,7 @@ public interface LinkAbiAware extends Task {
 						} else if (ArchiveBlob.isArMagic(hdr.array())) {
 							visitArchive(path, ArchiveBlob.parse(source), visitor);
 						} else {
-							throw new UnsupportedOperationException();
+							throw new UnsupportedOperationException("Invalid file with signature '" + HexFormat.of().formatHex(hdr.array()) + "' on file '" + path + "'");
 						}
 					} catch (IOException e) {
 						throw new RuntimeException(e);
@@ -92,7 +92,7 @@ public interface LinkAbiAware extends Task {
 				} else if (blob instanceof MachOBlob.MachOImageBlob) {
 					visitMachO(path, (MachOBlob.MachOImageBlob) blob, visitor);
 				} else {
-					throw new RuntimeException();
+					throw new RuntimeException("invalid mach-o blob on file '" + path + "'");
 				}
 			}
 			protected abstract void visitMachO(Path path, MachOBlob.MachOImageBlob blob, Step1Visitor visitor);
@@ -177,6 +177,7 @@ public interface LinkAbiAware extends Task {
 					case ET_DYN:
 						// ignore, will be snapshot byte-for-byte, users should not put shared library here
 						break;
+					default: throw new UnsupportedOperationException("invalid elf type '" + blob.e_type() + "' on file '" + path + "'");
 				}
 			}
 
@@ -190,6 +191,7 @@ public interface LinkAbiAware extends Task {
 					case MH_DYLIB_STUB:
 						// ignore, will be snapshot byte-for-byte, users should not put shared library here
 						break;
+					default: throw new UnsupportedOperationException("invalid mach-o type '" + blob.filetype() + "' on file '" + path + "'");
 				}
 			}
 
@@ -234,6 +236,7 @@ public interface LinkAbiAware extends Task {
 					case ET_DYN:
 						visitor.visitSharedLibrary(path, SharedLibFormat.ELF);
 						break;
+					default: throw new UnsupportedOperationException("invalid elf type '" + blob.e_type() + "' on file '" + path + "'");
 				}
 			}
 
@@ -248,7 +251,7 @@ public interface LinkAbiAware extends Task {
 					case MH_DYLIB_STUB:
 						visitor.visitSharedLibrary(path, SharedLibFormat.MACHO);
 						break;
-					default: throw new UnsupportedOperationException();
+					default: throw new UnsupportedOperationException("invalid mach-o type '" + blob.filetype() + "' on file '" + path + "'");
 				}
 			}
 
