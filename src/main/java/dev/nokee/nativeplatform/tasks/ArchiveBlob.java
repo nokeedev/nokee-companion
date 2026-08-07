@@ -3,6 +3,7 @@ package dev.nokee.nativeplatform.tasks;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.util.*;
+import java.util.function.Consumer;
 
 import static dev.nokee.nativeplatform.tasks.BinaryUtils.requireInt;
 import static java.nio.charset.StandardCharsets.US_ASCII;
@@ -35,15 +36,30 @@ import static java.nio.charset.StandardCharsets.US_ASCII;
  * fit in the header. Every other member, <em>including</em> long-named ones, is handed to the reader:
  * skipping a real object would under-count imports and could miss a relink.
  */
+// TODO: implements BinaryBlob common interface
 final class ArchiveBlob {
 	private static final byte[] AR_MAGIC = {0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a}; // !<arch>\n
 	private static final int HEADER_SIZE = 60; // in bytes
 	private static final int NAME_LENGTH = 16; // in bytes
 	private static final int SIZE_OFFSET = 48; // in bytes
 	private static final int SIZE_LENGTH = 10; // in bytes
+	// TODO: Write an utility Consumer that will automatically skip all BSD/GNU symbol table to be used with forEach(...)
+	//   Note that we also need tests that would include those symbol tables
 	private static final String BSD_SYMBOL_TABLE = "__.SYMDEF";
 	private static final String GNU_SYMBOL_TABLE = "/";
 	private static final String GNU_SYMBOL_TABLE_64 = "/SYM64/";
+	public static Consumer<ArchiveMember> skipSymbolTables(Consumer<? super ArchiveMember> consumer) {
+		return it -> {
+			String name = it.identifier();
+			if (name.equals(BSD_SYMBOL_TABLE)) {
+				// ignores
+			} else if (name.equals(GNU_SYMBOL_TABLE) || name.equals(GNU_SYMBOL_TABLE_64)) {
+				// ignores
+			} else {
+				consumer.accept(it);
+			}
+		};
+	}
 
 	ArchiveBlob(BSource source, ByteBuffer hdr) {
 		this.source = source;

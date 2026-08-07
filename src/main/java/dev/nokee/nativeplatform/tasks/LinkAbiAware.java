@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 
+import static dev.nokee.nativeplatform.tasks.ArchiveBlob.skipSymbolTables;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_DYN;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_REL;
 import static dev.nokee.nativeplatform.tasks.MachOBlob.*;
@@ -200,7 +201,7 @@ public interface LinkAbiAware extends Task {
 				// ignore, library will be snapshot byte-for-byte, users should not put static library here
 
 				ByteBuffer hdr = ByteBuffer.allocate(8);
-				for (ArchiveBlob.ArchiveMember member : blob.members()) {
+				blob.members().forEach(skipSymbolTables(member -> {
 					BSource source = member.file();
 					source.read(hdr.clear());
 					if (ElfBlob.isElfMagic(hdr.array())) {
@@ -212,13 +213,9 @@ public interface LinkAbiAware extends Task {
 						assert macho instanceof MachOBlob.MachOImageBlob && ((MachOImageBlob) macho).filetype() == MH_OBJECT;
 						LinkAbiExtension.macho.visitImports(macho, visitor::visitImport);
 					} else {
-						if (member.identifier().startsWith("__.SYMDEF")) {
-							// ignore symbol table
-						} else {
-							throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
-						}
+						throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
 					}
-				}
+				}));
 			}
 		}
 
@@ -262,7 +259,7 @@ public interface LinkAbiAware extends Task {
 				visitor.visitStaticLibrary(path);
 
 				ByteBuffer hdr = ByteBuffer.allocate(8);
-				for (ArchiveBlob.ArchiveMember member : blob.members()) {
+				blob.members().forEach(skipSymbolTables(member -> {
 					BSource source = member.file();
 					source.read(hdr.clear());
 					if (ElfBlob.isElfMagic(hdr.array())) {
@@ -274,13 +271,9 @@ public interface LinkAbiAware extends Task {
 						assert macho instanceof MachOBlob.MachOImageBlob && ((MachOImageBlob) macho).filetype() == MH_OBJECT;
 						LinkAbiExtension.macho.visitImports(macho, visitor::visitImport);
 					} else {
-						if (member.identifier().startsWith("__.SYMDEF")) {
-							// ignore symbol table
-						} else {
-							throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
-						}
+						throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
 					}
-				}
+				}));
 			}
 		}
 
