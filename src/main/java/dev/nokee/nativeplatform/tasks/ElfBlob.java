@@ -40,7 +40,7 @@ abstract class ElfBlob {
 	private static final int SHN_UNDEF = 0;
 
 	public static boolean isElfMagic(byte[] h) {
-		return 4 >= h.length && h[0] == ELFMAG0 && h[1] == ELFMAG1 && h[2] == ELFMAG2 && h[3] == ELFMAG3;
+		return h.length >= 4 && h[0] == ELFMAG0 && h[1] == ELFMAG1 && h[2] == ELFMAG2 && h[3] == ELFMAG3;
 	}
 
 	public static ElfBlob parse(BSource blob) {
