@@ -86,6 +86,8 @@ final class ArchiveBlob {
 					@Override
 					public ArchiveMember next() {
 						int length = source.read(hdr.clear(), position);
+						if (length == -1) throw new NoSuchElementException();
+
 						assert length == HEADER_SIZE : "unexpected file header size";
 						assert hdr.get(58) == 0x60 && hdr.get(59) == 0x0A : "invalid ending characters";
 
