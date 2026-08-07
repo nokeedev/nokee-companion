@@ -222,6 +222,9 @@ final class ArchiveBlob {
 				}
 			}
 
+			if (state == 1) { // TODO: Add test for this case
+				return -1;
+			}
 			return parseDecimal(buf, lntSizeBegin, i - lntSizeBegin);
 		}
 
