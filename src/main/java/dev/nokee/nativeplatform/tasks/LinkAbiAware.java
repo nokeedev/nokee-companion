@@ -203,9 +203,7 @@ public interface LinkAbiAware extends Task {
 				for (ArchiveBlob.ArchiveMember member : blob.members()) {
 					BSource source = member.file();
 					source.read(hdr.clear());
-					if (member.identifier().equals("symbol table")) {
-						// ignore symbol table
-					} else if (ElfBlob.isElfMagic(hdr.array())) {
+					if (ElfBlob.isElfMagic(hdr.array())) {
 						ElfBlob elf = ElfBlob.parse(source);
 						assert elf.e_type() == ET_REL;
 						LinkAbiExtension.elf.visitImports(elf, visitor::visitImport);
@@ -214,7 +212,11 @@ public interface LinkAbiAware extends Task {
 						assert macho instanceof MachOBlob.MachOImageBlob && ((MachOImageBlob) macho).filetype() == MH_OBJECT;
 						LinkAbiExtension.macho.visitImports(macho, visitor::visitImport);
 					} else {
-						throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
+						if (member.identifier().startsWith("__.SYMDEF")) {
+							// ignore symbol table
+						} else {
+							throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
+						}
 					}
 				}
 			}
