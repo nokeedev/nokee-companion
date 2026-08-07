@@ -177,7 +177,7 @@ final class ArchiveBlob {
 	private static int gnutrim(byte[] buf, int off, int len) {
 		int end = artrim(buf, off, len) - 1;
 
-		// If // -> do nothing
+		// If // -> do nothing (or is it? TODO: is // the name or / with the terminating /?
 		// If a/ -> a
 		// If foo.o/ -> foo.o
 		// If foo.o -> foo.o
@@ -300,6 +300,8 @@ final class ArchiveBlob {
 					break;
 			}
 		}
+
+		// TODO: Can we build an archive with a name like '#1/` (aka no number) using standard tool?
 
 		return parseDecimal(buf, extendedSizeBegin, i - extendedSizeBegin);
 	}

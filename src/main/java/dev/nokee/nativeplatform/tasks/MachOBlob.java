@@ -30,6 +30,8 @@ import static dev.nokee.nativeplatform.tasks.BinaryUtils.requireInt;
  * an archive member and a slice of a fat binary are all handled the same way.
  */
 // Care was taken to avoid as many condition and allocation as possible
+// TODO: implements BinaryBlob common interface
+// TODO: Prevent MachOBlob from being extended outside of this class via correct visibility of the constructor
 abstract class MachOBlob {
 	private static final int MH_MAGIC = 0xFEEDFACE;
 	private static final int MH_CIGAM = 0xCEFAEDFE;

@@ -9,6 +9,8 @@ import static dev.nokee.nativeplatform.tasks.BinaryUtils.asUnsigned;
 import static dev.nokee.nativeplatform.tasks.BinaryUtils.requireInt;
 
 // Care was taken to avoid as many condition and allocation as possible
+// TODO: implements BinaryBlob common interface
+// TODO: Prevent ElfBlob from being extended outside of this class via correct visibility of the constructor
 abstract class ElfBlob {
 	// for e_ident
 	private static final int EI_MAG0 = 0; // index in e_ident array
