@@ -115,21 +115,14 @@ final class MachOBinaryHasher implements AbiBinaryHasher {
 		assert image.filetype() == MH_OBJECT;
 
 		MachOBlob.MachOSymtabCommand symtab = null;
-		MachOBlob.MachODysymtabCommand dysymtab = null;
 		for (MachOBlob.MachOLoadCommand loadCommand : image.loadCommands()) {
 			if (loadCommand instanceof MachOBlob.MachOSymtabCommand) {
 				symtab = (MachOBlob.MachOSymtabCommand) loadCommand;
-			} else if (loadCommand instanceof MachOBlob.MachODysymtabCommand) {
-				dysymtab = (MachOBlob.MachODysymtabCommand) loadCommand;
-			}
-
-			if (symtab != null && dysymtab != null) {
 				break;
 			}
 		}
 
 		assert symtab != null;
-		assert dysymtab != null;
 
 		MachOBlob.MachOStringTable strtab = symtab.strings();
 
