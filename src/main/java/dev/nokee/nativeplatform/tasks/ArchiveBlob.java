@@ -51,7 +51,7 @@ final class ArchiveBlob {
 	public static Consumer<ArchiveMember> skipSymbolTables(Consumer<? super ArchiveMember> consumer) {
 		return it -> {
 			String name = it.identifier();
-			if (name.equals(BSD_SYMBOL_TABLE)) {
+			if (name.equals(BSD_SYMBOL_TABLE) || name.equals("__.SYMDEF SORTED")) {
 				// ignores
 			} else if (name.equals(GNU_SYMBOL_TABLE) || name.equals(GNU_SYMBOL_TABLE_64)) {
 				// ignores
