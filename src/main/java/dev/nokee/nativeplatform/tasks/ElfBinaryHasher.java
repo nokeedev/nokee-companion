@@ -31,8 +31,7 @@ final class ElfBinaryHasher {
 		return null;
 	}
 
-	public Map<Integer, ElfBlob.ElfSectionHeader> hash(ElfBlob blob, Set<Integer> types) {
-		ElfBlob.ElfSectionTable sections = blob.sections();
+	private Map<Integer, ElfBlob.ElfSectionHeader> hash(ElfBlob.ElfSectionTable sections, Set<Integer> types) {
 		Map<Integer, ElfBlob.ElfSectionHeader> result = new HashMap<>();
 
 		for (int i = 0; i < sections.size() || (result.size() != types.size()); i++) {
@@ -48,26 +47,29 @@ final class ElfBinaryHasher {
 	}
 
 	public void visitImports(ElfBlob blob, Consumer<? super String> visitor) {
-		Map<Integer, ElfBlob.ElfSectionHeader> shs = hash(blob, rel_types);
+		try (ElfBlob.ElfSectionTable sections = blob.sections()) {
+			Map<Integer, ElfBlob.ElfSectionHeader> shs = hash(sections, rel_types);
 
-		ElfBlob.ElfSectionHeader symtab = shs.get(SHT_SYMTAB);
+			ElfBlob.ElfSectionHeader symtab = shs.get(SHT_SYMTAB);
 
-		ElfBlob.ElfStringTable strtab = loadDynstr(symtab);
-
-		if (symtab == null) {
-			// no import table
-		} else if (strtab != null) {
-			visitGlobalOrWeakSymbols(symtab, sym -> {
-				if (sym.shndx() == SHN_UNDEF) {
-					String name = strtab.get(sym.name() & 0xFFFFFFFF);
-					if (!name.isEmpty()) {
-						visitor.accept(name);
-					}
+			ElfBlob.ElfStringTable strtab = loadDynstr(symtab);
+			try (strtab) {
+				if (symtab == null) {
+					// no import table
+				} else if (strtab != null) {
+					visitGlobalOrWeakSymbols(symtab, sym -> {
+						if (sym.shndx() == SHN_UNDEF) {
+							String name = strtab.get(sym.name() & 0xFFFFFFFF);
+							if (!name.isEmpty()) {
+								visitor.accept(name);
+							}
+						}
+					});
+				} else {
+					// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
+					throw new RuntimeException("ELF shared library .dynsym is unreadable");
 				}
-			});
-		} else {
-			// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
-			throw new RuntimeException("ELF shared library .dynsym is unreadable");
+			}
 		}
 	}
 
@@ -77,31 +79,34 @@ final class ElfBinaryHasher {
 	}
 
 	public void visitSharedLib(ElfBlob blob, SonameAndExportVisitor visitor) throws IOException {
-		Map<Integer, ElfBlob.ElfSectionHeader> shs = hash(blob, dyn_types);
+		try (ElfBlob.ElfSectionTable sections = blob.sections()) {
+			Map<Integer, ElfBlob.ElfSectionHeader> shs = hash(sections, dyn_types);
 
-		ElfBlob.ElfSectionHeader dynamic = shs.get(SHT_DYNAMIC);
-		ElfBlob.ElfSectionHeader dynsym = shs.get(SHT_DYNSYM);
+			ElfBlob.ElfSectionHeader dynamic = shs.get(SHT_DYNAMIC);
+			ElfBlob.ElfSectionHeader dynsym = shs.get(SHT_DYNSYM);
 
-		ElfBlob.ElfStringTable strtab = loadDynstr(dynsym);
-
-		if (dynamic != null && strtab != null) {
-			visitor.visitSoname(extractSoname(blob, strtab, dynamic.offset(), dynamic.size()));
-		}
-
-		if (dynsym == null) {
-			// no exprted symbols
-		} else if (strtab != null) {
-			visitGlobalOrWeakSymbols(dynsym, sym -> {
-				if (sym.shndx() != SHN_UNDEF) {
-					String name = strtab.get(sym.name() & 0xFFFFFFFF);
-					if (!name.isEmpty()) {
-						visitor.visitExport(name, sym.binding());
-					}
+			ElfBlob.ElfStringTable strtab = loadDynstr(dynsym);
+			try (strtab) {
+				if (dynamic != null && strtab != null) {
+					visitor.visitSoname(extractSoname(blob, strtab, dynamic.offset(), dynamic.size()));
 				}
-			});
-		} else {
-			// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
-			throw new RuntimeException("ELF shared library .dynsym is unreadable");
+
+				if (dynsym == null) {
+					// no exprted symbols
+				} else if (strtab != null) {
+					visitGlobalOrWeakSymbols(dynsym, sym -> {
+						if (sym.shndx() != SHN_UNDEF) {
+							String name = strtab.get(sym.name() & 0xFFFFFFFF);
+							if (!name.isEmpty()) {
+								visitor.visitExport(name, sym.binding());
+							}
+						}
+					});
+				} else {
+					// .dynsym is present but its string table/layout is unreadable: we cannot determine the exports.
+					throw new RuntimeException("ELF shared library .dynsym is unreadable");
+				}
+			}
 		}
 	}
 
@@ -111,28 +116,31 @@ final class ElfBinaryHasher {
 
 		// Map the dynamic table: it is scanned entry by entry (until DT_NULL/DT_SONAME), so a mapping turns
 		// those per-entry reads into memory accesses. Each entry i is at index i * entSize into this mapping.
-		MappedByteBuffer dynamic = blob.source.mmap(dynOff, dynSize);
-		dynamic.order(blob.order);
-
-		for (int i = 0; i < count; i++) {
-			int dyn = i * entSize;
-			long tag = blob.d_tag(dynamic, dyn);
-			long val = blob.d_val(dynamic, dyn);
-			if (tag == DT_NULL) break;
-			if (tag == DT_SONAME) {
-				return strtab.get(val);
+		MappedByteBuffer dynamic = (MappedByteBuffer) blob.source.mmap(dynOff, dynSize).order(blob.order);
+		try {
+			for (int i = 0; i < count; i++) {
+				int dyn = i * entSize;
+				long tag = blob.d_tag(dynamic, dyn);
+				long val = blob.d_val(dynamic, dyn);
+				if (tag == DT_NULL) break;
+				if (tag == DT_SONAME) {
+					return strtab.get(val);
+				}
 			}
+			return null;
+		} finally {
+			MappedBufferUtils.unmap(dynamic);
 		}
-		return null;
 	}
 
 
 	private void visitGlobalOrWeakSymbols(ElfBlob.ElfSectionHeader sh, Consumer<? super ElfBlob.ElfSymbol> visitor) {
-		ElfBlob.ElfSymbolTable symtab = new ElfBlob.ElfSymbolTable(sh);
-		for (ElfBlob.ElfSymbol sym : symtab) { // entry 0 is always STN_UNDEF
-			int binding = sym.binding();
-			if (binding == STB_GLOBAL || binding == STB_WEAK) {
-				visitor.accept(sym);
+		try (ElfBlob.ElfSymbolTable symtab = new ElfBlob.ElfSymbolTable(sh)) {
+			for (ElfBlob.ElfSymbol sym : symtab) { // entry 0 is always STN_UNDEF
+				int binding = sym.binding();
+				if (binding == STB_GLOBAL || binding == STB_WEAK) {
+					visitor.accept(sym);
+				}
 			}
 		}
 	}

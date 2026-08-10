@@ -78,9 +78,9 @@ abstract class ElfBlob {
 		return asUnsigned(hdr.getShort(16));
 	}
 
-	public static final class ElfSectionTable implements Iterable<ElfSectionHeader> {
+	public static final class ElfSectionTable implements Iterable<ElfSectionHeader>, AutoCloseable {
 		private final ElfBlob blob;
-		private ByteBuffer sht = null;
+		private MappedByteBuffer sht = null;
 		private final int e_shnum;
 		private final int e_shentsize;
 
@@ -108,7 +108,7 @@ abstract class ElfBlob {
 					throw new RuntimeException("ELF shared library has no section headers");
 				}
 
-				sht = blob.source.mmap(e_shoff, (long) e_shentsize * e_shnum).order(blob.order);
+				sht = (MappedByteBuffer) blob.source.mmap(e_shoff, (long) e_shentsize * e_shnum).order(blob.order);
 			}
 
 			return sht;
@@ -203,29 +203,39 @@ abstract class ElfBlob {
 				}
 			};
 		}
+
+		@Override
+		public void close() {
+			MappedBufferUtils.unmap(sht);
+		}
 	}
 
-	public static final class ElfStringTable {
-		private final ByteBuffer strtab;
+	public static final class ElfStringTable implements AutoCloseable {
+		private final MappedByteBuffer strtab;
 
 		public ElfStringTable(ElfSectionHeader section) {
-			strtab = section.owner().blob.source.mmap(section.offset(), section.size()).order(section.owner().blob.order);
+			strtab = (MappedByteBuffer) section.owner().blob.source.mmap(section.offset(), section.size()).order(section.owner().blob.order);
 		}
 
 		public String get(long offset) {
 			// TODO: offset should be int or long?
 			return BinaryUtils.readCString(strtab, (int) offset);
 		}
+
+		@Override
+		public void close() {
+			MappedBufferUtils.unmap(strtab);
+		}
 	}
 
-	public static final class ElfSymbolTable implements Iterable<ElfSymbol> {
-		private final ByteBuffer symtab;
+	public static final class ElfSymbolTable implements Iterable<ElfSymbol>, AutoCloseable {
+		private final MappedByteBuffer symtab;
 		private final long size;
 		private final long entsize;
 		private final ElfBlob blob;
 
 		public ElfSymbolTable(ElfSectionHeader section) {
-			this.symtab = section.owner().blob.source.mmap(section.offset(), section.size()).order(section.owner().blob.order);
+			this.symtab = (MappedByteBuffer) section.owner().blob.source.mmap(section.offset(), section.size()).order(section.owner().blob.order);
 			this.size = section.size() / section.entsize();
 			this.entsize = section.entsize();
 			this.blob = section.owner().blob;
@@ -264,6 +274,13 @@ abstract class ElfBlob {
 				}
 			};
 		}
+
+		@Override
+		public void close() {
+			if (symtab != null) {
+				MappedBufferUtils.unmap(symtab);
+			}
+		}
 	}
 
 	public interface ElfSymbol {
@@ -273,6 +290,46 @@ abstract class ElfBlob {
 	}
 
 	public interface ElfSectionHeader {
+		static ElfSectionHeader copyOf(ElfSectionHeader hdr) {
+			ElfSectionTable owner = hdr.owner();
+			int sh_type = hdr.type();
+			long sh_offset = hdr.offset();
+			long sh_size = hdr.size();
+			int sh_link = hdr.link();
+			long sh_entsize = hdr.entsize();
+			return new ElfSectionHeader() {
+				@Override
+				public ElfSectionTable owner() {
+					return owner;
+				}
+
+				@Override
+				public int type() {
+					return sh_type;
+				}
+
+				@Override
+				public long offset() {
+					return sh_offset;
+				}
+
+				@Override
+				public long size() {
+					return sh_size;
+				}
+
+				@Override
+				public int link() {
+					return sh_link;
+				}
+
+				@Override
+				public long entsize() {
+					return sh_entsize;
+				}
+			};
+		}
+
 		ElfSectionTable owner();
 
 		int type();
