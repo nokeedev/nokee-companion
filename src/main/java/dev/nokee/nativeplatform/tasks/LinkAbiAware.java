@@ -304,18 +304,18 @@ public interface LinkAbiAware extends Task {
 		}
 
 		private static final class ImportSymbols {
-			private final SortedMap<String, Boolean> values = new TreeMap<>();
+			private final SortedMap<Integer, Boolean> values = new TreeMap<>();
 
 			public void add(String e) {
-				values.put(e, Boolean.FALSE);
+				values.put(e.hashCode(), Boolean.FALSE);
 			}
 
 			public boolean contains(String e) {
-				return values.computeIfPresent(e, (__, ___) -> Boolean.TRUE) != null;
+				return values.computeIfPresent(e.hashCode(), (__, ___) -> Boolean.TRUE) != null;
 			}
 
-			public Set<String> restrictToUnused() {
-				TreeSet<String> result = new TreeSet<>();
+			public Set<Object> restrictToUnused() {
+				TreeSet<Object> result = new TreeSet<>();
 				values.forEach((k, v) -> {
 					if (!v) {
 						result.add(k);
@@ -328,9 +328,9 @@ public interface LinkAbiAware extends Task {
 		private static final class Step2Result {
 			private final List<HashCode> hashcode;
 			private final Set<Path> inputFiles;
-			private final Set<String> unsused;
+			private final Set<Object> unsused;
 
-			public Step2Result(List<HashCode> hashcode, Set<Path> inputFiles, Set<String> unsused) {
+			public Step2Result(List<HashCode> hashcode, Set<Path> inputFiles, Set<Object> unsused) {
 				this.hashcode = hashcode;
 				this.inputFiles = inputFiles;
 				this.unsused = unsused;
@@ -402,7 +402,7 @@ public interface LinkAbiAware extends Task {
 				for (SharedLibFile sharedLib : it.sharedLibs) {
 					hashcode.add(sharedLib.hash(it.imports));
 				}
-				Set<String> unsused = it.imports.restrictToUnused();
+				Set<Object> unsused = it.imports.restrictToUnused();
 				return new Step2Result(hashcode, it.inputFiles, unsused);
 			}));
 			step2.finalizeValueOnRead();
