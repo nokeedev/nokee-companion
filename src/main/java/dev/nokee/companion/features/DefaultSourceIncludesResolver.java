@@ -34,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class DefaultSourceIncludesResolver implements SourceIncludesResolver {
 	private static final String NORMALIZE_PATH_CASING_PROPERTY_NAME = "dev.nokee.internal.native.headers.normalize-path-casing";
@@ -337,6 +338,7 @@ public class DefaultSourceIncludesResolver implements SourceIncludesResolver {
 	private class DirectoryContents {
 		private final File searchDir;
 		private final Map<String, CachedIncludeFile> contents = new HashMap<String, CachedIncludeFile>();
+		private final Map<File, Set<String>> filesPerDirs = new HashMap<>();
 
 		DirectoryContents(File searchDir) {
 			this.searchDir = searchDir;
@@ -346,9 +348,18 @@ public class DefaultSourceIncludesResolver implements SourceIncludesResolver {
 			return contents.computeIfAbsent(includePath,
 				key -> {
 					File candidate = normalizeIncludePath(searchDir, includePath);
-					return fileSystemAccess.readRegularFileContentHash(candidate.getAbsolutePath())
-						.map(contentHash -> (CachedIncludeFile) new SystemIncludeFile(candidate, key, contentHash))
-						.orElse(MISSING_INCLUDE_FILE);
+					Set<String> candidateFiles = filesPerDirs.computeIfAbsent(candidate.getParentFile(), dir -> {
+						String[] listing = dir.list();
+						if (listing == null) return Collections.emptySet();
+						return Arrays.stream(listing).collect(Collectors.toSet());
+					});
+					if (candidateFiles.contains(candidate.getName())) {
+						return fileSystemAccess.readRegularFileContentHash(candidate.getAbsolutePath())
+							.map(contentHash -> (CachedIncludeFile) new SystemIncludeFile(candidate, key, contentHash))
+							.orElse(MISSING_INCLUDE_FILE);
+					} else {
+						return MISSING_INCLUDE_FILE;
+					}
 				});
 		}
 	}
