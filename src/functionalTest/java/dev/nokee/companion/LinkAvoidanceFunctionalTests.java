@@ -2,11 +2,14 @@ package dev.nokee.companion;
 
 import dev.nokee.companion.fixtures.GradleBuild;
 import dev.nokee.companion.fixtures.GradleRunnerArguments;
-import dev.nokee.companion.fixtures.GradleTestKitMatchers.ExecutedBuild;
 import dev.nokee.elements.core.*;
 import dev.nokee.elements.nativebase.NativeElement;
 import dev.nokee.elements.nativebase.NativeLibraryElement;
 import org.apache.commons.lang3.SystemUtils;
+import org.gradle.internal.os.OperatingSystem;
+import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform;
+import org.gradle.nativeplatform.toolchain.NativeToolChainRegistry;
+import org.gradle.nativeplatform.toolchain.internal.plugins.StandardToolChainsPlugin;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -17,14 +20,14 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.function.Consumer;
 
-import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
+import static dev.gradleplugins.buildscript.blocks.ApplyStatement.Notation.plugin;
+import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
+import static dev.gradleplugins.buildscript.syntax.Syntax.*;
 import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static dev.nokee.companion.fixtures.PathExtensions.write;
 import static dev.nokee.elements.core.ProjectElement.ofMain;
-import static dev.nokee.elements.nativebase.NativeLibraryElement.ofPublicHeaders;
 import static dev.nokee.elements.nativebase.NativeSourceElement.ofSources;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -32,13 +35,12 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class LinkAvoidanceFunctionalTests {
-	@TempDir Path testDirectory;
 	GradleBuild build;
 	GradleRunner runner;
 	GradleRunnerArguments args = GradleRunnerArguments.create().withInfoLogging();
 
 	@BeforeEach
-	void setup() throws IOException {
+	void setup(@TempDir Path testDirectory) throws IOException {
 		build = GradleBuild.inDirectory(testDirectory);
 		runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 
@@ -46,21 +48,75 @@ class LinkAvoidanceFunctionalTests {
 			it.put("org.gradle.configuration-cache", true);
 			it.put("dev.nokee.native-companion.link-avoidance.enabled", true);
 		});
-		build.subproject("lib", project -> {
-			project.plugins(it -> {
-				it.id("cpp-library");
-			});
-		});
-
-		build.subproject("app", project -> {
-			project.plugins(it -> {
-				it.id("dev.nokee.native-companion");
-			});
+		build.rootProject(project -> {
+			project.append(staticImportClass(OperatingSystem.class));
+			project.append(staticImportClass(DefaultNativePlatform.class));
+			project.append(importClass(NativeToolChainRegistry.class));
+			project.append(apply(plugin(StandardToolChainsPlugin.class)));
 			project.append(groovyDsl("""
-				dependencies {
-					implementation project(':lib')
+				def toolChains = project.modelRegistry.realize('toolChains', NativeToolChainRegistry)
+
+				void sharedLib(String name) {
+					def cppTask = tasks.register("compile${name.capitalize()}", CppCompile) {
+						objectFileDir = layout.buildDirectory.dir("obj/$name")
+						source.from(fileTree("src/$name/cpp"))
+						includes.from("src/$name/headers")
+					}
+
+					def linkTask = tasks.register("link${name.capitalize()}", LinkSharedLibrary) {
+						source.from(cppTask.flatMap { it.objectFileDir }.map { it.asFileTree.matching { include('**/*.o', '**/*.obj') } })
+						linkedFile = layout.buildDirectory.file(current().getSharedLibraryName("out/$name/$name"))
+					}
+
+					tasks.named { it == 'link' }.configureEach {
+						libs.from(linkTask.flatMap { it.linkedFile })
+					}
+				}
+
+				void staticLib(String name) {
+					def cppTask = tasks.register("compile${name.capitalize()}", CppCompile) {
+						objectFileDir = layout.buildDirectory.dir("obj/$name")
+						source.from(fileTree("src/$name/cpp"))
+						includes.from("src/$name/headers")
+					}
+
+					def createTask = tasks.register("create${name.capitalize()}", CreateStaticLibrary) {
+						source.from(cppTask.flatMap { it.objectFileDir }.map { it.asFileTree.matching { include('**/*.o', '**/*.obj') } })
+						outputFile = layout.buildDirectory.file(current().getStaticLibraryName("out/$name/$name"))
+						toolChain = targetPlatform.map { toolChains.getForPlatform(it) }
+						targetPlatform = host()
+					}
+
+					tasks.named { it == 'link' }.configureEach {
+						libs.from(createTask.flatMap { it.outputFile })
+					}
+				}
+
+				def compileTask = tasks.register('compile', CppCompile) {
+					objectFileDir = layout.buildDirectory.dir('obj/main')
+					source.from(fileTree('src/main/cpp'))
+					includes.from('src/main/headers')
+				}
+
+				tasks.withType(AbstractNativeCompileTask).configureEach {
+					positionIndependentCode = true
+					toolChain = targetPlatform.map { toolChains.getForPlatform(it) }
+					targetPlatform = host()
+				}
+
+				tasks.withType(AbstractLinkTask).configureEach {
+					toolChain = targetPlatform.map { toolChains.getForPlatform(it) }
+					targetPlatform = host()
+					debuggable = true
 				}
 			"""));
+		});
+
+		build.rootProject(project -> {
+			project.plugins(it -> {
+				it.id("dev.nokee.native-companion");
+				it.id("lifecycle-base");
+			});
 		});
 	}
 
@@ -79,7 +135,15 @@ class LinkAvoidanceFunctionalTests {
 	class LinkExecutableTests extends LinkAvoidanceTester {
 		@BeforeEach
 		void setup() {
-			build.subproject("app", project -> project.plugins(it -> it.id("cpp-application")));
+			build.rootProject(project -> {
+				project.append(staticImportClass(OperatingSystem.class));
+				project.append(groovyDsl("""
+					tasks.register('link', Class.forName('%s')) {
+						source.from(tasks.named('compile').flatMap { it.objectFileDir }.map { it.asFileTree.matching { include('**/*.o', '**/*.obj') } })
+						linkedFile = layout.buildDirectory.file(current().getExecutableName('out/main/main'))
+					}
+				""".formatted("dev.nokee.nativeplatform.tasks.LinkExecutableTask")));
+			});
 		}
 	}
 
@@ -87,7 +151,14 @@ class LinkAvoidanceFunctionalTests {
 	class LinkSharedLibraryTests extends LinkAvoidanceTester {
 		@BeforeEach
 		void setup() {
-			build.subproject("app", project -> project.plugins(it -> it.id("cpp-library")));
+			build.rootProject( project -> {
+				project.append(groovyDsl("""
+					tasks.register('link', Class.forName('%s')) {
+						source.from(tasks.named('compile').flatMap { it.objectFileDir }.map { it.asFileTree.matching { include('**/*.o', '**/*.obj') } })
+						linkedFile = layout.buildDirectory.file(current().getSharedLibraryName('out/main/main'))
+					}
+				""".formatted("dev.nokee.nativeplatform.tasks.LinkSharedLibraryTask")));
+			});
 		}
 	}
 
@@ -102,22 +173,24 @@ class LinkAvoidanceFunctionalTests {
 		void doesNotRelinkOnImplementationOnlyChange() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
+			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
 		void relinkOnNewExportedSymbol() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(addedSymbol())));
+			addedSymbol().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
 		}
 
 		@Test
@@ -126,11 +199,12 @@ class LinkAvoidanceFunctionalTests {
 			// reaches the exported symbol table and adding one must not change the ABI seen by consumers.
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedStaticFunction())));
+			fixture.lib.impl.withAddedStaticFunction().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -139,11 +213,12 @@ class LinkAvoidanceFunctionalTests {
 			// reaches the exported symbol table and adding one must not change the ABI seen by consumers.
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedStaticVariable())));
+			fixture.lib.impl.withAddedStaticVariable().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -152,11 +227,12 @@ class LinkAvoidanceFunctionalTests {
 			// so - like a static function - it stays out of the exported symbol table and must not relink.
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedAnonymousNamespaceFunction())));
+			fixture.lib.impl.withAddedAnonymousNamespaceFunction().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -165,31 +241,34 @@ class LinkAvoidanceFunctionalTests {
 			// as a weak (COMDAT) exported symbol, so it IS part of the ABI and adding one must relink.
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withAddedInlineFunction())));
+			fixture.lib.impl.withAddedInlineFunction().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
 		}
 
 		@Test
 		void alwaysRelinkAfterClean() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			assertThat(runs(runner.withArguments(args.withTasks("clean", ":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":clean", ":link").toList())), tasksExecuted(hasItem(":link")));
 		}
 
 		@Test
 		void relinkOnRemovedExportedSymbol() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withRenamedAbiChange())));
+			fixture.lib.impl.withRenamedAbiChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -198,161 +277,168 @@ class LinkAvoidanceFunctionalTests {
 
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withWeakSymbolChange())));
+			fixture.lib.impl.withWeakSymbolChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+		}
+
+		private Path fooComponent() {
+			return build.getLocation().resolve("src/foo/cpp");
+		}
+
+		private Path mainComponent() {
+			return build.getLocation().resolve("src/main/cpp");
 		}
 
 		@Test
 		void relinkOnSymbolTypeChangesFromFunctionToVariable() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
+			fixture.lib.impl.withVariableKindChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
-			build.subproject("lib", writeToProject(ofPublicHeaders(fixture.lib.api.withVariableKindChange())));
-			build.subproject("app", writeToProject(ofSources(fixture.app.main.useAsVariableSymbol())));
+//			fixture.lib.api.withVariableKindChange().writeToDirectory(build.getLocation().resolve("includes"));
+			fixture.app.main.useAsVariableSymbol().writeToDirectory(mainComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
 
 			// TODO: SEEMS TO BE ONLY UNDEFINED
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+//			fixture.lib.api.writeToDirectory(build.getLocation().resolve("includes")); // Return to original
+			fixture.lib.impl.writeToDirectory(fooComponent()); // Return to original
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
 		}
 
 		@Test
 		void relinkWhenParameterCountChanges() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
+			fixture.lib.impl.addParameterChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecutedAndNotSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
 		@Test
 		void doesNotRelinkWhenReturnTypeChanges() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
+			fixture.lib.impl.withReturnTypeChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
 		void doesNotRelinkWhenFunctionBecomesVariableInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withVariableKindChange())));
+			fixture.lib.impl.withVariableKindChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
-			build.subproject("lib", writeToProject(ofPublicHeaders(fixture.lib.api.withVariableKindChange())));
-			build.subproject("app", writeToProject(ofSources(fixture.app.main.useAsVariableSymbol())));
+//			fixture.lib.api.withVariableKindChange().writeToDirectory(build.getLocation().resolve("include"));
+			fixture.app.main.useAsVariableSymbol().writeToDirectory(mainComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
 		void doesNotRelinkWhenParameterCountChangesInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.addParameterChange())));
+			fixture.lib.impl.addParameterChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
 		void doesNotRelinkWhenReturnTypeChangesInC() {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withReturnTypeChange())));
+			fixture.lib.impl.withReturnTypeChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
 		void doesNotRelinkWhenLibraryChangeLocationButNotAbi() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			build.subproject("lib", project -> {
+			build.rootProject(sharedLibComponent("foo"));
+			build.rootProject(project -> {
 				project.append(groovyDsl("""
-					afterEvaluate {
-						tasks.withType(LinkSharedLibrary).configureEach {
-							installName = linkedFile.get().asFile.name // use non-absolute default value
-						}
+					tasks.named('linkFoo', LinkSharedLibrary) {
+						installName = linkedFile.get().asFile.name // use non-absolute default value
 					}
 				"""));
 			});
 
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
 			// relocating a library should not cause a relink
-			build.subproject("lib", project -> {
+			build.rootProject(project -> {
 				project.append(groovyDsl("""
-					afterEvaluate {
-						tasks.withType(LinkSharedLibrary).configureEach {
-							linkedFile = layout.buildDirectory.file(linkedFile.get().asFile.name) // safe-ish as we are just building one variant
-						}
+					tasks.named('linkFoo', LinkSharedLibrary) {
+						linkedFile = layout.buildDirectory.file(linkedFile.get().asFile.name) // safe-ish as we are just building one variant
 					}
 				"""));
 			});
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
 		void relinkWhenStaticLibraryImplementationChanges() {
-			build.subproject("lib", project -> {
-				project.append(groovyDsl("""
-					library {
-						linkage = [Linkage.STATIC]
-					}
-				"""));
-			});
-
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			build.rootProject(staticLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withImplementationOnlyChange())));
+			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksExecuted(hasItem(":app:linkDebug")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
 		}
 
 		@Test
 		void realizeTaskLibraryOnlyDuringExecutionPhase() {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
+			build.rootProject(sharedLibComponent("foo"));
 			build.subproject("other-lib", project -> {
 				write(project.file("src/main/cpp/foo.cpp"), "int foo_bar() { return 42; }");
 				project.plugins(it -> it.id("cpp-library"));
 			});
 			succeeds(runner.withArguments(":other-lib:assemble"));
 
-			build.subproject("app", project -> {
+			build.rootProject(project -> {
 				project.append(groovyDsl("""
-					components.withType(CppBinary).configureEach {
-						linkTask.get().libs.from(providers.gradleProperty('additional-lib').orElse([]).map {
+					tasks.named('link') {
+						libs.from(providers.gradleProperty('additional-lib').orElse([]).map {
 							println('resolving additional-lib: ' + it)
 							return it
 						})
@@ -360,12 +446,24 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			ExecutedBuild result = runs(runner.withArguments(":app:assemble", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")));
-			assertThat(result, tasksExecuted(hasItem(":app:linkDebug")));
-			assertThat(result.task(":app:linkDebug"), output(containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib")));
+			ExecutedBuild result = runs(runner.withArguments(":link", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")));
+			assertThat(result, tasksExecuted(hasItem(":link")));
+			assertThat(result.task(":link"), output(containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib")));
 		}
+	}
+
+	private Consumer<? super GradleBuild.GradleProject> sharedLibComponent(String name) {
+		return project -> {
+			project.append(groovyDsl("sharedLib('%s')".formatted(name)));
+		};
+	}
+
+	private Consumer<? super GradleBuild.GradleProject> staticLibComponent(String name) {
+		return project -> {
+			project.append(groovyDsl("staticLib('%s')".formatted(name)));
+		};
 	}
 
 	private String sharedLib(String path) {
@@ -384,7 +482,7 @@ class LinkAvoidanceFunctionalTests {
 		throw new RuntimeException();
 	}
 
-	private static class Fixture extends WorkspaceElement {
+	private static class Fixture {
 		private enum SymbolKind { FUNCTION, VARIABLE }
 		private final CppApp app;
 		private final CppLib lib;
@@ -394,7 +492,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		public Fixture(boolean useExternC) {
-			this.app = new CppApp();
+			this.app = new CppApp(useExternC);
 			this.lib = new CppLib(useExternC);
 		}
 
@@ -403,7 +501,11 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		public class CppApp extends ProjectElement {
-			public final CppMainUsingApiHeader main = new CppMainUsingApiHeader();
+			public final CppMainUsingApiHeader main;
+
+			public CppApp(boolean useExternC) {
+				this.main = new CppMainUsingApiHeader(useExternC);
+			}
 
 			@Override
 			public Element getMainElement() {
@@ -412,11 +514,9 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		public class CppLib extends ProjectElement {
-			public final CppApiHeader api;
 			public final CppImpl impl;
 
 			public CppLib(boolean useExternC) {
-				this.api = new CppApiHeader(useExternC);
 				this.impl = new CppImpl(useExternC);
 			}
 
@@ -425,7 +525,7 @@ class LinkAvoidanceFunctionalTests {
 				return new NativeLibraryElement() {
 					@Override
 					public SourceElement getPublicHeaders() {
-						return api;
+						return SourceElement.empty();
 					}
 
 					@Override
@@ -436,39 +536,13 @@ class LinkAvoidanceFunctionalTests {
 			}
 		}
 
-		@Override
-		public List<ProjectElement> getProjects() {
-			return List.of(app, lib);
-		}
-
 		public void writeToProject(GradleBuild build) {
-			build.subproject("app", project -> {
+			build.rootProject(project -> {
 				new GradleLayoutElement().applyTo(app).writeToDirectory(project.getLocation());
 			});
-			build.subproject("lib", project -> {
-				new GradleLayoutElement().applyTo(lib).writeToDirectory(project.getLocation());
+			build.rootProject(project -> {
+				lib.impl.writeToDirectory(project.getLocation().resolve("src/foo/cpp"));
 			});
-		}
-
-		class CppApiHeader extends SourceFileElement {
-			private final boolean useExternC;
-
-			public CppApiHeader(boolean useExternC) {
-				this.useExternC = useExternC;
-			}
-
-			@Override
-			public SourceFile getSourceFile() {
-				return sourceFile("api.h", externC("int greet();"));
-			}
-
-			private String externC(String s) {
-				return useExternC ? "extern \"C\" " + s : s;
-			}
-
-			public SourceFileElement withVariableKindChange() {
-				return ofFile(sourceFile("api.h", externC("int greet;")));
-			}
 		}
 
 		class CppImpl extends SourceFileElement {
@@ -537,24 +611,37 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		class CppMainUsingApiHeader extends SourceFileElement {
+			private final boolean useExternC;
 			private final SymbolKind kind;
 
-			public CppMainUsingApiHeader() {
-				this(SymbolKind.FUNCTION);
+			public CppMainUsingApiHeader(boolean useExternC) {
+				this(useExternC, SymbolKind.FUNCTION);
 			}
 
-			private CppMainUsingApiHeader(SymbolKind kind) {
+			private CppMainUsingApiHeader(boolean useExternC, SymbolKind kind) {
+				this.useExternC = useExternC;
 				this.kind = kind;
+			}
+
+			private String externC(String s) {
+				return useExternC ? "extern \"C\" " + s : s;
 			}
 
 			@Override
 			public SourceFile getSourceFile() {
 				return sourceFile("main.cpp", """
-					#include "api.h"
+					%s
 					int main() {
 						return %s == 32 ? 0 : 1;
 					}
-					""".formatted(symbolUsage()));
+					""".formatted(symbolDeclaration(), symbolUsage()));
+			}
+
+			private String symbolDeclaration() {
+				return switch (kind) {
+					case FUNCTION -> useExternC ? "extern \"C\" int greet();" : "int greet();";
+					case VARIABLE -> useExternC ? "extern \"C\" int greet;" : "extern int greet;";
+				};
 			}
 
 			private String symbolUsage() {
