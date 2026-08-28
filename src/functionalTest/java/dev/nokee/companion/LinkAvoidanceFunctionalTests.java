@@ -12,11 +12,13 @@ import org.gradle.nativeplatform.toolchain.NativeToolChainRegistry;
 import org.gradle.nativeplatform.toolchain.internal.plugins.StandardToolChainsPlugin;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +35,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class LinkAvoidanceFunctionalTests {
 	GradleBuild build;
@@ -51,6 +54,7 @@ class LinkAvoidanceFunctionalTests {
 		build.rootProject(project -> {
 			project.append(staticImportClass(OperatingSystem.class));
 			project.append(staticImportClass(DefaultNativePlatform.class));
+			project.append(importClass(DefaultNativePlatform.class));
 			project.append(importClass(NativeToolChainRegistry.class));
 			project.append(apply(plugin(StandardToolChainsPlugin.class)));
 			project.append(groovyDsl("""
@@ -190,7 +194,7 @@ class LinkAvoidanceFunctionalTests {
 
 			addedSymbol().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -246,7 +250,7 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withAddedInlineFunction().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -256,7 +260,7 @@ class LinkAvoidanceFunctionalTests {
 			build.rootProject(sharedLibComponent("foo"));
 			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":clean", ":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":clean", ":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -308,12 +312,12 @@ class LinkAvoidanceFunctionalTests {
 //			fixture.lib.api.withVariableKindChange().writeToDirectory(build.getLocation().resolve("includes"));
 			fixture.app.main.useAsVariableSymbol().writeToDirectory(mainComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 
 			// TODO: SEEMS TO BE ONLY UNDEFINED
 //			fixture.lib.api.writeToDirectory(build.getLocation().resolve("includes")); // Return to original
 			fixture.lib.impl.writeToDirectory(fooComponent()); // Return to original
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -355,7 +359,7 @@ class LinkAvoidanceFunctionalTests {
 //			fixture.lib.api.withVariableKindChange().writeToDirectory(build.getLocation().resolve("include"));
 			fixture.app.main.useAsVariableSymbol().writeToDirectory(mainComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 
 			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
@@ -421,7 +425,115 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+		}
+
+		@Test
+		@Disabled
+		void relinkWhenLibraryTargetsAnotherMachine() {
+			// The target machine - e_machine in ELF, cputype/cpusubtype in Mach-O, Machine in the PE COFF
+			// header - is not part of the exported symbol table, yet linking against a library built for
+			// another machine is rejected by GNU ld, ld64 and link.exe alike. A library that keeps every one
+			// of its exports but moves to another machine is therefore a different linker-facing
+			// representation and must relink.
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			build.rootProject(project -> project.append(groovyDsl("""
+				def newPlatform = new DefaultNativePlatform('other')
+				newPlatform.architecture('x86-64')
+				tasks.named('compileFoo') { targetPlatform = newPlatform }
+				tasks.named('linkFoo') { targetPlatform = newPlatform }
+			""")));
+
+			assertThat(runs(runner.withArguments(":link")), tasksExecutedAndNotSkipped(hasItem(":link")));
+		}
+
+		@Test
+		void relinkWhenLibraryTargetsAnotherOsAbi() throws IOException {
+			assumeTrue(SystemUtils.IS_OS_LINUX, "EI_OSABI only exists in ELF"); // TODO: assert binary format not OS
+
+			// EI_OSABI, e_ident byte 7, tells the linker which OS extensions the rest of the file may use, so
+			// it too decides whether a link can succeed while living outside the exported symbol table. An
+			// ifunc is the way to get a GNU/Linux OS ABI out of the toolchain rather than out of a byte
+			// rewrite: the resolver is static, so the exported symbol table is unchanged.
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.rootProject(sharedLibComponent("foo"));
+
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			// Unlike the machine, the OS ABI is not something a compiler flag asks for: it is emitted because
+			// of what the library contains. Assert the toolchain actually moved it, so a toolchain that does
+			// not fails here instead of silently turning this into a test of nothing.
+			final long EI_OSABI = 7;
+			final int ELFOSABI_FREEBSD = 9;
+			try (RandomAccessFile f = new RandomAccessFile(build.getLocation().resolve(OperatingSystem.current().getSharedLibraryName("out/foo/foo")).toFile(), "rw")) {
+				f.seek(EI_OSABI);
+				f.write(ELFOSABI_FREEBSD);
+			}
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+		}
+
+		@Test
+		void relinkWhenExportedSymbolSizeChanges() {
+			assumeTrue(SystemUtils.IS_OS_LINUX, "st_size is an ELF concept"); // TODO: assert binary format not OS
+
+			// st_size is its own field in Elf64_Sym, apart from the name and from the binding and type packed
+			// into st_info, so growing an exported data object leaves all three untouched. The linker reserves
+			// st_size bytes in a non-PIE consumer's own .bss and emits a copy relocation, which is what makes
+			// the size part of what the consumer was linked against. Nothing fails at link time: a consumer
+			// left unrelinked shows up at run time instead, as the loader reporting that the symbol "has
+			// different size in shared object".
+			SourceFile.of("impl2.cpp", "char my_buffer[64] = {};").writeToDirectory(fooComponent());
+			SourceFile.of("main.cpp", """
+					#include <cstdio>
+					extern char my_buffer[];
+					int main() {
+						my_buffer[0] = 'H';
+						my_buffer[1] = 'i';
+						my_buffer[2] = '\\0';
+
+						std::puts(my_buffer);
+						return 0;
+					}
+				""").writeToDirectory(mainComponent());
+			build.rootProject(sharedLibComponent("foo"));
+
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			// Rebuilt by the same compiler from the same source but for a larger object, so the exported name,
+			// its binding and its type are all identical and st_size is the only difference.
+			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+		}
+
+		@Test
+		void relinkWhenExportedSymbolBecomesThreadLocal() {
+			assumeTrue(SystemUtils.IS_OS_LINUX, "STT_TLS is an ELF concept"); // TODO: assert binary format not OS
+
+			// Only the type nibble of st_info moves, from STT_OBJECT to STT_TLS, so the name and the binding
+			// are identical across the two builds. Thread-local symbols use their own relocation family, so a
+			// consumer holding an ordinary data relocation against this symbol stops being valid and GNU ld
+			// rejects it with "accessed both as normal and thread local symbol".
+			SourceFile.of("impl2.cpp", "int counter = 0;").writeToDirectory(fooComponent());
+			SourceFile.of("main.cpp", """
+					extern int counter;
+					int main() {
+						return ++counter;
+					}
+				""").writeToDirectory(mainComponent());
+			build.rootProject(sharedLibComponent("foo"));
+
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			SourceFile.of("impl2.cpp", "__thread int counter = 0;").writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -652,7 +764,7 @@ class LinkAvoidanceFunctionalTests {
 			}
 
 			public SourceFileElement useAsVariableSymbol() {
-				return new CppMainUsingApiHeader(SymbolKind.VARIABLE);
+				return new CppMainUsingApiHeader(useExternC, SymbolKind.VARIABLE);
 			}
 		}
 	}
