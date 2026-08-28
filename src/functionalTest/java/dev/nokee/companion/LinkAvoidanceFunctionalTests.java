@@ -769,3 +769,9 @@ class LinkAvoidanceFunctionalTests {
 		}
 	}
 }
+
+// TODO: Test a library that change EI_DATA but same export table -> relink fails. Left out for now because
+//  there is no honest way to produce it: flipping the byte order of an ELF file is not something a compiler
+//  flag asks for, and a big-endian shared library needs a cross toolchain no host here has. Rewriting the
+//  byte by hand would be testing a file no linker would ever hand us.
+// TODO: overlinking (rpath-link) second-level library remove a symbol -> relink fails if strict mode (-z defs) but no relink if not strict mode
