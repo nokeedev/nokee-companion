@@ -43,11 +43,11 @@ public class GradleBuild {
 		return subprojects.computeIfAbsent(path, this::newSubproject);
 	}
 
-	public GradleBuild rootProject(Consumer<? super GradleBuildFile> action) {
+	public GradleBuild rootProject(Consumer<? super GradleProject> action) {
 		if (buildFile == null) {
 			buildFile = GradleBuildFile.inDirectory(location);
 		}
-		action.accept(buildFile);
+		action.accept(new GradleProject(location, buildFile));
 		return this;
 	}
 

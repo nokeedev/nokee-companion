@@ -25,12 +25,12 @@ class CompileOnlyFunctionalTests {
 		main = GradleBuild.inDirectory(testDirectory);
 
 		new GradleLayoutElement().applyTo(ofMain(app.withoutImplementation())).writeToDirectory(main.getLocation());
-		main.rootProject(buildFile -> {
-			buildFile.plugins(it -> {
+		main.rootProject(project -> {
+			project.plugins(it -> {
 				it.id("cpp-application");
 				it.id("dev.nokee.native-companion");
 			});
-			buildFile.append(groovyDsl("""
+			project.append(groovyDsl("""
 				dependencies {
 					compileOnly project(':api')
 					implementation project(':lib')
