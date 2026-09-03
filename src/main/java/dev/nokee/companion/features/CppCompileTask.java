@@ -12,20 +12,26 @@ import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.*;
+import org.gradle.api.internal.file.TaskFileVarFactory;
+import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.*;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.*;
 import org.gradle.internal.Cast;
+import org.gradle.internal.file.Deleter;
 import org.gradle.internal.io.StreamByteBuffer;
 import org.gradle.internal.operations.*;
 import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.internal.os.OperatingSystem;
+import org.gradle.internal.vfs.FileSystemAccess;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.language.base.internal.compile.VersionAwareCompiler;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
+import org.gradle.language.nativeplatform.internal.incremental.CompilationStateCacheFactory;
 import org.gradle.language.nativeplatform.internal.incremental.IncrementalCompilerBuilder;
+import org.gradle.language.nativeplatform.internal.incremental.sourceparser.CSourceParser;
 import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
 import org.gradle.nativeplatform.internal.BuildOperationLoggingCompilerDecorator;
 import org.gradle.nativeplatform.platform.internal.NativePlatformInternal;
@@ -45,7 +51,9 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.util.*;
@@ -544,7 +552,35 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	private transient IncrementalCompilerBuilder.IncrementalCompiler incrementalCompiler;
 
 	@Internal
-	public abstract Property<IncrementalCompilerBuilder> getIncrementalCompilerBuilderService();
+	public abstract Property<Class<? extends IncrementalCompilerBuilder>> getIncrementalCompilerBuilderClass();
+
+	//region Services required by IncrementalCompilerBuilder
+	@Inject protected abstract BuildOperationRunner getBuildOperationRunner();
+	@Inject protected abstract CompilationStateCacheFactory getCompilationStateCacheFactory();
+	@Inject protected abstract CSourceParser getSourceParser();
+	@Inject protected abstract Deleter getDeleter();
+	@Inject protected abstract DirectoryFileTreeFactory getDirectoryFileTreeFactory();
+	@Inject protected abstract FileSystemAccess getFileSystemAccess();
+	@Inject protected abstract TaskFileVarFactory getFileVarFactory();
+	//endregion
+
+	@Internal
+	public Provider<IncrementalCompilerBuilder> getIncrementalCompilerBuilderService() {
+		return getIncrementalCompilerBuilderClass().map(builderClass -> {
+			try {
+				Constructor<? extends IncrementalCompilerBuilder> ctor = builderClass.getConstructor(BuildOperationRunner.class,
+					CompilationStateCacheFactory.class,
+					CSourceParser.class,
+					Deleter.class,
+					DirectoryFileTreeFactory.class,
+					FileSystemAccess.class,
+					TaskFileVarFactory.class);
+				return ctor.newInstance(getBuildOperationRunner(), getCompilationStateCacheFactory(), getSourceParser(), getDeleter(), getDirectoryFileTreeFactory(), getFileSystemAccess(), getFileVarFactory());
+			} catch (NoSuchMethodException | InvocationTargetException | InstantiationException | IllegalAccessException e) {
+				throw new RuntimeException(e);
+			}
+		});
+	}
 
 	private IncrementalCompilerBuilder.IncrementalCompiler getIncrementalCompiler() {
 		if (incrementalCompiler == null) {
