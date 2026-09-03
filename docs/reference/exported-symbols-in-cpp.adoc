@@ -133,39 +133,43 @@ Nothing else survives, so a metadata change reaches a PE export table only when 
 Each verdict covers the global symbols an edit writes, removes, or renames, and it assumes <<toolchain-export-rules,the export rule>> exports them.
 MSVC exports on request, so an edit reaching a name that no `+__declspec(dllexport)+` and no module-definition file mentions is an implementation change there.
 
-Adding a function definition at namespace scope::
-+
+[#adding-a-function-definition-at-namespace-scope]
+=== Adding a function definition at namespace scope
+
 [source,diff]
 ----
 +void f(int) { }
 ----
-+
+
 API change because the definition has external linkage, which writes a new global symbol.
 See <<namespace-scope-definitions>>.
 
-Removing a namespace-scope definition::
-+
+[#removing-a-namespace-scope-definition]
+=== Removing a namespace-scope definition
+
 [source,diff]
 ----
 -void f(int) { }
 ----
-+
+
 API change because the global symbol it wrote disappears with it.
 See <<namespace-scope-definitions>>.
 
-Renaming a namespace-scope definition::
-+
+[#renaming-a-namespace-scope-definition]
+=== Renaming a namespace-scope definition
+
 [source,diff]
 ----
 -void f(int) { }
 +void g(int) { }
 ----
-+
+
 API change because the mangled name is built from the identifier.
 See <<namespace-scope-definitions>>.
 
-Renaming a class or a namespace::
-+
+[#renaming-a-class-or-a-namespace]
+=== Renaming a class or a namespace
+
 [source,diff]
 ----
 -class Buffer {
@@ -173,59 +177,64 @@ Renaming a class or a namespace::
      void write(int);
  };
 ----
-+
+
 API change for every symbol underneath it, because the mangled name carries the class and the namespace.
 See <<name-mangling>>.
 
-Wrapping a definition in a namespace::
-+
+[#wrapping-a-definition-in-a-namespace]
+=== Wrapping a definition in a namespace
+
 [source,diff]
 ----
 +namespace detail {
  void f(int) { }
 +}
 ----
-+
+
 API change because the namespace joins the mangled name.
 See <<name-mangling>>.
 
-Wrapping a definition in an unnamed namespace::
-+
+[#wrapping-a-definition-in-an-unnamed-namespace]
+=== Wrapping a definition in an unnamed namespace
+
 [source,diff]
 ----
 +namespace {
  void f(int) { }
 +}
 ----
-+
+
 API change because an unnamed namespace gives internal linkage, which turns the global symbol local.
 See <<namespace-scope-definitions>>.
 
-Adding a definition inside an unnamed namespace::
-+
+[#adding-a-definition-inside-an-unnamed-namespace]
+=== Adding a definition inside an unnamed namespace
+
 [source,diff]
 ----
 +namespace {
 +void helper(int) { }
 +}
 ----
-+
+
 Implementation change because an unnamed namespace gives the definition internal linkage, which produces a local symbol.
 See <<namespace-scope-definitions>>.
 
-Adding `static` to a namespace-scope definition::
-+
+[#adding-static-to-a-namespace-scope-definition]
+=== Adding `static` to a namespace-scope definition
+
 [source,diff]
 ----
 -void f(int) { }
 +static void f(int) { }
 ----
-+
+
 API change because `static` gives the definition internal linkage, which turns its global symbol local.
 See <<namespace-scope-definitions>>.
 
-Moving a definition to another translation unit in the same library::
-+
+[#moving-a-definition-to-another-translation-unit-in-the-same-library]
+=== Moving a definition to another translation unit in the same library
+
 [source,diff]
 ----
 --- lib/lib.cpp
@@ -233,12 +242,13 @@ Moving a definition to another translation unit in the same library::
 --- lib/util.cpp
 +void f(int) { }
 ----
-+
+
 Implementation change because the library still holds the definition, so the same global symbol comes out.
 See <<definition-placement>>.
 
-Moving a definition out of the library::
-+
+[#moving-a-definition-out-of-the-library]
+=== Moving a definition out of the library
+
 [source,diff]
 ----
 --- lib/lib.cpp
@@ -254,12 +264,13 @@ Moving a definition out of the library::
      return f() + g();
  }
 ----
-+
+
 API change because the library stops defining the symbol and imports it instead.
 See <<definition-placement>>.
 
-Changing a function's body::
-+
+[#changing-a-functions-body]
+=== Changing a function's body
+
 [source,diff]
 ----
  int limit() {
@@ -267,44 +278,48 @@ Changing a function's body::
 +    return 9;
  }
 ----
-+
+
 Implementation change because a symbol records the declaration, and the declaration is untouched.
 
-Adding `constexpr` to a function::
-+
+[#adding-constexpr-to-a-function]
+=== Adding `constexpr` to a function
+
 [source,diff]
 ----
 -int limit() { return 8; }
 +constexpr int limit() { return 8; }
 ----
-+
+
 API change because `constexpr` implies `inline`, which switches the symbol from strong binding to weak.
 See <<inline-functions>>.
 
-Adding an overload::
-+
+[#adding-an-overload]
+=== Adding an overload
+
 [source,diff]
 ----
  void f(int) { }
 +void f(double) { }
 ----
-+
+
 API change because the mangled name carries the parameter types, so the overload gets a symbol of its own.
 See <<name-mangling>>.
 
-Changing a parameter's type::
-+
+[#changing-a-parameters-type]
+=== Changing a parameter's type
+
 [source,diff]
 ----
 -void f(int) { }
 +void f(double) { }
 ----
-+
+
 API change because the mangled name carries the parameter types.
 See <<function-signatures>>.
 
-Changing what a type alias names::
-+
+[#changing-what-a-type-alias-names]
+=== Changing what a type alias names
+
 [source,diff]
 ----
 --- lib.h
@@ -313,90 +328,98 @@ Changing what a type alias names::
 
  void f(Handle);
 ----
-+
+
 API change for every function using the alias, because an alias mangles as the type it names.
 See <<function-signatures>>.
 
-Reordering a function's parameters::
-+
+[#reordering-a-functions-parameters]
+=== Reordering a function's parameters
+
 [source,diff]
 ----
 -void f(int, double) { }
 +void f(double, int) { }
 ----
-+
+
 API change because the mangled name carries the parameter types in order.
 See <<function-signatures>>.
 
-Adding `const` to a by-value parameter::
-+
+[#adding-const-to-a-by-value-parameter]
+=== Adding `const` to a by-value parameter
+
 [source,diff]
 ----
 -void f(int count) { }
 +void f(const int count) { }
 ----
-+
+
 Implementation change because the parameter type list drops top-level `const`.
 See <<function-signatures>>.
 
-Changing a function's return type::
-+
+[#changing-a-functions-return-type]
+=== Changing a function's return type
+
 [source,diff]
 ----
 -int f() { return 0; }
 +long f() { return 0; }
 ----
-+
+
 Implementation change, and an API change under MSVC, because only MSVC folds the return type into the name.
 See <<function-signatures>>.
 
-Adding `noexcept` to a function::
-+
+[#adding-noexcept-to-a-function]
+=== Adding `noexcept` to a function
+
 [source,diff]
 ----
 -void f(int) { }
 +void f(int) noexcept { }
 ----
-+
+
 Implementation change, and an API change where the `noexcept` sits inside a parameter's function type, because an exception specification never reaches the function's own name.
 See <<function-signatures>>.
 
-Adding, changing, or removing a default argument::
-+
+[#adding-changing-or-removing-a-default-argument]
+=== Adding, changing, or removing a default argument
+
 [source,diff]
 ----
 --- lib.h
 -void f(int count = 1);
 +void f(int count);
 ----
-+
+
 Implementation change because a default argument lives at the call site and reaches no symbol.
 See <<function-signatures>>.
 
-Adding or removing a parameter::
-+
+[#adding-or-removing-a-parameter]
+=== Adding or removing a parameter
+
 [source,diff]
 ----
 -void f(int a, int b) { }
 +void f(int a) { }
 ----
-+
+
 API change because the mangled name carries the whole parameter list.
 See <<function-signatures>>.
 
-Adding `override`, `final`, `explicit`, or an attribute::
-+
+[#adding-override-final-explicit-or-an-attribute]
+=== Adding `override`, `final`, `explicit`, or an attribute
+
 [source,diff]
 ----
 -int size() const;
 +[[nodiscard]] int size() const override;
 ----
-+
+
 Implementation change because the compiler checks them and writes none of them into the name.
 See <<function-signatures>>.
 
-Adding `const` to a member function::
-+
+[#adding-const-to-a-member-function]
+=== Adding `const` to a member function
+
 [source,diff]
 ----
 --- lib.h
@@ -408,12 +431,13 @@ Adding `const` to a member function::
 -int C::size() { return 0; }
 +int C::size() const { return 0; }
 ----
-+
+
 API change because a member function's cv-qualifier reaches the mangled name.
 See <<function-signatures>>.
 
-Adding a member function with its definition outside the class::
-+
+[#adding-a-member-function-with-its-definition-outside-the-class]
+=== Adding a member function with its definition outside the class
+
 [source,diff]
 ----
 --- lib.h
@@ -423,12 +447,13 @@ Adding a member function with its definition outside the class::
 --- lib.cpp
 +void C::f() { }
 ----
-+
+
 API change because the definition writes a new global symbol carrying the class name.
 See <<class-members>>.
 
-Adding `= delete` to a function::
-+
+[#adding-delete-to-a-function]
+=== Adding `= delete` to a function
+
 [source,diff]
 ----
  class C {
@@ -436,12 +461,13 @@ Adding `= delete` to a function::
 +    C(const C&) = delete;
  };
 ----
-+
+
 API change because the compiler emits nothing for it, so a symbol that existed disappears.
 See <<class-members>>.
 
-Adding `static` to a member function::
-+
+[#adding-static-to-a-member-function]
+=== Adding `static` to a member function
+
 [source,diff]
 ----
  class C {
@@ -449,12 +475,13 @@ Adding `static` to a member function::
 +    static void f();
  };
 ----
-+
+
 Implementation change, and an API change under MSVC, because only MSVC records the `static` in the name.
 See <<class-members>>.
 
-Changing a member's access specifier::
-+
+[#changing-a-members-access-specifier]
+=== Changing a member's access specifier
+
 [source,diff]
 ----
  class C {
@@ -463,12 +490,13 @@ Changing a member's access specifier::
      void f();
  };
 ----
-+
+
 Implementation change, and an API change under MSVC, because only MSVC records the access specifier in the name.
 See <<class-members>>.
 
-Defining a special member function outside the class body::
-+
+[#defining-a-special-member-function-outside-the-class-body]
+=== Defining a special member function outside the class body
+
 [source,diff]
 ----
 --- lib.h
@@ -478,12 +506,13 @@ Defining a special member function outside the class body::
 --- lib.cpp
 +C::~C() = default;
 ----
-+
+
 API change because the out-of-line definition switches the symbol from weak binding to strong.
 See <<class-members>>.
 
-Adding a static data member::
-+
+[#adding-a-static-data-member]
+=== Adding a static data member
+
 [source,diff]
 ----
 --- lib.h
@@ -493,12 +522,13 @@ Adding a static data member::
 --- lib.cpp
 +int C::count = 0;
 ----
-+
+
 API change because its namespace-scope definition writes a global symbol.
 See <<class-members>>.
 
-Adding a data member::
-+
+[#adding-a-data-member]
+=== Adding a data member
+
 [source,diff]
 ----
  class C {
@@ -506,12 +536,13 @@ Adding a data member::
 +    int b;
  };
 ----
-+
+
 Implementation change because no symbol records a class's layout.
 See <<class-layout>>.
 
-Adding a base class::
-+
+[#adding-a-base-class]
+=== Adding a base class
+
 [source,diff]
 ----
 -class C {
@@ -519,12 +550,13 @@ Adding a base class::
      int a;
  };
 ----
-+
+
 Implementation change, unless the base brings virtual functions along, because no symbol records a class's layout.
 See <<class-layout>>.
 
-Adding the first virtual function to a class::
-+
+[#adding-the-first-virtual-function-to-a-class]
+=== Adding the first virtual function to a class
+
 [source,diff]
 ----
  class C {
@@ -532,12 +564,13 @@ Adding the first virtual function to a class::
 +    virtual void f();
  };
 ----
-+
+
 API change because the class then needs a vtable, which writes symbols for the vtable and its run-time type information.
 See <<virtual-functions>>.
 
-Moving a virtual function's definition out of the header::
-+
+[#moving-a-virtual-functions-definition-out-of-the-header]
+=== Moving a virtual function's definition out of the header
+
 [source,diff]
 ----
 --- lib.h
@@ -548,12 +581,13 @@ Moving a virtual function's definition out of the header::
 --- lib.cpp
 +void C::f() { }
 ----
-+
+
 API change on ELF and Mach-O because the class gains a key function, which switches the vtable from weak binding to strong.
 See <<virtual-functions>>.
 
-Reordering virtual functions::
-+
+[#reordering-virtual-functions]
+=== Reordering virtual functions
+
 [source,diff]
 ----
  class C {
@@ -562,44 +596,48 @@ Reordering virtual functions::
 +    virtual void f();
  };
 ----
-+
+
 Implementation change because the vtable's contents change while its symbol keeps the same name and size.
 See <<virtual-functions>>.
 
-Adding a `const` object at namespace scope::
-+
+[#adding-a-const-object-at-namespace-scope]
+=== Adding a `const` object at namespace scope
+
 [source,diff]
 ----
 +const int limit = 8;
 ----
-+
+
 Implementation change because a `const` object at namespace scope has internal linkage.
 See <<constant-objects>>.
 
-Adding `extern` to a `const` object at namespace scope::
-+
+[#adding-extern-to-a-const-object-at-namespace-scope]
+=== Adding `extern` to a `const` object at namespace scope
+
 [source,diff]
 ----
 -const int limit = 8;
 +extern const int limit = 8;
 ----
-+
+
 API change because `extern` gives the object external linkage, which writes a global symbol.
 See <<constant-objects>>.
 
-Adding an `inline` function definition to a header::
-+
+[#adding-an-inline-function-definition-to-a-header]
+=== Adding an `inline` function definition to a header
+
 [source,diff]
 ----
 --- lib.h
 +inline int limit() { return 8; }
 ----
-+
+
 Implementation change because nothing uses it yet, so the compiler writes no symbol.
 See <<inline-functions>>.
 
-Calling an `inline` function from a new place::
-+
+[#calling-an-inline-function-from-a-new-place]
+=== Calling an `inline` function from a new place
+
 [source,diff]
 ----
 --- lib.h
@@ -612,12 +650,13 @@ Calling an `inline` function from a new place::
 +    return limit();
  }
 ----
-+
+
 API change because the call makes the compiler emit the definition, which writes a weak global symbol.
 See <<inline-functions>>.
 
-Adding a `static` local variable to an inline function::
-+
+[#adding-a-static-local-variable-to-an-inline-function]
+=== Adding a `static` local variable to an inline function
+
 [source,diff]
 ----
 --- lib.h
@@ -627,12 +666,13 @@ Adding a `static` local variable to an inline function::
 +    return r;
  }
 ----
-+
+
 API change because the variable names one object across the program, so it gets a global symbol of its own.
 See <<inline-functions>>.
 
-Using a template specialization the library had not used::
-+
+[#using-a-template-specialization-the-library-had-not-used]
+=== Using a template specialization the library had not used
+
 [source,diff]
 ----
 --- lib.h
@@ -646,109 +686,117 @@ Using a template specialization the library had not used::
 +    return twice(2);
  }
 ----
-+
+
 API change because the compiler instantiates the specialization, which writes a weak global symbol.
 See <<templates>>.
 
-Adding an explicit instantiation definition::
-+
+[#adding-an-explicit-instantiation-definition]
+=== Adding an explicit instantiation definition
+
 [source,diff]
 ----
 +template class Buffer<int>;
 ----
-+
+
 API change because the instantiation writes global symbols for every member.
 See <<templates>>.
 
-Adding `extern "C"` to a function::
-+
+[#adding-extern-c-to-a-function]
+=== Adding `extern "C"` to a function
+
 [source,diff]
 ----
 -void f(int) { }
 +extern "C" void f(int) { }
 ----
-+
+
 API change because C language linkage replaces the mangled name with the plain identifier.
 See <<language-linkage>>.
 
-Adding `thread_local` to an exported object::
-+
+[#adding-thread-local-to-an-exported-object]
+=== Adding `thread_local` to an exported object
+
 [source,diff]
 ----
 -int counter;
 +thread_local int counter;
 ----
-+
+
 API change on ELF and Mach-O because thread storage shows up on the exported symbol.
 See <<thread-local-objects>>.
 
-Changing a function's calling convention::
-+
+[#changing-a-functions-calling-convention]
+=== Changing a function's calling convention
+
 [source,diff]
 ----
 -void f() { }
 +void __stdcall f() { }
 ----
-+
+
 API change under MSVC because a decorated name carries the calling convention.
 See <<calling-conventions>>.
 
-Exporting a name that was not exported::
-+
+[#exporting-a-name-that-was-not-exported]
+=== Exporting a name that was not exported
+
 .MSVC
 [source,diff]
 ----
 -void f(int) { }
 +__declspec(dllexport) void f(int) { }
 ----
-+
+
 .GCC and Clang using -fvisibility=hidden
 [source,diff]
 ----
 -void f(int) { }
 +__attribute__((visibility("default"))) void f(int) { }
 ----
-+
+
 API change because the marker flips the export rule's decision for that name.
 See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
 
-Unexporting a name that was exported::
-+
+[#unexporting-a-name-that-was-exported]
+=== Unexporting a name that was exported
+
 .MSVC
 [source,diff]
 ----
 -__declspec(dllexport) void f(int) { }
 +void f(int) { }
 ----
-+
+
 .GCC and Clang
 [source,diff]
 ----
 -void f(int) { }
 +__attribute__((visibility("hidden"))) void f(int) { }
 ----
-+
+
 API change because the marker flips the export rule's decision for that name.
 See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
 
-Making a definition weak::
-+
+[#making-a-definition-weak]
+=== Making a definition weak
+
 [source,diff]
 ----
 -void f(int) { }
 +__attribute__((weak)) void f(int) { }
 ----
-+
+
 API change because binding travels with the symbol, and the linker resolves against it.
 See <<weak-symbols>>.
 
-Adding an alias for an existing definition::
-+
+[#adding-an-alias-for-an-existing-definition]
+=== Adding an alias for an existing definition
+
 [source,diff]
 ----
 +void g(int) __attribute__((alias("_Z1fi")));
 ----
-+
+
 API change because the alias writes a second global symbol for the same definition.
 See <<aliases>>.
 

@@ -101,71 +101,78 @@ Nothing else survives, so a metadata change reaches a PE export table only when 
 Each verdict covers the global symbols an edit writes, removes, or renames, and it assumes <<toolchain-export-rules,the export rule>> exports them.
 MSVC exports on request, so an edit reaching a name that no `+__declspec(dllexport)+` and no module-definition file mentions is an implementation change there.
 
-Adding a function definition at file scope::
-+
+[#adding-a-function-definition-at-file-scope]
+=== Adding a function definition at file scope
+
 [source,diff]
 ----
 +void f(void) { }
 ----
-+
+
 API change because the definition has external linkage, which writes a new global symbol.
 See <<file-scope-definitions>>.
 
-Removing a file-scope definition::
-+
+[#removing-a-file-scope-definition]
+=== Removing a file-scope definition
+
 [source,diff]
 ----
 -void f(void) { }
 ----
-+
+
 API change because the global symbol it wrote disappears with it.
 See <<file-scope-definitions>>.
 
-Renaming a file-scope definition::
-+
+[#renaming-a-file-scope-definition]
+=== Renaming a file-scope definition
+
 [source,diff]
 ----
 -void f(void) { }
 +void g(void) { }
 ----
-+
+
 API change because a C symbol name is built from the identifier.
 See <<file-scope-definitions>>.
 
-Adding `static` to a file-scope definition::
-+
+[#adding-static-to-a-file-scope-definition]
+=== Adding `static` to a file-scope definition
+
 [source,diff]
 ----
 -int counter = 0;
 +static int counter = 0;
 ----
-+
+
 API change because `static` gives the definition internal linkage, which turns its global symbol local.
 See <<file-scope-definitions>>.
 
-Removing `static` from a file-scope definition::
-+
+[#removing-static-from-a-file-scope-definition]
+=== Removing `static` from a file-scope definition
+
 [source,diff]
 ----
 -static int counter = 0;
 +int counter = 0;
 ----
-+
+
 API change because external linkage turns the local symbol into a global one.
 See <<file-scope-definitions>>.
 
-Adding or removing a `static` function or object::
-+
+[#adding-or-removing-a-static-function-or-object]
+=== Adding or removing a `static` function or object
+
 [source,diff]
 ----
 +static void helper(void) { }
 ----
-+
+
 Implementation change because internal linkage keeps the symbol local, and no toolchain exports a local symbol.
 See <<file-scope-definitions>>.
 
-Moving a definition to another translation unit in the same library::
-+
+[#moving-a-definition-to-another-translation-unit-in-the-same-library]
+=== Moving a definition to another translation unit in the same library
+
 [source,diff]
 ----
 --- lib/lib.c
@@ -173,12 +180,13 @@ Moving a definition to another translation unit in the same library::
 --- lib/util.c
 +void f(void) { }
 ----
-+
+
 Implementation change because the library still holds the definition, so the same global symbol comes out.
 See <<definition-placement>>.
 
-Moving a definition out of the library::
-+
+[#moving-a-definition-out-of-the-library]
+=== Moving a definition out of the library
+
 [source,diff]
 ----
 --- lib/lib.c
@@ -194,12 +202,13 @@ Moving a definition out of the library::
      return f() + g();
  }
 ----
-+
+
 API change because the library stops defining the symbol and imports it instead.
 See <<definition-placement>>.
 
-Changing a function's body::
-+
+[#changing-a-functions-body]
+=== Changing a function's body
+
 [source,diff]
 ----
  int limit(void) {
@@ -207,53 +216,58 @@ Changing a function's body::
 +    return 9;
  }
 ----
-+
+
 Implementation change because a symbol records the declaration, and the declaration is untouched.
 
-Changing an object's initial value::
-+
+[#changing-an-objects-initial-value]
+=== Changing an object's initial value
+
 [source,diff]
 ----
 -const int limit = 8;
 +const int limit = 9;
 ----
-+
+
 Implementation change because a symbol records the object's name and size, neither of which the value reaches.
 
-Adding or removing `const` on a file-scope object::
-+
+[#adding-or-removing-const-on-a-file-scope-object]
+=== Adding or removing `const` on a file-scope object
+
 [source,diff]
 ----
 -int counter = 0;
 +const int counter = 0;
 ----
-+
+
 Implementation change because the object then lives in read-only memory, and its symbol records the same name, type, binding, and size.
 See <<constant-objects>>.
 
-Adding a `const` object at file scope::
-+
+[#adding-a-const-object-at-file-scope]
+=== Adding a `const` object at file scope
+
 [source,diff]
 ----
 +const int limit = 8;
 ----
-+
+
 API change because a file-scope definition without `static` has external linkage, `const` or not.
 See <<constant-objects>>.
 
-Adding or removing a local variable::
-+
+[#adding-or-removing-a-local-variable]
+=== Adding or removing a local variable
+
 [source,diff]
 ----
  void f(void) {
 +    int scratch = 0;
  }
 ----
-+
+
 Implementation change because an automatic object has no linkage and produces no symbol.
 
-Reordering declarations within a translation unit::
-+
+[#reordering-declarations-within-a-translation-unit]
+=== Reordering declarations within a translation unit
+
 [source,diff]
 ----
 +void g(void) { }
@@ -262,22 +276,24 @@ Reordering declarations within a translation unit::
 -
 -void g(void) { }
 ----
-+
+
 Implementation change because the same definitions produce the same symbols.
 
-Adding an `inline` function definition to a header::
-+
+[#adding-an-inline-function-definition-to-a-header]
+=== Adding an `inline` function definition to a header
+
 [source,diff]
 ----
 --- lib.h
 +inline int limit(void) { return 8; }
 ----
-+
+
 Implementation change because an inline definition supplies no external definition, so it writes no global symbol.
 See <<inline-functions>>.
 
-Calling an `inline` function from a new place::
-+
+[#calling-an-inline-function-from-a-new-place]
+=== Calling an `inline` function from a new place
+
 [source,diff]
 ----
 --- lib.h
@@ -290,12 +306,13 @@ Calling an `inline` function from a new place::
 +    return limit();
  }
 ----
-+
+
 Implementation change because the call leaves an undefined reference, which the external definition already satisfies.
 See <<inline-functions>>.
 
-Declaring an `inline` function `extern` in one translation unit::
-+
+[#declaring-an-inline-function-extern-in-one-translation-unit]
+=== Declaring an `inline` function `extern` in one translation unit
+
 [source,diff]
 ----
 --- lib.h
@@ -306,12 +323,13 @@ Declaring an `inline` function `extern` in one translation unit::
 +
 +extern int limit(void);
 ----
-+
+
 API change because that declaration turns the inline definition into the external definition, which writes the global symbol.
 See <<inline-functions>>.
 
-Adding `static inline` to a header::
-+
+[#adding-static-inline-to-a-header]
+=== Adding `static inline` to a header
+
 [source,diff]
 ----
 --- lib.h
@@ -321,78 +339,85 @@ Adding `static inline` to a header::
  #include "lib.h"
  // ...
 ----
-+
+
 Implementation change because internal linkage gives each including translation unit a local symbol.
 See <<inline-functions>>.
 
-Adding `_Thread_local` to an exported object, C11 and later::
-+
+[#adding-thread-local-to-an-exported-object-c11-and-later]
+=== Adding `_Thread_local` to an exported object, C11 and later
+
 [source,diff]
 ----
 -int counter;
 +_Thread_local int counter;
 ----
-+
+
 API change on ELF and Mach-O because thread storage shows up on the exported symbol.
 See <<thread-local-objects>>.
 
-Changing a function's calling convention::
-+
+[#changing-a-functions-calling-convention]
+=== Changing a function's calling convention
+
 [source,diff]
 ----
 -void f(void) { }
 +void __stdcall f(void) { }
 ----
-+
+
 API change on 32-bit Windows because Windows x86 decoration folds the calling convention into the symbol name.
 See <<calling-conventions>>.
 
-Changing a parameter's type::
-+
+[#changing-a-parameters-type]
+=== Changing a parameter's type
+
 [source,diff]
 ----
 -void f(int x) { }
 +void f(double x) { }
 ----
-+
+
 Implementation change, and an API change on 32-bit Windows under `+__stdcall+` or `+__fastcall+` when the parameter list's total size changes, because a C symbol name records no parameter types.
 See <<function-signatures>>.
 
-Changing a function's return type::
-+
+[#changing-a-functions-return-type]
+=== Changing a function's return type
+
 [source,diff]
 ----
 -int f(void) { return 0; }
 +long f(void) { return 0; }
 ----
-+
+
 Implementation change because a C symbol name records no return type.
 See <<function-signatures>>.
 
-Adding or removing a parameter::
-+
+[#adding-or-removing-a-parameter]
+=== Adding or removing a parameter
+
 [source,diff]
 ----
 -void f(int a) { }
 +void f(int a, int b) { }
 ----
-+
+
 Implementation change, and an API change on 32-bit Windows under `+__stdcall+` or `+__fastcall+`, because a C symbol name records no parameter list.
 See <<function-signatures>>.
 
-Reordering a function's parameters::
-+
+[#reordering-a-functions-parameters]
+=== Reordering a function's parameters
+
 [source,diff]
 ----
 -void f(int a, double b) { }
 +void f(double a, int b) { }
 ----
-+
+
 Implementation change because a C symbol name records no parameter order.
 See <<function-signatures>>.
 
-Changing a struct's fields::
-+
+[#changing-a-structs-fields]
+=== Changing a struct's fields
+
 [source,diff]
 ----
  struct point {
@@ -400,12 +425,13 @@ Changing a struct's fields::
 +    int y;
  };
 ----
-+
+
 Implementation change because no symbol records a struct's fields.
 See <<struct-layout>>.
 
-Changing what a type alias names::
-+
+[#changing-what-a-type-alias-names]
+=== Changing what a type alias names
+
 [source,diff]
 ----
 --- lib.h
@@ -414,66 +440,70 @@ Changing what a type alias names::
 
  void f(handle);
 ----
-+
+
 Implementation change because a C symbol name records no types, so an alias never reaches it.
 See <<function-signatures>>.
 
-Exporting a name that was not exported::
-+
+[#exporting-a-name-that-was-not-exported]
+=== Exporting a name that was not exported
+
 .MSVC
 [source,diff]
 ----
 -void f(void) { }
 +__declspec(dllexport) void f(void) { }
 ----
-+
+
 .GCC and Clang using -fvisibility=hidden
 [source,diff]
 ----
 -void f(void) { }
 +__attribute__((visibility("default"))) void f(void) { }
 ----
-+
+
 API change because the marker flips the export rule's decision for that name.
 See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
 
-Unexporting a name that was exported::
-+
+[#unexporting-a-name-that-was-exported]
+=== Unexporting a name that was exported
+
 .MSVC
 [source,diff]
 ----
 -__declspec(dllexport) void f(void) { }
 +void f(void) { }
 ----
-+
+
 .GCC and Clang
 [source,diff]
 ----
 -void f(void) { }
 +__attribute__((visibility("hidden"))) void f(void) { }
 ----
-+
+
 API change because the marker flips the export rule's decision for that name.
 See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
 
-Making a definition weak::
-+
+[#making-a-definition-weak]
+=== Making a definition weak
+
 [source,diff]
 ----
 -void f(void) { }
 +__attribute__((weak)) void f(void) { }
 ----
-+
+
 API change because binding travels with the symbol, and the linker resolves against it.
 See <<weak-symbols>>.
 
-Adding an alias for an existing definition::
-+
+[#adding-an-alias-for-an-existing-definition]
+=== Adding an alias for an existing definition
+
 [source,diff]
 ----
 +void g(void) __attribute__((alias("f")));
 ----
-+
+
 API change because the alias writes a second global symbol for the same definition.
 See <<aliases>>.
 
