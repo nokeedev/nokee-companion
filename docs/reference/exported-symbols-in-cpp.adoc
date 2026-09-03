@@ -201,6 +201,18 @@ Wrapping a definition in an unnamed namespace::
 API change because an unnamed namespace gives internal linkage, which turns the global symbol local.
 See <<namespace-scope-definitions>>.
 
+Adding a definition inside an unnamed namespace::
++
+[source,diff]
+----
++namespace {
++void helper(int) { }
++}
+----
++
+Implementation change because an unnamed namespace gives the definition internal linkage, which produces a local symbol.
+See <<namespace-scope-definitions>>.
+
 Adding `static` to a namespace-scope definition::
 +
 [source,diff]
@@ -349,16 +361,27 @@ Adding `noexcept` to a function::
 Implementation change, and an API change where the `noexcept` sits inside a parameter's function type, because an exception specification never reaches the function's own name.
 See <<function-signatures>>.
 
-Changing a default argument::
+Adding, changing, or removing a default argument::
 +
 [source,diff]
 ----
 --- lib.h
 -void f(int count = 1);
-+void f(int count = 2);
++void f(int count);
 ----
 +
 Implementation change because a default argument lives at the call site and reaches no symbol.
+See <<function-signatures>>.
+
+Adding or removing a parameter::
++
+[source,diff]
+----
+-void f(int a, int b) { }
++void f(int a) { }
+----
++
+API change because the mangled name carries the whole parameter list.
 See <<function-signatures>>.
 
 Adding `override`, `final`, `explicit`, or an attribute::
@@ -892,7 +915,7 @@ A class growing that way is an API change on ELF.
 == Function signatures
 
 <<name-mangling,The mangled name>> carries the parameter types in order.
-Changing a parameter's type is an API change, and so is swapping two parameters or adding one.
+Changing a parameter's type is an API change, and so is swapping two parameters, adding one, or removing one.
 
 A type alias mangles as the type it names.
 `using Handle = int;` makes `void f(Handle)` mangle as `_Z1fi`, and pointing `Handle` at `long` renames that symbol to `_Z1fl`.
@@ -921,6 +944,8 @@ The specification does reach the name of a function taking a function pointer, w
 
 Parameter names and default arguments:: Neither one reaches the object file.
 A default argument lives at the call site, so changing it takes a rebuild of every caller.
+Removing one leaves those callers with too few arguments, which the compiler reports.
+Removing the parameter itself renames the symbol, whatever default it carried.
 
 A cv-qualifier or a ref-qualifier on a member function does reach the name.
 `int C::size() const` and `int C::size()` are separate symbols, which makes adding `const` to a member function an API change.
