@@ -1,0 +1,991 @@
+= Exported Symbols in C++
+
+This chapter maps a change in C++ code to its effect on a library's exported symbols.
+
+An _API change_ adds, removes, or renames an exported symbol, or changes what one of them records.
+An _implementation change_ leaves every exported symbol as it was.
+
+A consumer importing a symbol compiles a declaration of it, and the definition it binds to lives in the library.
+Those two have to agree on more than the name.
+The exported symbol records only some of what they agree on, so an edit can change what a caller has to do while leaving that record alone.
+The linker sees nothing wrong and binds them anyway.
+Realigning the two takes a _rebuild_: the consumer's source runs through the compiler again, so its declaration matches the definition the library exports now.
+
+NOTE: A shared public header usually keeps both sides agreeing without any help, since the consumer and the library compile the same text.
+The linker knows nothing about headers, so this chapter speaks about the declaration each side compiled.
+
+== From code to exported symbols
+
+A <<definitions,definition>> of a name with <<external-linkage,external linkage>> produces a <<global-symbols,global symbol>>, under <<name-mangling,a name the compiler mangles>>.
+The <<toolchain-export-rules,toolchain's export rule>> decides which global symbols become exported symbols.
+
+[#definitions]
+=== Definitions
+
+A declaration introduces a name.
+A definition also supplies the thing the name stands for.
+
+`int counter = 0;`:: Defines the object.
+
+`extern int counter;`:: Declares only.
+
+`void f(int);`:: Declares only.
+
+`void f(int) { }`:: Defines the function.
+
+`class C { void f(int); };`:: Defines the class and declares the member function.
+
+`void C::f(int) { }`:: Defines the member function.
+
+`template<typename T> T twice(T v) { return v + v; }`:: Defines the template.
+The compiler writes a definition for each specialization the code uses.footnote:cppinst[ISO/IEC 14882:2020 [temp.inst\]]
+
+Only a definition puts a name in the export table.
+A declaration on its own leaves a reference for the linker to satisfy from somewhere else.
+
+The definition also has to sit in a translation unit compiled into this library.
+One living in the consumer, or in another library, puts nothing in this one.
+
+[#external-linkage]
+=== External linkage
+
+Linkage decides which declarations across the program refer to one entity.footnote:cpplink[ISO/IEC 14882:2020 [basic.link\]]
+
+External linkage:: The name refers to one entity across the whole program.
+A namespace-scope declaration gets it unless something hands it internal linkage.
+
+Internal linkage:: The name refers to one entity inside its own translation unit.
+`static` on the declaration is one way to get it.
+An unnamed namespace gives it to everything declared inside.footnote:cppunnamed[ISO/IEC 14882:2020 [namespace.unnamed\]]
+<<constant-objects,A `const` object at namespace scope>> gets it without any keyword.
+
+No linkage:: Each declaration refers to something of its own.
+Block-scope names and function parameters have it.
+
+External linkage and a definition together produce a _global symbol_, the only kind a toolchain can export.
+
+Internal linkage produces a local symbol, and no other translation unit reaches it.
+A block-scope `static` object also gets a local symbol, since its storage outlives the call that created it.
+
+[#global-symbols]
+=== Global symbols
+
+A global symbol is a name in an object file the linker can resolve from another object file.
+It is the unit the export step works on, and it carries what the language decided about the name.
+
+Its type records whether the name is an object, a function, or a thread-local object.
+Its binding records whether another definition may override it.
+An object's size comes from the definition too, and a linker allocating space for it reads that size.
+
+A change to any of these is an API change even when every exported name stays as it was.footnote:[A PE ordinal and an ELF symbol version travel with an exported symbol too, and neither comes from the C++ source. The link step assigns them, through a module-definition file or a version script.]
+
+[#name-mangling]
+=== Name mangling
+
+A C++ program can hold several entities called `f`, so the compiler encodes the whole declaration into one symbol name.
+
+`void f(int)`:: `_Z1fi` under the Itanium ABI, `?f@@YAXH@Z` under MSVC.
+
+`void f(double)`:: `_Z1fd` under the Itanium ABI, `?f@@YAXN@Z` under MSVC.
+
+`void ns::f(int)`:: `_ZN2ns1fEi` under the Itanium ABI, `?f@ns@@YAXH@Z` under MSVC.
+
+`void C::f(int) const`:: `_ZNK1C1fEi` under the Itanium ABI, `?f@C@@QEBAXH@Z` under MSVC.
+
+The mangled name carries the enclosing namespace, the class, the parameter types, and the qualifiers sitting on a member function.
+An edit reaching any of those renames the exported symbol.
+Renaming a class or a namespace renames every symbol underneath it, the vtable and the `type_info` included.
+MSVC folds in the return type, the calling convention, and the member's access specifier as well.
+
+NOTE: The MSVC decorations above are the x64 forms.
+A 32-bit target spells the same declarations differently.
+
+NOTE: An MSVC decorated name spells a `class` type `V` and a `struct` type `U`, so switching the keyword renames every function taking that type.
+The Itanium ABI spells both the same way.
+
+TIP: `c++filt` turns a mangled name back into a declaration, and `undname` does the same for an MSVC decorated name.
+
+[#toolchain-export-rules]
+=== Toolchain export rules
+
+A global symbol still has to pass the toolchain's export rule.
+
+[[gcc-export-rule]]GCC:: Every global symbol reaches a shared library's export table.
+Visibility attributes and version scripts are what keep names out.
+Targeting Windows swaps this for an auto-export heuristic, which exports every global symbol only while the build declares no explicit exports.
+
+Clang:: Same as <<gcc-export-rule,GCC>>.
+
+MSVC:: No global symbol reaches a DLL's export table on its own.
+Exporting one takes `+__declspec(dllexport)+` on its declaration, or an entry in a module-definition file.
+
+How much of the global symbol survives into the export table depends on the binary format.
+
+ELF:: The `.dynsym` entry keeps the record intact, name and type and binding and size alike.
+
+Mach-O:: The export trie keeps the name, an address, and a few flags, thread-local and weak-definition among them.
+
+PE:: The export directory keeps a name, an ordinal, and an address.
+Nothing else survives, so a metadata change reaches a PE export table only when it reaches the name.
+
+== Change summary
+
+Each verdict covers the global symbols an edit writes, removes, or renames, and it assumes <<toolchain-export-rules,the export rule>> exports them.
+MSVC exports on request, so an edit reaching a name that no `+__declspec(dllexport)+` and no module-definition file mentions is an implementation change there.
+
+Adding a function definition at namespace scope::
++
+[source,diff]
+----
++void f(int) { }
+----
++
+API change because the definition has external linkage, which writes a new global symbol.
+See <<namespace-scope-definitions>>.
+
+Removing a namespace-scope definition::
++
+[source,diff]
+----
+-void f(int) { }
+----
++
+API change because the global symbol it wrote disappears with it.
+See <<namespace-scope-definitions>>.
+
+Renaming a namespace-scope definition::
++
+[source,diff]
+----
+-void f(int) { }
++void g(int) { }
+----
++
+API change because the mangled name is built from the identifier.
+See <<namespace-scope-definitions>>.
+
+Renaming a class or a namespace::
++
+[source,diff]
+----
+-class Buffer {
++class Storage {
+     void write(int);
+ };
+----
++
+API change for every symbol underneath it, because the mangled name carries the class and the namespace.
+See <<name-mangling>>.
+
+Wrapping a definition in a namespace::
++
+[source,diff]
+----
++namespace detail {
+ void f(int) { }
++}
+----
++
+API change because the namespace joins the mangled name.
+See <<name-mangling>>.
+
+Wrapping a definition in an unnamed namespace::
++
+[source,diff]
+----
++namespace {
+ void f(int) { }
++}
+----
++
+API change because an unnamed namespace gives internal linkage, which turns the global symbol local.
+See <<namespace-scope-definitions>>.
+
+Adding `static` to a namespace-scope definition::
++
+[source,diff]
+----
+-void f(int) { }
++static void f(int) { }
+----
++
+API change because `static` gives the definition internal linkage, which turns its global symbol local.
+See <<namespace-scope-definitions>>.
+
+Moving a definition to another translation unit in the same library::
++
+[source,diff]
+----
+--- lib/lib.cpp
+-void f(int) { }
+--- lib/util.cpp
++void f(int) { }
+----
++
+Implementation change because the library still holds the definition, so the same global symbol comes out.
+See <<definition-placement>>.
+
+Moving a definition out of the library::
++
+[source,diff]
+----
+--- lib/lib.cpp
+-int f() { return 0; }
+ int g() { return 1; }
+
+--- app/main.cpp
+-extern int f();
++int f() { return 0; }
+ extern int g();
+
+ int main() {
+     return f() + g();
+ }
+----
++
+API change because the library stops defining the symbol and imports it instead.
+See <<definition-placement>>.
+
+Changing a function's body::
++
+[source,diff]
+----
+ int limit() {
+-    return 8;
++    return 9;
+ }
+----
++
+Implementation change because a symbol records the declaration, and the declaration is untouched.
+
+Adding `constexpr` to a function::
++
+[source,diff]
+----
+-int limit() { return 8; }
++constexpr int limit() { return 8; }
+----
++
+API change because `constexpr` implies `inline`, which switches the symbol from strong binding to weak.
+See <<inline-functions>>.
+
+Adding an overload::
++
+[source,diff]
+----
+ void f(int) { }
++void f(double) { }
+----
++
+API change because the mangled name carries the parameter types, so the overload gets a symbol of its own.
+See <<name-mangling>>.
+
+Changing a parameter's type::
++
+[source,diff]
+----
+-void f(int) { }
++void f(double) { }
+----
++
+API change because the mangled name carries the parameter types.
+See <<function-signatures>>.
+
+Changing what a type alias names::
++
+[source,diff]
+----
+--- lib.h
+-using Handle = int;
++using Handle = long;
+
+ void f(Handle);
+----
++
+API change for every function using the alias, because an alias mangles as the type it names.
+See <<function-signatures>>.
+
+Reordering a function's parameters::
++
+[source,diff]
+----
+-void f(int, double) { }
++void f(double, int) { }
+----
++
+API change because the mangled name carries the parameter types in order.
+See <<function-signatures>>.
+
+Adding `const` to a by-value parameter::
++
+[source,diff]
+----
+-void f(int count) { }
++void f(const int count) { }
+----
++
+Implementation change because the parameter type list drops top-level `const`.
+See <<function-signatures>>.
+
+Changing a function's return type::
++
+[source,diff]
+----
+-int f() { return 0; }
++long f() { return 0; }
+----
++
+Implementation change, and an API change under MSVC, because only MSVC folds the return type into the name.
+See <<function-signatures>>.
+
+Adding `noexcept` to a function::
++
+[source,diff]
+----
+-void f(int) { }
++void f(int) noexcept { }
+----
++
+Implementation change, and an API change where the `noexcept` sits inside a parameter's function type, because an exception specification never reaches the function's own name.
+See <<function-signatures>>.
+
+Changing a default argument::
++
+[source,diff]
+----
+--- lib.h
+-void f(int count = 1);
++void f(int count = 2);
+----
++
+Implementation change because a default argument lives at the call site and reaches no symbol.
+See <<function-signatures>>.
+
+Adding `override`, `final`, `explicit`, or an attribute::
++
+[source,diff]
+----
+-int size() const;
++[[nodiscard]] int size() const override;
+----
++
+Implementation change because the compiler checks them and writes none of them into the name.
+See <<function-signatures>>.
+
+Adding `const` to a member function::
++
+[source,diff]
+----
+--- lib.h
+ class C {
+-    int size();
++    int size() const;
+ };
+--- lib.cpp
+-int C::size() { return 0; }
++int C::size() const { return 0; }
+----
++
+API change because a member function's cv-qualifier reaches the mangled name.
+See <<function-signatures>>.
+
+Adding a member function with its definition outside the class::
++
+[source,diff]
+----
+--- lib.h
+ class C {
++    void f();
+ };
+--- lib.cpp
++void C::f() { }
+----
++
+API change because the definition writes a new global symbol carrying the class name.
+See <<class-members>>.
+
+Adding `= delete` to a function::
++
+[source,diff]
+----
+ class C {
+-    C(const C&);
++    C(const C&) = delete;
+ };
+----
++
+API change because the compiler emits nothing for it, so a symbol that existed disappears.
+See <<class-members>>.
+
+Adding `static` to a member function::
++
+[source,diff]
+----
+ class C {
+-    void f();
++    static void f();
+ };
+----
++
+Implementation change, and an API change under MSVC, because only MSVC records the `static` in the name.
+See <<class-members>>.
+
+Changing a member's access specifier::
++
+[source,diff]
+----
+ class C {
+-public:
++private:
+     void f();
+ };
+----
++
+Implementation change, and an API change under MSVC, because only MSVC records the access specifier in the name.
+See <<class-members>>.
+
+Defining a special member function outside the class body::
++
+[source,diff]
+----
+--- lib.h
+ class C {
++    ~C();
+ };
+--- lib.cpp
++C::~C() = default;
+----
++
+API change because the out-of-line definition switches the symbol from weak binding to strong.
+See <<class-members>>.
+
+Adding a static data member::
++
+[source,diff]
+----
+--- lib.h
+ class C {
++    static int count;
+ };
+--- lib.cpp
++int C::count = 0;
+----
++
+API change because its namespace-scope definition writes a global symbol.
+See <<class-members>>.
+
+Adding a data member::
++
+[source,diff]
+----
+ class C {
+     int a;
++    int b;
+ };
+----
++
+Implementation change because no symbol records a class's layout.
+See <<class-layout>>.
+
+Adding a base class::
++
+[source,diff]
+----
+-class C {
++class C : public Base {
+     int a;
+ };
+----
++
+Implementation change, unless the base brings virtual functions along, because no symbol records a class's layout.
+See <<class-layout>>.
+
+Adding the first virtual function to a class::
++
+[source,diff]
+----
+ class C {
+-    void f();
++    virtual void f();
+ };
+----
++
+API change because the class then needs a vtable, which writes symbols for the vtable and its run-time type information.
+See <<virtual-functions>>.
+
+Moving a virtual function's definition out of the header::
++
+[source,diff]
+----
+--- lib.h
+ class C {
+-    virtual void f() { }
++    virtual void f();
+ };
+--- lib.cpp
++void C::f() { }
+----
++
+API change on ELF and Mach-O because the class gains a key function, which switches the vtable from weak binding to strong.
+See <<virtual-functions>>.
+
+Reordering virtual functions::
++
+[source,diff]
+----
+ class C {
+-    virtual void f();
+     virtual void g();
++    virtual void f();
+ };
+----
++
+Implementation change because the vtable's contents change while its symbol keeps the same name and size.
+See <<virtual-functions>>.
+
+Adding a `const` object at namespace scope::
++
+[source,diff]
+----
++const int limit = 8;
+----
++
+Implementation change because a `const` object at namespace scope has internal linkage.
+See <<constant-objects>>.
+
+Adding `extern` to a `const` object at namespace scope::
++
+[source,diff]
+----
+-const int limit = 8;
++extern const int limit = 8;
+----
++
+API change because `extern` gives the object external linkage, which writes a global symbol.
+See <<constant-objects>>.
+
+Adding an `inline` function definition to a header::
++
+[source,diff]
+----
+--- lib.h
++inline int limit() { return 8; }
+----
++
+Implementation change because nothing uses it yet, so the compiler writes no symbol.
+See <<inline-functions>>.
+
+Calling an `inline` function from a new place::
++
+[source,diff]
+----
+--- lib.h
+ inline int limit() { return 8; }
+--- lib.cpp
+ #include "lib.h"
+
+ int g() {
+-    return 0;
++    return limit();
+ }
+----
++
+API change because the call makes the compiler emit the definition, which writes a weak global symbol.
+See <<inline-functions>>.
+
+Adding a `static` local variable to an inline function::
++
+[source,diff]
+----
+--- lib.h
+ inline Registry& registry() {
+-    return *the_registry;
++    static Registry r;
++    return r;
+ }
+----
++
+API change because the variable names one object across the program, so it gets a global symbol of its own.
+See <<inline-functions>>.
+
+Using a template specialization the library had not used::
++
+[source,diff]
+----
+--- lib.h
+ template<typename T>
+ T twice(T v) { return v + v; }
+--- lib.cpp
+ #include "lib.h"
+
+ int g() {
+-    return 0;
++    return twice(2);
+ }
+----
++
+API change because the compiler instantiates the specialization, which writes a weak global symbol.
+See <<templates>>.
+
+Adding an explicit instantiation definition::
++
+[source,diff]
+----
++template class Buffer<int>;
+----
++
+API change because the instantiation writes global symbols for every member.
+See <<templates>>.
+
+Adding `extern "C"` to a function::
++
+[source,diff]
+----
+-void f(int) { }
++extern "C" void f(int) { }
+----
++
+API change because C language linkage replaces the mangled name with the plain identifier.
+See <<language-linkage>>.
+
+Adding `thread_local` to an exported object::
++
+[source,diff]
+----
+-int counter;
++thread_local int counter;
+----
++
+API change on ELF and Mach-O because thread storage shows up on the exported symbol.
+See <<thread-local-objects>>.
+
+Changing a function's calling convention::
++
+[source,diff]
+----
+-void f() { }
++void __stdcall f() { }
+----
++
+API change under MSVC because a decorated name carries the calling convention.
+See <<calling-conventions>>.
+
+Exporting a name that was not exported::
++
+.MSVC
+[source,diff]
+----
+-void f(int) { }
++__declspec(dllexport) void f(int) { }
+----
++
+.GCC and Clang using -fvisibility=hidden
+[source,diff]
+----
+-void f(int) { }
++__attribute__((visibility("default"))) void f(int) { }
+----
++
+API change because the marker flips the export rule's decision for that name.
+See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
+
+Unexporting a name that was exported::
++
+.MSVC
+[source,diff]
+----
+-__declspec(dllexport) void f(int) { }
++void f(int) { }
+----
++
+.GCC and Clang
+[source,diff]
+----
+-void f(int) { }
++__attribute__((visibility("hidden"))) void f(int) { }
+----
++
+API change because the marker flips the export rule's decision for that name.
+See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
+
+Making a definition weak::
++
+[source,diff]
+----
+-void f(int) { }
++__attribute__((weak)) void f(int) { }
+----
++
+API change because binding travels with the symbol, and the linker resolves against it.
+See <<weak-symbols>>.
+
+Adding an alias for an existing definition::
++
+[source,diff]
+----
++void g(int) __attribute__((alias("_Z1fi")));
+----
++
+API change because the alias writes a second global symbol for the same definition.
+See <<aliases>>.
+
+[#namespace-scope-definitions]
+== Namespace-scope definitions
+
+At namespace scope, a definition has external linkage until something hands it internal linkage.
+`static` on the declaration does that.
+An unnamed namespace covers everything declared inside it.footnote:cppunnamed[]
+<<constant-objects,A `const` object>> gets internal linkage from the qualifier alone.
+
+The toolchain never exports a definition with internal linkage, so any edit to one is an implementation change.
+A definition with external linkage produces a global symbol, and <<toolchain-export-rules,the toolchain's export rule>> decides whether to export it.
+When the toolchain exports it, adding, removing, or renaming the definition is an API change.
+
+<<name-mangling,The mangled name>> carries the enclosing namespace.
+Wrapping an existing definition in a namespace gives it a different exported symbol, and the old one disappears.
+
+[#definition-placement]
+== Definition placement
+
+A library holds several translation units.
+Moving a definition from one to another leaves the exported symbols alone, so the edit is an implementation change.
+
+Moving a definition to a different library is an API change for both.
+The first library stops defining the symbol and stops exporting it.
+Code there that still calls the function imports the symbol instead.
+The second library defines it now, and <<toolchain-export-rules,its export rule>> decides whether that symbol reaches the export table.
+
+[#constant-objects]
+== Constant objects
+
+A `const` object at namespace scope has internal linkage, so it produces a local symbol the toolchain never exports.footnote:cpplink[]
+Adding one is an implementation change.
+`constexpr` on an object implies `const`, so the same rule covers it.
+
+`extern` on the declaration gives the object external linkage, which produces a global symbol.
+Adding or removing `extern` on a `const` object is an API change.
+
+NOTE: A `const` object the code reads only in constant expressions often produces no symbol whatsoever, since the compiler substitutes the value at each use.
+
+[#inline-functions]
+== Inline functions and variables
+
+An `inline` function keeps external linkage, and its definition may appear in every translation unit that uses it.footnote:cppinline[ISO/IEC 14882:2020 [dcl.inline\]]
+The compiler writes a global symbol for each copy and marks each one so the linker keeps a single survivor.
+That survivor carries weak binding, and <<toolchain-export-rules,the export rule>> treats it like any other global symbol.
+
+A header holding an `inline` definition produces nothing on its own, so adding one is an implementation change.
+The symbol appears once something in the library calls the function, so that call is an API change.
+
+C++17 `inline` variables follow the same rules, and a `static constexpr` data member is implicitly `inline`.
+
+`constexpr` on a function implies `inline` too.
+Adding it to a namespace-scope function switches that function's symbol from strong binding to weak, which is an API change.
+
+A `static` local variable inside an inline function names one object across the whole program, so a local symbol per translation unit will not do.
+The compiler writes a weak global symbol for it, mangled from the enclosing function, and adds a guard variable when the initialization runs at run time.
+Both are global symbols like any other.
+
+NOTE: `-fvisibility-inlines-hidden` gives hidden visibility to inline member functions under GCC and Clang, which keeps their symbols out of the export table.
+
+[#templates]
+== Templates
+
+A template definition produces no symbol on its own.
+The compiler writes one for each specialization the library uses, on <<inline-functions,the same terms as an inline definition>>: weak binding, one copy surviving the link.footnote:cppinst[]
+
+Reaching for a specialization the library had not used before writes a new global symbol.
+Dropping the last use of a specialization removes it.
+Either edit is an API change where <<toolchain-export-rules,the export rule>> reaches that symbol.
+
+An explicit instantiation definition writes global symbols for every member, whatever the library happens to use.footnote:cppexplicit[ISO/IEC 14882:2020 [temp.explicit\]]
+
+[source,cpp]
+----
+template class Buffer<int>;
+----
+
+Adding that line is an API change on the same terms.
+`extern template class Buffer<int>;` runs the other way, keeping the compiler from writing those symbols in that translation unit.
+
+<<name-mangling,The mangled name>> carries the template arguments, so `Buffer<int>` and `Buffer<long>` are separate global symbols.
+
+NOTE: `+template class __declspec(dllexport) Buffer<int>;+` is how a specialization's members reach a DLL's export table, since MSVC exports no instantiation on its own.
+
+[#class-members]
+== Class members
+
+A member function whose definition sits outside the class body produces a global symbol.
+<<name-mangling,Its mangled name>> carries the class alongside the parameter types.
+Adding such a definition is an API change, and so is removing one.
+
+A member function with its body inside the class is implicitly `inline`, so <<inline-functions,the inline rules>> apply to it.
+The same goes for `= default` written inside the class, and for the special member functions the compiler supplies on its own.
+Each translation unit using one gets a weak symbol, and a trivial destructor produces no symbol whatsoever.
+
+Defining that member in a source file instead, with a body or with `= default` there, produces a strong global symbol in a single translation unit.footnote:[A special member function counts as user-provided once its first declaration leaves out `= default`, which is what makes the out-of-line form non-trivial.]
+Binding on an exported symbol changes, so the edit is an API change on ELF and Mach-O.
+A PE export directory records no binding, so the edit reaches a DLL's export table only where the inline form had produced nothing.
+
+`= delete` on a member function leaves the compiler nothing to write, so a symbol that existed disappears.
+
+A static data member needs a definition at namespace scope, and that definition is what produces the global symbol.
+
+The Itanium ABI mangles no implicit object parameter, so `void C::f(int)` and `static void C::f(int)` share the symbol `_ZN1C1fEi`.
+Adding `static` to a member function is an implementation change under GCC and Clang.
+
+IMPORTANT: A static member function receives no `this`, so its arguments arrive in different registers.
+GCC and Clang give both forms the same symbol name, which leaves the linker nothing to catch, and every consumer needs a rebuild.
+
+Access specifiers stay out of the mangled name too, so changing a member from `public` to `private` is an implementation change under GCC and Clang.
+A consumer compiled against the old header keeps calling it, since access control runs at compile time and never reaches the call itself.
+
+NOTE: An MSVC decorated name records both, where `Q` marks a public member function, `I` a protected one, `A` a private one, and `S` a public static one.
+A static member function drops the `this` encoding as well, so `?f@C@@QEAAXH@Z` becomes `?f@C@@SAXH@Z`.
+Either edit renames the symbol there, which makes it an API change under MSVC.
+
+NOTE: One destructor writes several symbols under the Itanium ABI, since a complete object and a base subobject need different code.
+The ABI names them `D1` and `D2`, and a `virtual` destructor adds `D0` for the deleting form.
+
+[#virtual-functions]
+== Virtual functions
+
+A class with a virtual function needs a vtable, and that vtable gets a symbol of its own.
+Run-time type information adds two more.
+
+The vtable:: Holds the function pointers each object of the class dispatches through.
+
+The `type_info` object:: Answers `typeid` and drives `dynamic_cast`.
+
+The type name string:: Spells the class name out for `type_info` to point at.
+
+Adding the first virtual function to a class writes all three, so the edit is an API change.
+The function itself gets a symbol too, on the same terms as any other member.
+
+The compiler picks a _key function_, the first virtual member function the class declares and defines outside the class body, and it writes the vtable into the translation unit holding that definition.
+A class without a key function gets a weak vtable in every translation unit needing one, on <<inline-functions,the terms an inline definition follows>>.
+
+Moving one virtual function's definition into a source file gives a keyless class a key function, and the vtable becomes a strong symbol in that one translation unit.
+Binding on an exported symbol changes, so the edit is an API change on ELF and Mach-O.
+
+IMPORTANT: Reordering virtual functions rewrites what the vtable holds while every symbol name and size stays as it was.
+The linker sees an identical library and reuses the previous link result.
+A consumer compiled against the old order calls the wrong function, so it needs a rebuild.
+
+NOTE: An MSVC decorated name records whether a member function is virtual, so adding `virtual` to one that already existed renames its symbol there.
+
+[#class-layout]
+== Class layout
+
+An object's layout comes from what the class declares and how the ABI packs it.
+None of that reaches a symbol name.
+Adding a data member, changing one's type, swapping two of them, or introducing a base class is an implementation change.
+A base class bringing virtual functions along puts the class under <<virtual-functions,the vtable rules>>.
+
+IMPORTANT: A layout edit leaves the linker-facing representation alone, so consumers keep the previous link result while their compiled code reads the old offsets.
+Every consumer needs a rebuild.
+
+NOTE: An exported object of that class records its size on ELF, and a class growing by one member grows the object with it.
+A class growing that way is an API change on ELF.
+
+[#function-signatures]
+== Function signatures
+
+<<name-mangling,The mangled name>> carries the parameter types in order.
+Changing a parameter's type is an API change, and so is swapping two parameters or adding one.
+
+A type alias mangles as the type it names.
+`using Handle = int;` makes `void f(Handle)` mangle as `_Z1fi`, and pointing `Handle` at `long` renames that symbol to `_Z1fl`.
+Editing an alias is an API change for every function whose signature uses it.
+
+Parts of the declaration stay out of the name.
+
+Return type:: The Itanium ABI leaves it out for an ordinary function, since two functions in one scope can never differ by return type alone.
+Changing it is an implementation change under GCC and Clang.
+A function template carries it, because two templates can differ by return type and their specializations need separate names.
+A conversion operator carries it too, where the target type is the name.
+Every MSVC decorated name folds in the return type, which makes the same edit an API change under MSVC.
++
+IMPORTANT: A consumer reads the return value the way the old declaration described it.
+GCC and Clang hand the linker an identical symbol, so nothing relinks, and every consumer needs a rebuild.
+
+Top-level `const` on a parameter:: The parameter type list drops it,footnote:cppfct[ISO/IEC 14882:2020 [dcl.fct\]] so `void f(int)` and `void f(const int)` mangle identically.
+That edit is an implementation change.
+`const` inside a pointer or a reference survives, which puts `void f(const int&)` and `void f(int&)` on separate symbols.
+
+`override`, `final`, `explicit`, and attributes:: The compiler checks them and writes none of them into the name.
+Adding or removing one is an implementation change.
+
+`noexcept`:: A function's own name carries no exception specification under either ABI, so adding or removing `noexcept` on a function is an implementation change.
+The specification does reach the name of a function taking a function pointer, where `void f(void (*)())` and `void f(void (*)() noexcept)` are separate symbols.
+
+Parameter names and default arguments:: Neither one reaches the object file.
+A default argument lives at the call site, so changing it takes a rebuild of every caller.
+
+A cv-qualifier or a ref-qualifier on a member function does reach the name.
+`int C::size() const` and `int C::size()` are separate symbols, which makes adding `const` to a member function an API change.
+
+[#language-linkage]
+== Language linkage
+
+`extern "C"` on a declaration gives the function the symbol name a C compiler would give it.footnote:cpplinkspec[ISO/IEC 14882:2020 [dcl.link\]]
+`void f(int)` becomes `f` on ELF, and `_f` on Mach-O.
+Adding or removing `extern "C"` renames the exported symbol, so the edit is an API change.
+
+A name with C language linkage records no parameter types, which leaves you one function per name.
+
+[#thread-local-objects]
+== Thread-local objects
+
+`thread_local` gives an object thread storage duration.footnote:cppthread[ISO/IEC 14882:2020 [basic.stc.thread\]]
+<<namespace-scope-definitions,The rules for a namespace-scope definition>> apply here as they do to any other object.
+
+On ELF and Mach-O, the thread storage shows up on the exported symbol, which makes the edit an API change.
+A PE exported symbol carries no trace of it, so the edit stays an implementation change.
+
+NOTE: A `thread_local` object with external linkage gets a wrapper function alongside it, which hands back the address once the calling thread has initialized the object.
+Initialization running at run time adds a second function holding that work.
+ELF exports the object and the wrapper both.
+Mach-O keeps the object's own symbol local and exports the wrapper on its own.
+
+[#calling-conventions]
+== Calling conventions
+
+The Itanium ABI keeps the calling convention out of the mangled name, so switching a function from one convention to another is an implementation change under GCC and Clang.
+
+NOTE: An MSVC decorated name carries the convention.
+`void f()` becomes `?f@@YAXXZ` under `+__cdecl+` and `?f@@YGXXZ` under `+__stdcall+`.
+Switching conventions renames the symbol, which makes the edit an API change under MSVC.
+
+[#export-markers]
+== Export markers
+
+An export marker acts on <<toolchain-export-rules,the toolchain's export rule>>, deciding whether a global symbol becomes an exported symbol.
+A marker that flips that decision is an API change.
+
+MSVC exports no global symbol on its own, so `+__declspec(dllexport)+` on a declaration is what puts a name in a DLL's export table.
+Putting it on a class exports every member of that class, the vtable among them.
+A module-definition file does the same job for the names it lists, spelled the way the compiler mangled them.
+
+GCC and Clang export every global symbol by default.
+`+__attribute__((visibility("hidden")))+` keeps one name out of the export table, and `-fvisibility=hidden` applies that to all of them at once.
+A build using that flag then marks each name it wants exported with `+__attribute__((visibility("default")))+`.
+
+NOTE: A marker agreeing with the default export rules changes nothing, making the edit an implementation change.
+
+[#weak-symbols]
+== Weak symbols
+
+ELF and Mach-O let a symbol carry weak binding, which travels with the symbol.
+A definition gets strong binding by default, and `+__attribute__((weak))+` is how GCC and Clang mark one weak.
+Switching an exported symbol between the two is an API change.
+
+C++ produces weak symbols without any attribute, since <<inline-functions,an inline definition>>, <<templates,a template specialization>>, a vtable, and the `type_info` beside it each get one.
+
+[#aliases]
+== Aliases
+
+`+__attribute__((alias("target")))+` writes an additional global symbol pointing at an existing definition.
+The target is spelled as the mangled name, so an alias for `void f(int)` names `_Z1fi`.
+When <<toolchain-export-rules,the export rule>> exports that new name, the edit is an API change.
+An alias staying internal to the library changes nothing a consumer sees, so it is an implementation change.

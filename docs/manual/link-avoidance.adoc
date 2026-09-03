@@ -1,0 +1,107 @@
+= Link Avoidance
+
+Link avoidance narrows the up-to-date checking of a link task's input libraries to the parts that can change the link result.
+
+Picture a shared library where you changed how one function computes its result.
+Its bytes now differ from the last build, which would marks an expensive link task out-of-date.
+However, the linker reads only a few parts of that library, the export table among them.
+Your edit left all of them untouched.
+In those cases, the build can safely reuse the previous link result.
+
+Without link avoidance, the link tasks snapshot the input libraries byte-for-byte.
+Any change in the byte content of an input library results in a relink.
+These changes can be in executable code, read-only and writable data, relocation information, debug information, or internal symbols.
+
+== The linker-facing representation
+
+Only a small part of a dependent shared library matters to the linker.
+That part is its _linker-facing representation_.
+That representation covers:
+
+Exported symbols:: Each symbol's name, plus the attributes the linker resolves against.
+ELF packs binding and type into one field and records size separately.
+Mach-O records binding.
+
+Library identity:: The `DT_SONAME` dynamic tag on ELF, the `LC_ID_DYLIB` load command on Mach-O, and the DLL name on PE.
+`LC_ID_DYLIB` also carries a compatibility version that the linker copies into its consumers.
+
+Required runtime dependencies:: The `DT_NEEDED` tags on ELF, which the linker follows to resolve symbols through second-level dependencies.
+PE and Mach-O record nothing the linker needs here.
+
+Target architecture:: The machine type recorded in the library's header.
+A linker refuses a library built for another architecture, whatever its exports say.
+
+Symbol versioning:: On ELF, one symbol name can exist at several versions, listed in `.gnu.version_d`.
+The linker records which version it bound to, so moving a symbol between versions changes the link result even though its name holds still.
+
+The link task can safely ignore any change that leaves this information intact.
+
+== Input normalization
+
+During input snapshotting, the link task normalizes each shared library into its linker-facing representation.
+
+The link task captures object files byte-for-byte, whether local or dependent.
+Their content lands directly in the linker result.
+The same rule covers static libraries, which are archives of object files.
+
+NOTE: A Windows import library and a static library share the `.lib` extension and the same archive format.
+An import library carries the linker-facing metadata about its DLL.
+Link avoidance normalizes the metadata the same way it handles any other shared library.
+
+== Fallback and opt-out
+
+Link avoidance needs to recognize a file before it can normalize it.
+A file in an unfamiliar format, or one the link task cannot parse, falls back to a byte-for-byte capture.
+The fallback keeps the result correct.
+The build then relinks as often as it would without link avoidance.
+
+While ruling out a stale link result, you may want link avoidance out of the way.
+Every byte change then forces a relink again.
+The other reason to turn it off is a toolchain producing output the normalization does not fully cover.
+You can link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkAbiAware.java#L113[restore byte-for-byte snapshotting for all input libraries with a link task property].
+
+== From source to export table
+
+Whether a symbol reaches the export table depends on the language and on what the toolchain does with it.
+The linker's own job is narrow.
+It resolves references between the object files it is given.
+Only the names an object file publishes can take part.
+Those are its _global symbols_.
+
+Two things produce a global symbol: a definition compiled into this library, and a language rule saying the name is visible to other object files.
+C calls that rule _external linkage_, and other languages spell it differently.
+The chapters on xref:../reference/exported-symbols-in-c.adoc[exported symbols in C] and xref:../reference/exported-symbols-in-cpp.adoc[exported symbols in C++] map each language's code changes onto the export table.
+
+A global symbol carries more than a name.
+The binary format decides what metadata travels with it, and the linker reads that too.
+
+The toolchain then decides which global symbols reach the export table:
+
+Explicit:: You mark each symbol for export, e.g. MSVC toolchains.
+
+Implicit:: The toolchain exports every global symbol, e.g. GCC-based toolchains.
+
+A module-definition file or a version script overrides either rule for the names listed in it.
+
+== API and implementation changes
+
+An *implementation change* rearranges what happens inside a symbol that already exists.
+You swap a loop for a lookup table, or fix an off-by-one.
+The library's bytes move.
+Its linker-facing representation holds still.
+The consumer's link tasks stay up-to-date.
+
+An *API change* alters the set of symbols the library offers.
+You add a function, remove one, rename one, or change its signature.
+Changing an attribute the linker reads counts too, such as a symbol's binding.footnote:[Binding tells the linker whether a symbol is weak or strong.
+A symbol that stops being weak counts as a change even when its name remains unchanged.]
+The consumer's link tasks run again, because the linker-facing representation differs.
+
+Some edits sit between the two.
+Say you reach for a C++ template you had not instantiated before.
+The compiler emits a fresh symbol into the library to hold it.
+Under a toolchain that exports implicitly, that symbol joins the export table.
+That one-line edit is an API change.footnote:[Which edits emit new symbols depends on the language and the toolchain, and xref:../reference/exported-symbols-in-cpp.adoc[exported symbols in C++\] works through them.]
+
+TIP: When a relink surprises you, compare the exported symbols of the two builds.
+Matching names mean the difference sits elsewhere in the linker-facing representation, such as a symbol's size or the target architecture.
