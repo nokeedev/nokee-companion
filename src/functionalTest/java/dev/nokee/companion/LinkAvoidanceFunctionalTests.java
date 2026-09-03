@@ -775,3 +775,5 @@ class LinkAvoidanceFunctionalTests {
 //  flag asks for, and a big-endian shared library needs a cross toolchain no host here has. Rewriting the
 //  byte by hand would be testing a file no linker would ever hand us.
 // TODO: overlinking (rpath-link) second-level library remove a symbol -> relink fails if strict mode (-z defs) but no relink if not strict mode
+// TODO: Test __attribute__((alias("target"))) as an API change
+// TODO: Test adding/removing const as an implementation change in C
