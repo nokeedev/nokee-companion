@@ -85,7 +85,7 @@ testing {
 				implementation 'dev.nokee.commons:commons-names:latest.release'
 				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.integration')
 				implementation testFixtures('dev.gradleplugins:gradle-runner-kit:latest.release')
-				implementation 'dev.nokee.commons:commons-hamcrest:latest.integration'
+				implementation 'dev.nokee.commons:nokee-hamcrest:latest.integration'
 			}
 		}
 		samplesTest(JvmTestSuite) {
