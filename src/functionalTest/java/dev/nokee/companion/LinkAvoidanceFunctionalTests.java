@@ -65,6 +65,7 @@ class LinkAvoidanceFunctionalTests {
 						objectFileDir = layout.buildDirectory.dir("obj/$name")
 						source.from(fileTree("src/$name/cpp"))
 						includes.from("src/$name/headers")
+						macros.put('MYLIB_BUILD', null)
 					}
 
 					def linkTask = tasks.register("link${name.capitalize()}", LinkSharedLibrary) {
@@ -73,7 +74,7 @@ class LinkAvoidanceFunctionalTests {
 					}
 
 					tasks.named { it == 'link' }.configureEach {
-						libs.from(linkTask.flatMap { it.linkedFile })
+						libs.from(linkTask.flatMap { it.importLibrary.orElse(it.linkedFile) })
 					}
 				}
 
@@ -82,6 +83,7 @@ class LinkAvoidanceFunctionalTests {
 						objectFileDir = layout.buildDirectory.dir("obj/$name")
 						source.from(fileTree("src/$name/cpp"))
 						includes.from("src/$name/headers")
+						macros.put('MYLIB_BUILD', null)
 					}
 
 					def createTask = tasks.register("create${name.capitalize()}", CreateStaticLibrary) {
@@ -160,6 +162,11 @@ class LinkAvoidanceFunctionalTests {
 					tasks.register('link', Class.forName('%s')) {
 						source.from(tasks.named('compile').flatMap { it.objectFileDir }.map { it.asFileTree.matching { include('**/*.o', '**/*.obj') } })
 						linkedFile = layout.buildDirectory.file(current().getSharedLibraryName('out/main/main'))
+
+						if (!targetPlatform.get().operatingSystem.isMacOsX()) {
+							installName = linkedFile.locationOnly.map { it.asFile.name }
+						}
+//						installName = targetPlatform.zip(linkedFile.locationOnly.map { it.asFile.name }) { (platform, installName) -> platform.operatingSystem.isMacOsX() ? null : installName }
 					}
 				""".formatted("dev.nokee.nativeplatform.tasks.LinkSharedLibraryTask")));
 			});
@@ -560,9 +567,10 @@ class LinkAvoidanceFunctionalTests {
 
 			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			ExecutedBuild result = runs(runner.withArguments(":link", "-Padditional-lib=" + sharedLib("other-lib/build/lib/main/debug/libother-lib")));
+			String sharedLibPath = OperatingSystem.current().getSharedLibraryName("other-lib/build/lib/main/debug/other-lib");
+			ExecutedBuild result = runs(runner.withArguments(":link", "-Padditional-lib=" + sharedLibPath));
 			assertThat(result, tasksExecuted(hasItem(":link")));
-			assertThat(result.task(":link"), output(containsString("resolving additional-lib: other-lib/build/lib/main/debug/libother-lib")));
+			assertThat(result.task(":link"), output(containsString("resolving additional-lib: " + sharedLibPath)));
 		}
 	}
 
@@ -578,23 +586,20 @@ class LinkAvoidanceFunctionalTests {
 		};
 	}
 
-	private String sharedLib(String path) {
-		Path sharedLib = build.getLocation().resolve(path);
-		Path searchDir = sharedLib.getParent();
-		String fileName = sharedLib.getFileName().toString();
-		try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(searchDir)) {
-			for (Path dir : dirStream) {
-				if (dir.getFileName().toString().startsWith(fileName)) {
-					return build.getLocation().relativize(dir).toString();
-				}
-			}
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
-		throw new RuntimeException();
-	}
-
 	private static class Fixture {
+		private static final String EXPORT_DEFINES = """
+			#if defined(_WIN32) || defined(__CYGWIN__)
+			  #if defined(MYLIB_BUILD)
+			    #define MYLIB_EXPORT __declspec(dllexport)
+			  #else
+			    #define MYLIB_EXPORT __declspec(dllimport)
+			  #endif
+			#elif defined(__GNUC__) || defined(__clang__)
+			  #define MYLIB_EXPORT __attribute__((visibility("default")))
+			#else
+			  #define MYLIB_EXPORT
+			#endif
+			""";
 		private enum SymbolKind { FUNCTION, VARIABLE }
 		private final CppApp app;
 		private final CppLib lib;
@@ -666,11 +671,11 @@ class LinkAvoidanceFunctionalTests {
 
 			@Override
 			public SourceFile getSourceFile() {
-				return sourceFile("impl.cpp", externC("int greet() { return 32; }"));
+				return sourceFile("impl.cpp", EXPORT_DEFINES + externC(" MYLIB_EXPORT int greet() { return 32; }"));
 			}
 
 			public SourceFileElement withImplementationOnlyChange() {
-				return ofFile(getSourceFile().withContent(__ -> externC("int greet() { return 100; }")));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + externC("MYLIB_EXPORT int greet() { return 100; }")));
 			}
 
 			// The following changes add a symbol that is private to this compilation unit (internal
@@ -679,30 +684,30 @@ class LinkAvoidanceFunctionalTests {
 			// inlined away), and greet() still returns 32 so the exported ABI is otherwise unchanged.
 			// These are C++-only constructs, so they are never combined with extern "C".
 			public SourceFileElement withAddedStaticFunction() {
-				return ofFile(getSourceFile().withContent(__ -> "static int helper() { return 32; }\nint greet() { return helper(); }"));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + "static int helper() { return 32; }\nMYLIB_EXPORT int greet() { return helper(); }"));
 			}
 
 			public SourceFileElement withAddedStaticVariable() {
 				// volatile keeps the read (and thus the storage) even if the variant were ever optimized.
-				return ofFile(getSourceFile().withContent(__ -> "static volatile int counter = 32;\nint greet() { return counter; }"));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + "static volatile int counter = 32;\nMYLIB_EXPORT int greet() { return counter; }"));
 			}
 
 			public SourceFileElement withAddedAnonymousNamespaceFunction() {
-				return ofFile(getSourceFile().withContent(__ -> "namespace { int helper() { return 32; } }\nint greet() { return helper(); }"));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + "namespace { int helper() { return 32; } }\nMYLIB_EXPORT int greet() { return helper(); }"));
 			}
 
 			// Unlike the above, an inline function keeps external linkage and is emitted as a weak
 			// exported symbol, so adding it is expected to relink.
 			public SourceFileElement withAddedInlineFunction() {
-				return ofFile(getSourceFile().withContent(__ -> "inline int helper() { return 32; }\nint greet() { return helper(); }"));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + "inline int helper() { return 32; }\nMYLIB_EXPORT int greet() { return helper(); }"));
 			}
 
 			public SourceFileElement withRenamedAbiChange() {
-				return ofFile(getSourceFile().withContent(__ -> externC("int greet_renamed() { return 32; }")));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + externC("MYLIB_EXPORT int greet_renamed() { return 32; }")));
 			}
 
 			public SourceFileElement withWeakSymbolChange() {
-				return ofFile(getSourceFile().withContent(__ -> externC("__attribute__((weak)) int greet() { return 32; }")));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + externC("__attribute__((weak)) MYLIB_EXPORT int greet() { return 32; }")));
 			}
 
 			private String externC(String s) {
@@ -710,15 +715,15 @@ class LinkAvoidanceFunctionalTests {
 			}
 
 			public SourceFileElement withVariableKindChange() {
-				return ofFile(getSourceFile().withContent(__ -> externC("int greet = 32;")));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + externC("MYLIB_EXPORT int greet = 32;")));
 			}
 
 			public SourceFileElement addParameterChange() {
-				return ofFile(getSourceFile().withContent(__ -> externC("int greet(int foo) { return foo + 32; }")));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + externC("MYLIB_EXPORT int greet(int foo) { return foo + 32; }")));
 			}
 
 			public SourceFileElement withReturnTypeChange() {
-				return ofFile(getSourceFile().withContent(__ -> externC("long greet() { return 32; }")));
+				return ofFile(getSourceFile().withContent(__ -> EXPORT_DEFINES + externC("MYLIB_EXPORT long greet() { return 32; }")));
 			}
 		}
 
@@ -741,7 +746,7 @@ class LinkAvoidanceFunctionalTests {
 
 			@Override
 			public SourceFile getSourceFile() {
-				return sourceFile("main.cpp", """
+				return sourceFile("main.cpp", EXPORT_DEFINES + """
 					%s
 					int main() {
 						return %s == 32 ? 0 : 1;
@@ -751,8 +756,8 @@ class LinkAvoidanceFunctionalTests {
 
 			private String symbolDeclaration() {
 				return switch (kind) {
-					case FUNCTION -> useExternC ? "extern \"C\" int greet();" : "int greet();";
-					case VARIABLE -> useExternC ? "extern \"C\" int greet;" : "extern int greet;";
+					case FUNCTION -> useExternC ? "extern \"C\" MYLIB_EXPORT int greet();" : "MYLIB_EXPORT int greet();";
+					case VARIABLE -> useExternC ? "extern \"C\" MYLIB_EXPORT int greet;" : "extern MYLIB_EXPORT int greet;";
 				};
 			}
 
