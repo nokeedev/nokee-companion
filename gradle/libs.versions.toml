@@ -1,5 +1,5 @@
 [versions]
-junit-jupiter = "5.11.4"
+junit-jupiter = "6.1.3"
 
 [libraries]
 hamcrest-core = { module = "org.hamcrest:hamcrest", version = "2.2" }
