@@ -12,16 +12,24 @@ import org.gradle.nativeplatform.toolchain.NativeToolChainRegistry;
 import org.gradle.nativeplatform.toolchain.internal.ToolType;
 import org.gradle.nativeplatform.toolchain.internal.plugins.StandardToolChainsPlugin;
 import org.gradle.testkit.runner.GradleRunner;
+import org.hamcrest.Matcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.ArgumentsProvider;
+import org.junit.jupiter.params.provider.ArgumentsSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Path;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.Notation.plugin;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
@@ -52,6 +60,7 @@ class LinkAvoidanceFunctionalTests {
 			it.put("dev.nokee.native-companion.link-avoidance.enabled", true);
 		});
 		build.rootProject(project -> {
+			project.append(importClass("dev.nokee.nativeplatform.tasks.LinkAbiAware.AbiSnapshotter"));
 			project.append(staticImportClass(OperatingSystem.class));
 			project.append(staticImportClass(DefaultNativePlatform.class));
 			project.append(importClass(DefaultNativePlatform.class));
@@ -137,6 +146,39 @@ class LinkAvoidanceFunctionalTests {
 					""");
 			}
 		};
+	}
+
+	private static class AvoidOnNarrowOnly implements ArgumentsProvider {
+		@Override
+		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+			return Stream.of(
+				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("full ABI relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+			);
+		}
+	}
+
+	private static class AvoidOnLinkAbiAndUp implements ArgumentsProvider {
+		@Override
+		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+			return Stream.of(
+				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+			);
+		}
+	}
+
+	private static class AlwaysRelink implements ArgumentsProvider {
+		@Override
+		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+			return Stream.of(
+				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksExecutedAndNotSkipped(hasItem(":link")))
+			);
+		}
 	}
 
 	@Nested
@@ -232,8 +274,17 @@ class LinkAvoidanceFunctionalTests {
 	}
 
 	abstract class LinkAvoidanceTester {
-		@Test
-		void doesNotRelinkOnImplementationOnlyChange() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void doesNotRelinkOnImplementationOnlyChange(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -241,11 +292,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void relinkOnNewExportedSymbol() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenNewExportedSymbol(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -253,51 +313,90 @@ class LinkAvoidanceFunctionalTests {
 
 			addedSymbol().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-//		@Test
-//		void doesNotRelinkWhenExportedSymbolNotUsedByConsumerIsAdded() {
-//			var fixture = new Fixture();
-//			fixture.writeToProject(build);
-//			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
-//
-//			// The consumer imports only greet(); an exported symbol it never references is not in the
-//			// narrowed ABI, so adding one leaves the consumer's snapshot unchanged.
-//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbol())));
-//
-//			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
-//		}
-//
-//		@Test
-//		void doesNotRelinkWhenExportedSymbolNotUsedByConsumerChangesAbi() {
-//			var fixture = new Fixture();
-//			fixture.writeToProject(build);
-//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbol())));
-//			assertThat(theBuild(runner.withArguments(forTasks(":app:assemble"))), becomesUpToDate());
-//
-//			// Changing the ABI of an exported symbol the consumer does not import (unused()'s signature) is
-//			// absent from the narrowed ABI, so it must not relink.
-//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbolAbiChange())));
-//
-//			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
-//		}
-//
-//		@Test
-//		void doesNotRelinkWhenExportedSymbolNotUsedByConsumerIsRemoved() {
-//			var fixture = new Fixture();
-//			fixture.writeToProject(build);
-//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl.withUnusedExportedSymbol())));
-//			assertThat(theBuild(runner.withArguments(":app:assemble")), becomesUpToDate());
-//
-//			// Removing an exported symbol the consumer does not import leaves the narrowed ABI unchanged.
-//			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // back to only greet()
-//
-//			assertThat(runs(runner.withArguments(args.withTasks(":app:assemble").toList())), tasksSkipped(hasItem(":app:linkDebug")));
-//		}
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		void whenExportedSymbolNotUsedByConsumerIsAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
 
-		@Test
-		void doesNotRelinkWhenStaticFunctionAdded() {
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.rootProject(sharedLibComponent("foo"));
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			// The consumer imports only greet(); an exported symbol it never references is not in the
+			// narrowed ABI, so adding one leaves the consumer's snapshot unchanged.
+			fixture.lib.impl.withUnusedExportedSymbol().writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
+		}
+
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		void whenExportedSymbolNotUsedByConsumerChangesAbi(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.rootProject(sharedLibComponent("foo"));
+			fixture.lib.impl.withUnusedExportedSymbol().writeToDirectory(fooComponent());
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			// Changing the ABI of an exported symbol the consumer does not import (unused()'s signature) is
+			// absent from the narrowed ABI, so it must not relink.
+			fixture.lib.impl.withUnusedExportedSymbolAbiChange().writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
+		}
+
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		void whenExportedSymbolNotUsedByConsumerIsRemoved(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.rootProject(sharedLibComponent("foo"));
+			fixture.lib.impl.withUnusedExportedSymbol().writeToDirectory(fooComponent());
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			// Removing an exported symbol the consumer does not import leaves the narrowed ABI unchanged.
+			fixture.lib.impl.writeToDirectory(fooComponent()); // back to only greet()
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
+		}
+
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenStaticFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			// A static function has internal linkage, i.e. private to its compilation unit, so it never
 			// reaches the exported symbol table and adding one must not change the ABI seen by consumers.
 			var fixture = new Fixture();
@@ -307,11 +406,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withAddedStaticFunction().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenStaticVariableAdded() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenStaticVariableAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			// A static variable has internal linkage, i.e. private to its compilation unit, so it never
 			// reaches the exported symbol table and adding one must not change the ABI seen by consumers.
 			var fixture = new Fixture();
@@ -321,11 +429,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withAddedStaticVariable().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenAnonymousNamespaceFunctionAdded() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenAnonymousNamespaceFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			// A function in an anonymous namespace also has internal linkage (a mangled, LOCAL symbol),
 			// so - like a static function - it stays out of the exported symbol table and must not relink.
 			var fixture = new Fixture();
@@ -335,11 +452,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withAddedAnonymousNamespaceFunction().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenUnusedInlineFunctionAdded() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		void whenUnusedInlineFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			// An inline function keeps external linkage and is emitted as a weak (COMDAT) exported symbol, so
 			// under a whole-ABI snapshot it would relink. But it lives only in the library's implementation:
 			// the consumer has no declaration of it and never imports it, so narrowing drops it from the
@@ -352,7 +478,7 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withAddedInlineFunction().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
 		@Test
@@ -365,8 +491,17 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":clean", ":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
-		@Test
-		void relinkOnRemovedExportedSymbol() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenRemovedExportedSymbol(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -374,12 +509,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withRenamedAbiChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void relinkOnSymbolStrongnessTransition() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenSymbolStrongnessTransition(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			assumeFalse(SystemUtils.IS_OS_WINDOWS, "Weak symbols require GCC/Clang"); // TODO: assert toolchain capability not OS
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
 
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
@@ -388,7 +531,7 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withWeakSymbolChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
 		Path fooComponent() {
@@ -434,8 +577,17 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
-		@Test
-		void relinkOnSymbolTypeChangesFromFunctionToVariable() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenSymbolTypeChangesFromFunctionToVariable(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -443,22 +595,31 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withVariableKindChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
 //			fixture.lib.api.withVariableKindChange().writeToDirectory(build.getLocation().resolve("includes"));
 			fixture.app.main.useAsVariableSymbol().writeToDirectory(mainComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 
 			// TODO: SEEMS TO BE ONLY UNDEFINED
 //			fixture.lib.api.writeToDirectory(build.getLocation().resolve("includes")); // Return to original
 			fixture.lib.impl.writeToDirectory(fooComponent()); // Return to original
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void relinkWhenParameterCountChanges() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenParameterCountChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -466,11 +627,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.addParameterChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenReturnTypeChanges() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenReturnTypeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -478,11 +648,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withReturnTypeChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenFunctionBecomesVariableInC() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenFunctionBecomesVariableInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -490,7 +669,7 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withVariableKindChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 
 			// TODO: Replace with ExportedSymbolEx().asVariable()
 //			fixture.lib.api.withVariableKindChange().writeToDirectory(build.getLocation().resolve("include"));
@@ -498,12 +677,21 @@ class LinkAvoidanceFunctionalTests {
 
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 
-			build.subproject("lib", writeToProject(ofSources(fixture.lib.impl))); // Return to original
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			fixture.lib.impl.writeToDirectory(fooComponent()); // Return to original
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenParameterCountChangesInC() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenParameterCountChangesInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -511,11 +699,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.addParameterChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenReturnTypeChangesInC() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenReturnTypeChangesInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -523,11 +720,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withReturnTypeChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void doesNotRelinkWhenLibraryChangeLocationButNotAbi() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenLibraryChangeLocationButNotAbi(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -550,11 +756,20 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		void relinkWhenStaticLibraryImplementationChanges() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenStaticLibraryImplementationChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(staticLibComponent("foo"));
@@ -562,12 +777,20 @@ class LinkAvoidanceFunctionalTests {
 
 			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		@Disabled
-		void relinkWhenLibraryTargetsAnotherMachine() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenLibraryTargetsAnotherMachine(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
 			// The target machine - e_machine in ELF, cputype/cpusubtype in Mach-O, Machine in the PE COFF
 			// header - is not part of the exported symbol table, yet linking against a library built for
 			// another machine is rejected by GNU ld, ld64 and link.exe alike. A library that keeps every one
@@ -585,13 +808,21 @@ class LinkAvoidanceFunctionalTests {
 				tasks.named('linkFoo') { targetPlatform = newPlatform }
 			""")));
 
-			assertThat(runs(runner.withArguments(":link")), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(":link")), matcher);
 		}
 
-		@Test
-		@Disabled // not yet implemented
-		void relinkWhenLibraryTargetsAnotherOsAbi() throws IOException {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenLibraryTargetsAnotherOsAbi(String linkAbi, Matcher<ExecutedBuild> matcher) throws IOException {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "EI_OSABI only exists in ELF"); // TODO: assert binary format not OS
+
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
 
 			// EI_OSABI, e_ident byte 7, tells the linker which OS extensions the rest of the file may use, so
 			// it too decides whether a link can succeed while living outside the exported symbol table. An
@@ -613,13 +844,65 @@ class LinkAvoidanceFunctionalTests {
 				f.write(ELFOSABI_FREEBSD);
 			}
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		@Disabled // not yet implemented
-		void relinkWhenExportedSymbolBecomesThreadLocal() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenExportedSymbolSizeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) { // TODO: Not sure if this is true
+			assumeTrue(SystemUtils.IS_OS_LINUX, "st_size is an ELF concept"); // TODO: assert binary format not OS
+
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
+
+			// st_size is its own field in Elf64_Sym, apart from the name and from the binding and type packed
+			// into st_info, so growing an exported data object leaves all three untouched. The linker reserves
+			// st_size bytes in a non-PIE consumer's own .bss and emits a copy relocation, which is what makes
+			// the size part of what the consumer was linked against. Nothing fails at link time: a consumer
+			// left unrelinked shows up at run time instead, as the loader reporting that the symbol "has
+			// different size in shared object".
+			SourceFile.of("impl2.cpp", "char my_buffer[64] = {};").writeToDirectory(fooComponent());
+			SourceFile.of("main.cpp", """
+					#include <cstdio>
+					extern char my_buffer[];
+					int main() {
+						my_buffer[0] = 'H';
+						my_buffer[1] = 'i';
+						my_buffer[2] = '\\0';
+
+						std::puts(my_buffer);
+						return 0;
+					}
+				""").writeToDirectory(mainComponent());
+			build.rootProject(sharedLibComponent("foo"));
+
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			// Rebuilt by the same compiler from the same source but for a larger object, so the exported name,
+			// its binding and its type are all identical and st_size is the only difference.
+			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
+		}
+
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenExportedSymbolBecomesThreadLocal(String linkAbi, Matcher<ExecutedBuild> matcher) {
+			// TODO: Is this really just on Linux?
 			assumeTrue(SystemUtils.IS_OS_LINUX, "STT_TLS is an ELF concept"); // TODO: assert binary format not OS
+
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
 
 			// Only the type nibble of st_info moves, from STT_OBJECT to STT_TLS, so the name and the binding
 			// are identical across the two builds. Thread-local symbols use their own relocation family, so a
@@ -638,7 +921,7 @@ class LinkAvoidanceFunctionalTests {
 
 			SourceFile.of("impl2.cpp", "__thread int counter = 0;").writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
 		@Test
@@ -677,8 +960,17 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
-		@Test
-		void realizeTaskLibraryOnlyDuringExecutionPhase() {
+		@ParameterizedTest
+		@ValueSource(strings = { "AbiSnapshotter.NONE", "AbiSnapshotter.FULL_ABI", "AbiSnapshotter.NARROW_ABI"})
+		void realizeTaskLibraryOnlyDuringExecutionPhase(String linkAbi) {
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+				tasks.named('link') {
+					linkAbi.linkAbiSnapshotting = %s
+				}
+			""".formatted(linkAbi)));
+			});
+
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
@@ -895,6 +1187,7 @@ class LinkAvoidanceFunctionalTests {
 			public SourceFile getSourceFile() {
 				return sourceFile("main.cpp", EXPORT_DEFINES + """
 					%s
+					int foo();
 					int main() {
 						return (%s == 32 ? 0 : 1) + foo();
 					}

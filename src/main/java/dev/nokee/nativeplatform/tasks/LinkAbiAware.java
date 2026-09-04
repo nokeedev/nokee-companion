@@ -1,13 +1,11 @@
 package dev.nokee.nativeplatform.tasks;
 
+import dev.nokee.commons.gradle.provider.ZipProvider;
 import org.gradle.api.Task;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.ListProperty;
-import org.gradle.api.provider.Property;
-import org.gradle.api.provider.Provider;
-import org.gradle.api.provider.SetProperty;
+import org.gradle.api.provider.*;
 import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
 import org.gradle.internal.hash.HashCode;
@@ -21,6 +19,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
+import java.util.concurrent.Callable;
 
 import static dev.nokee.nativeplatform.tasks.ArchiveBlob.skipSymbolTables;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_DYN;
@@ -43,14 +42,15 @@ public interface LinkAbiAware extends Task {
 		return getExt_linkAbi().get();
 	}
 
+	enum AbiSnapshotter {
+		NONE,
+		FULL_ABI,
+		NARROW_ABI
+	}
+
 	abstract /*final*/ class LinkAbiExtension {
 		private SetProperty<Object> unresolved;
 		private SetProperty<Object> hashes;
-
-		private enum AbiSnapshotter {
-			FULL_ABI,
-			NARROW_ABI
-		}
 
 		private static final ElfBinaryHasher elf = new ElfBinaryHasher();
 		private static final MachOBinaryHasher macho = new MachOBinaryHasher();
@@ -364,6 +364,60 @@ public interface LinkAbiAware extends Task {
 			}
 		}
 
+		// However, libs files for full link ABI are processed differently
+		private static final class FullLibraryFiles extends InFiles {
+			public FullLibraryFiles(Set<FileSystemLocation> elements) {
+				super(elements);
+			}
+
+			@Override
+			protected void visitElf(Path path, ElfBlob blob, Step1Visitor visitor) {
+				switch (blob.e_type()) {
+					case ET_REL:
+						// ignores
+						break;
+					case ET_DYN:
+						visitor.visitSharedLibrary(path, SharedLibFormat.ELF);
+						break;
+					default: throw new UnsupportedOperationException("invalid elf type '" + blob.e_type() + "' on file '" + path + "'");
+				}
+			}
+
+			@Override
+			protected void visitMachO(Path path, MachOImageBlob blob, Step1Visitor visitor) {
+				switch (blob.filetype()) {
+					case MH_OBJECT:
+						// ignores
+						break;
+					case MH_DYLIB:
+					case MH_DYLIB_STUB:
+						visitor.visitSharedLibrary(path, SharedLibFormat.MACHO);
+						break;
+					default: throw new UnsupportedOperationException("invalid mach-o type '" + blob.filetype() + "' on file '" + path + "'");
+				}
+			}
+
+			@Override
+			protected void visitArchive(Path path, ArchiveBlob blob, Step1Visitor visitor) {
+				ByteBuffer hdr = ByteBuffer.allocate(8);
+				boolean isImportLib = false;
+				for (ArchiveBlob.ArchiveMember member : blob.members()) {
+					BSource source = member.file();
+					source.read(hdr.clear());
+					if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
+						isImportLib = true;
+						break;
+					}
+				}
+
+				if (isImportLib) {
+					visitor.visitImportLibrary(path);
+				} else {
+					visitor.visitStaticLibrary(path);
+				}
+			}
+		}
+
 		private static final class Step1Result {
 			private final ImportSymbols imports;
 			private final Set<Path> inputFiles;
@@ -390,7 +444,13 @@ public interface LinkAbiAware extends Task {
 			}
 		}
 
-		private static final class ImportSymbols {
+		private interface ImportSymbols {
+			void add(String e);
+			boolean contains(String e);
+			Set<Object> restrictToUnused();
+		}
+
+		private static final class CapturingImportSymbols implements ImportSymbols {
 			private final SortedMap<Integer, Boolean> values = new TreeMap<>();
 
 			public void add(String e) {
@@ -412,6 +472,20 @@ public interface LinkAbiAware extends Task {
 			}
 		}
 
+		private static final class EmptyImportSymbols implements ImportSymbols {
+			public void add(String e) {
+				// do nothing
+			}
+
+			public boolean contains(String e) {
+				return true;
+			}
+
+			public Set<Object> restrictToUnused() {
+				return Collections.emptySet();
+			}
+		}
+
 		private static final class Step2Result {
 			private final List<HashCode> hashcode;
 			private final Set<Path> inputFiles;
@@ -425,14 +499,16 @@ public interface LinkAbiAware extends Task {
 		}
 
 		@Inject
-		public LinkAbiExtension(ObjectFactory objects) {
+		public LinkAbiExtension(ObjectFactory objects, ProviderFactory providers) {
 			hashes = objects.setProperty(Object.class);
 			unresolved = objects.setProperty(Object.class);
 
+			final Provider<AbiSnapshotter> useAbi = getLinkAbiSnapshotting().orElse(AbiSnapshotter.NONE);
 
-			final Provider<Boolean> useAbi = getUseNormalizedAbi().orElse(false);
+			// The following steps are solely for ABI snapshotting.
+			// The no ABI snapshotting configuration is done in the final step.
 
-			// == Step 1
+			// == Step 1 ==
 			// transform all source into:
 			//   - extract all import symbols
 			//   -> warns on static lib
@@ -443,14 +519,15 @@ public interface LinkAbiAware extends Task {
 			//   - each static lib, hash each object in the archive by static lib name
 			//   - each shared lib, track a list of shared lib
 			//   - bail out on any failure to parse -> wide ABI link snapshot
+			ZipProvider.Factory zipProvider = objects.newInstance(ZipProvider.Factory.class);
 			ListProperty<InFiles> inFiles = objects.listProperty(InFiles.class);
-			inFiles.add(getSource().getElements().map(SourceFiles::new));
+			inFiles.addAll(zipProvider.zip(useAbi, getSource().getElements(), (linkAbi, sources) -> linkAbi.equals(AbiSnapshotter.FULL_ABI) ? null : sources).map(SourceFiles::new).map(Collections::singletonList).orElse(Collections.emptyList()));
 			inFiles.add(getLibs().getElements().map(it -> new LibraryFiles(it))); // using method reference here with configuration case cause error
 			inFiles.disallowChanges();
 			inFiles.finalizeValueOnRead();
 
-			Provider<Step1Result> step1 = inFiles.map(it -> {
-				ImportSymbols imports = new ImportSymbols();
+			Provider<Step1Result> step1 = zipProvider.zip(useAbi, inFiles, (linkAbi, it) -> {
+				ImportSymbols imports = linkAbi.equals(AbiSnapshotter.FULL_ABI) ? new EmptyImportSymbols() : new CapturingImportSymbols();
 				Set<Path> inputFiles = new LinkedHashSet<>();
 				Set<SharedLibFile> sharedLibs = new LinkedHashSet<>();
 				for (InFiles files : it) {
@@ -506,11 +583,26 @@ public interface LinkAbiAware extends Task {
 			//  - @Input set of unresolved symbols
 			//  - @InputFiles set of failed parsed shared libs
 			//  - @Input map of relative path to shared lib to HashCode of link ABI
-			getLibraryFiles().from(step2.map(it -> it.inputFiles));
-			getUnresolvedImports().set(step2.map(it -> it.unsused));
+			getLibraryFiles().from(useAbi.flatMap(linkAbi -> {
+				if (linkAbi.equals(AbiSnapshotter.NONE)) {
+					return getLibs().getElements();
+				}
+				return step2.map(it -> (Object) it.inputFiles).orElse(getLibs().getElements());
+			}));
+			getUnresolvedImports().set(useAbi.flatMap(linkAbi -> {
+				if (linkAbi.equals(AbiSnapshotter.NONE)) {
+					return null;
+				}
+				return step2.map(it -> it.unsused);
+			}));
 			getUnresolvedImports().disallowChanges();
 			getUnresolvedImports().finalizeValueOnRead();
-			getHashes().set(step2.map(it -> it.hashcode));
+			getHashes().set(useAbi.flatMap(linkAbi -> {
+				if (linkAbi.equals(AbiSnapshotter.NONE)) {
+					return null;
+				}
+				return step2.map(it -> it.hashcode);
+			}));
 			getHashes().disallowChanges();
 			getHashes().finalizeValueOnRead();
 		}
@@ -523,25 +615,21 @@ public interface LinkAbiAware extends Task {
 
 		@Input
 		@Optional
-		public abstract Property<Boolean> getUseNormalizedAbi();
+		public abstract Property<AbiSnapshotter> getLinkAbiSnapshotting();
 
 		@Input
+		@Optional
 		protected SetProperty<Object> getUnresolvedImports() {
 			return unresolved;
 		}
 
 		@Input
+		@Optional
 		protected SetProperty<Object> getHashes() {
 			return hashes;
 		}
 
 		@Inject protected abstract ObjectFactory getObjects();
-
-//		@Input // This pattern is @Nested while respecting the provider knowledge
-//		// Note that this pattern must split the "@InputFiles"/"@OutputFiles" from the "@Input" values as we don't have real @Nested
-//		protected SetProperty<Map<String, Object>> getLibraryAbiModelsProps() {
-//			return libraryAbiModelsProps;
-//		}
 
 		@InputFiles
 		@PathSensitive(PathSensitivity.NAME_ONLY) // because of Windows/MSVC, others use soname/installName

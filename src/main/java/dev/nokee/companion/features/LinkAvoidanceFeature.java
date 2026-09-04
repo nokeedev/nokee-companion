@@ -17,6 +17,6 @@ abstract class LinkAvoidanceFeature implements Plugin<Project> {
 
 	@Override
 	public void apply(Project project) {
-		getTasks().withType(LinkAbiAware.class).configureEach(task -> task.getLinkAbi().getUseNormalizedAbi().set(true));
+		getTasks().withType(LinkAbiAware.class).configureEach(task -> task.getLinkAbi().getLinkAbiSnapshotting().set(LinkAbiAware.AbiSnapshotter.FULL_ABI));
 	}
 }
