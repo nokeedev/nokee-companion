@@ -6,8 +6,20 @@ pluginManagement {
 
 plugins {
 	id 'nokeebuild.develocity'
+	id 'nokeebuild.source-control-management'
 	id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
 }
 
 rootProject.name = 'nokee-companion'
 includeBuild 'gradle/templates'
+
+sourceControlManagement {
+	// Until we move the fixtures from that repository
+	if (Boolean.parseBoolean(System.getenv("CI"))) {
+		gitRepository(uri("https://github.com/nokeedev/nokee-commons.git"))
+	}
+
+	gitRepository(uri("https://github.com/nokeedev/nokee-hamcrest.git"))
+	gitRepository(uri("https://github.com/gradle-plugins/gradle-build-script.git"))
+	gitRepository(uri("https://github.com/gradle-plugins/source-elements.git"))
+}
