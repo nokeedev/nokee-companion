@@ -65,27 +65,27 @@ testing {
 				implementation libs.mockito.core
 				implementation 'dev.gradleplugins:gradle-api:latest.release'
 				implementation libs.hamcrest.core
-				implementation 'dev.nokee.commons:nokee-hamcrest:latest.integration'
+				implementation libs.nokee.hamcrest
 				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.integration')
 				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
-				implementation('com.google.guava:guava:33.4.6-jre') { because 'TypeToken' }
+				implementation(libs.google.guava) { because 'TypeToken' }
 			}
 		}
 		functionalTest(JvmTestSuite) {
 			dependencies {
 				implementation gradleTestKit()
-				implementation 'commons-io:commons-io:latest.release'
+				implementation libs.apache.commons.io
 				implementation libs.apache.commons.lang3
 				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
 				implementation 'dev.gradleplugins:elements:latest.release'
-				implementation 'dev.nokee.templates:nokee-code-templates:latest.integration'
+				implementation libs.nokee.code.templates
 				implementation 'dev.gradleplugins:gradle-runner-kit:latest.release'
-				implementation 'org.jetbrains:annotations:26.0.2'
+				implementation libs.jetbrains.annotations
 				implementation libs.hamcrest.core
-				implementation 'dev.nokee.commons:commons-names:latest.release'
+				implementation libs.nokee.commons.names
 				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.integration')
 				implementation testFixtures('dev.gradleplugins:gradle-runner-kit:latest.release')
-				implementation 'dev.nokee.commons:nokee-hamcrest:latest.integration'
+				implementation libs.nokee.hamcrest
 			}
 		}
 		samplesTest(JvmTestSuite) {
