@@ -39,7 +39,7 @@ public interface AbstractNativeLanguageCachingCompilationFunctionalTester {
 		GradleBuildElement firstBuild = project.writeToDirectory(testDirectory.resolve("first"));
 		GradleBuildElement secondBuild = project.writeToDirectory(testDirectory.resolve("second"));
 		GradleRunner runner = GradleRunner.create().withPluginClasspath().forwardOutput();
-		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest.cleanIt(), taskUnderTest.toString()).withBuildCacheEnabled().withGradleUserHomeDirectory(testDirectory.resolve("user-home").toFile());
+		GradleRunnerArguments args = GradleRunnerArguments.create().withTasks(taskUnderTest.cleanIt(), taskUnderTest.toString()).withBuildCacheEnabled().requireOwnGradleUserHomeDirectory("build cache isolation");
 		runner.withArguments(args.toList());
 
 		assertThat(succeeds(runner.withProjectDir(firstBuild.getLocation().toFile())).task(taskUnderTest), executed());

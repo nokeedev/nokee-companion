@@ -83,13 +83,13 @@ public interface AbstractNativeLanguageIncrementalCompilationFunctionalTester {
 		// TODO: Use incremental elements
 		Files.delete(build.getLocation().resolve("src/main/cpp/file-to-remove.cpp"));
 		// TODO: Use TaskUnderTest model
-		assertThat(build.getLocation().resolve("build/objs"), aFile(hasDescendants(hasItem(withRelativePath(endsWith("file-to-remove.o"))))));
+		assertThat(build.getLocation().resolve("build/objs"), aFile(hasDescendants(hasItem(withRelativePath(aFileBaseNamed("file-to-remove"))))));
 
 		result = succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList()));
 		assertThat(result.task(taskUnderTest), not(performsFullRebuild()));
 
 		// TODO: Use TaskUnderTest model
-		assertThat(build.getLocation().resolve("build/objs"), aFile(not(hasDescendants(hasItem(withRelativePath(endsWith("file-to-remove.o")))))));
+		assertThat(build.getLocation().resolve("build/objs"), aFile(not(hasDescendants(hasItem(withRelativePath(aFileBaseNamed("file-to-remove")))))));
 	}
 
 	@Test // https://github.com/gradle/gradle/issues/29492

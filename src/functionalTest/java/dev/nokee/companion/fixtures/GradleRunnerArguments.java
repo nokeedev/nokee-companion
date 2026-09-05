@@ -3,6 +3,9 @@ package dev.nokee.companion.fixtures;
 import dev.gradleplugins.runnerkit.GradleRunner;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.function.UnaryOperator;
 
@@ -68,7 +71,12 @@ public class GradleRunnerArguments implements Iterable<String> {
 	 * @return a new {@link GradleRunner} instance configured with a unique Gradle user home directory, neverl null.
 	 */
 	public GradleRunnerArguments requireOwnGradleUserHomeDirectory(String because) {
-		return withGradleUserHomeDirectory(new File("user-home"));
+		try {
+			// TODO: Maybe just on Windows? See https://github.com/gradle/gradle/issues/12535
+			return withGradleUserHomeDirectory(Files.createTempDirectory("user-home").toFile());
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
 	}
 	//endregion
 

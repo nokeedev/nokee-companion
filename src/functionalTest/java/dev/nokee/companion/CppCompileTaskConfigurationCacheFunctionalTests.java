@@ -7,6 +7,7 @@ import dev.nokee.templates.CppApp;
 import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform;
 import org.gradle.nativeplatform.plugins.NativeComponentPlugin;
 import org.gradle.nativeplatform.toolchain.NativeToolChainRegistry;
+import org.gradle.nativeplatform.toolchain.internal.ToolType;
 import org.gradle.nativeplatform.toolchain.internal.plugins.StandardToolChainsPlugin;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +41,7 @@ class CppCompileTaskConfigurationCacheFunctionalTests {
 				project.plugins(it -> it.id("dev.nokee.native-companion"));
 				project.append(apply(plugin(NativeComponentPlugin.class)));
 				project.append(importClass("dev.nokee.language.cpp.tasks.CppCompile"));
+				project.append(importClass(ToolType.class));
 				project.append(groovyDsl("""
 						def toolChains = project.modelRegistry.realize('toolChains', NativeToolChainRegistry)
 
@@ -49,6 +51,7 @@ class CppCompileTaskConfigurationCacheFunctionalTests {
 							objectFileDir = layout.buildDirectory.dir('objs')
 							source.from(fileTree('src/main/cpp'))
 							includes.from('src/main/headers')
+							systemIncludes.from(toolChain.zip(targetPlatform) { toolchain, platform -> toolchain.select(platform).getSystemLibraries(ToolType.CPP_COMPILER).includeDirs })
 						}
 					""".stripIndent()));
 

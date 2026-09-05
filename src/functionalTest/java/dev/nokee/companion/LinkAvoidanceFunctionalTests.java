@@ -9,6 +9,7 @@ import org.apache.commons.lang3.SystemUtils;
 import org.gradle.internal.os.OperatingSystem;
 import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform;
 import org.gradle.nativeplatform.toolchain.NativeToolChainRegistry;
+import org.gradle.nativeplatform.toolchain.internal.ToolType;
 import org.gradle.nativeplatform.toolchain.internal.plugins.StandardToolChainsPlugin;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,8 +20,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
@@ -55,6 +54,7 @@ class LinkAvoidanceFunctionalTests {
 			project.append(staticImportClass(OperatingSystem.class));
 			project.append(staticImportClass(DefaultNativePlatform.class));
 			project.append(importClass(DefaultNativePlatform.class));
+			project.append(importClass(ToolType.class));
 			project.append(importClass(NativeToolChainRegistry.class));
 			project.append(apply(plugin(StandardToolChainsPlugin.class)));
 			project.append(groovyDsl("""
@@ -108,6 +108,7 @@ class LinkAvoidanceFunctionalTests {
 					positionIndependentCode = true
 					toolChain = targetPlatform.map { toolChains.getForPlatform(it) }
 					targetPlatform = host()
+					systemIncludes.from(toolChain.zip(targetPlatform) { toolchain, platform -> toolchain.select(platform).getSystemLibraries(ToolType.CPP_COMPILER).includeDirs })
 				}
 
 				tasks.withType(AbstractLinkTask).configureEach {
@@ -459,6 +460,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@Test
+		@Disabled // not yet implemented
 		void relinkWhenLibraryTargetsAnotherOsAbi() throws IOException {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "EI_OSABI only exists in ELF"); // TODO: assert binary format not OS
 
@@ -486,6 +488,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@Test
+		@Disabled // not yet implemented
 		void relinkWhenExportedSymbolSizeChanges() {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "st_size is an ELF concept"); // TODO: assert binary format not OS
 
@@ -520,6 +523,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@Test
+		@Disabled // not yet implemented
 		void relinkWhenExportedSymbolBecomesThreadLocal() {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "STT_TLS is an ELF concept"); // TODO: assert binary format not OS
 

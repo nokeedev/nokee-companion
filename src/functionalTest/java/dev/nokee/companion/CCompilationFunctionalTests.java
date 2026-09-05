@@ -6,6 +6,7 @@ import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.platform.nativebase.fixtures.CGreeterApp;
 import dev.nokee.platform.nativebase.fixtures.CGreeterTest;
+import org.gradle.nativeplatform.toolchain.internal.ToolType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -15,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
+import static dev.gradleplugins.buildscript.syntax.Syntax.importClass;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static dev.nokee.elements.core.ProjectElement.ofTest;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -38,6 +40,7 @@ class CCompilationFunctionalTests {
 			it.id("dev.nokee.native-companion");
 		});
 
+		build.getBuildFile().append(importClass(ToolType.class));
 		build.getBuildFile().append(groovyDsl("""
 			application { component ->
 				binaries.configureEach { binary ->
@@ -45,8 +48,9 @@ class CCompilationFunctionalTests {
 						toolChain = binary.toolChain
 						targetPlatform = binary.targetPlatform.nativePlatform
 						objectFileDir = layout.buildDirectory.dir("obj/main/c/${binary.name - 'main'}")
-						source(fileTree('src/main/c'))
-						includes(component.privateHeaderDirs)
+						source.from(fileTree('src/main/c'))
+						includes.from(component.privateHeaderDirs)
+						systemIncludes.from(toolChain.zip(targetPlatform) { toolchain, platform -> toolchain.select(platform).getSystemLibraries(ToolType.C_COMPILER).includeDirs })
 					}
 					compileTask.get().objectFileDir = layout.buildDirectory.dir("obj/main/cpp/${binary.name - 'main' - 'Executable'}")
 				}

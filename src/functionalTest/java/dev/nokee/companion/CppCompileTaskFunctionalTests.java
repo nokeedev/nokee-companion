@@ -8,6 +8,7 @@ import dev.nokee.elements.core.GradleLayoutElement;
 import dev.nokee.templates.CppApp;
 import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform;
 import org.gradle.nativeplatform.plugins.NativeComponentPlugin;
+import org.gradle.nativeplatform.toolchain.internal.ToolType;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -28,13 +29,17 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		result.getBuildFile().append(apply(plugin(NativeComponentPlugin.class)));
 		result.getBuildFile().append(importClass("dev.nokee.language.cpp.tasks.CppCompile"));
 		result.getBuildFile().append(staticImportClass(DefaultNativePlatform.class));
+		result.getBuildFile().append(importClass(ToolType.class));
 		result.getBuildFile().append(groovyDsl("""
-				project.modelRegistry.realize('toolChains', NativeToolChainRegistry)
+				def toolChains = project.modelRegistry.realize('toolChains', NativeToolChainRegistry)
 
-				def compileTask = tasks.create("compile", CppCompile.clazz())
-				compileTask.targetPlatform = host()
-				compileTask.toolChain = extensions.getByType(NativeToolChainRegistry).getByName('clang')
-				compileTask.objectFileDir = layout.buildDirectory.dir('objs')
+				def compileTask = tasks.create("compile", CppCompile.clazz()) {
+					targetPlatform = host()
+					toolChain = targetPlatform.map { toolChains.getForPlatform(it) }
+					objectFileDir = layout.buildDirectory.dir('objs')
+					positionIndependentCode = true
+					systemIncludes.from(toolChain.zip(targetPlatform) { toolchain, platform -> toolchain.select(platform).getSystemLibraries(ToolType.CPP_COMPILER).includeDirs })
+				}
 
 				def subject = tasks.named('compile', CppCompile)
 			""".stripIndent()));

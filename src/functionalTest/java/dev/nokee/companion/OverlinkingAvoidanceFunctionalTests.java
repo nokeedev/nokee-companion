@@ -17,6 +17,7 @@ import static dev.gradleplugins.buildscript.syntax.Syntax.groovyDsl;
 import static dev.gradleplugins.fixtures.runnerkit.BuildResultMatchers.hasFailureCause;
 import static dev.gradleplugins.runnerkit.GradleExecutor.gradleTestKit;
 import static dev.nokee.elements.core.ProjectElement.ofMain;
+import static org.apache.commons.io.FilenameUtils.separatorsToUnix;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
@@ -68,7 +69,7 @@ class OverlinkingAvoidanceFunctionalTests {
 						}
 						repositories.maven { url = '%s' }
 					}
-				""".formatted(project.getLocation().relativize(testDirectory.resolve("repo")))));
+				""".formatted(separatorsToUnix(project.getLocation().relativize(testDirectory.resolve("repo")).toString()))));
 			});
 		GradleRunner.create(gradleTestKit()).inDirectory(vendors.getLocation()).withArguments(":list:publishCppPublicationToMavenRepository").build();
 
@@ -88,7 +89,7 @@ class OverlinkingAvoidanceFunctionalTests {
 							implementation 'com.example.vendors:list:+'
 						}
 					}
-				""".formatted(project.getLocation().relativize(testDirectory.resolve("repo")))));
+				""".formatted(separatorsToUnix(project.getLocation().relativize(testDirectory.resolve("repo")).toString()))));
 			})
 			.subproject("lib", project -> {
 				new GradleLayoutElement().applyTo(ofMain(app.getUtilities())).writeToDirectory(project.getLocation());
@@ -112,7 +113,7 @@ class OverlinkingAvoidanceFunctionalTests {
 					dependencies {
 						runtimeOnly project(':common')
 					}
-				""".formatted(project.getLocation().relativize(testDirectory.resolve("repo")))));
+				""".formatted(separatorsToUnix(project.getLocation().relativize(testDirectory.resolve("repo")).toString()))));
 			})
 			.subproject("common", project -> {
 				// TODO: Maybe use logger instead of duplicated list
