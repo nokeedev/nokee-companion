@@ -10,7 +10,7 @@ nokee-commons-backports = { module = "dev.nokee.commons:commons-backports", vers
 nokee-hamcrest = { module = "dev.nokee.commons:nokee-hamcrest", version = "latest.integration" }
 nokee-plugins-multiplatform-publishing = { module = "dev.nokee.multiplatform-publishing:dev.nokee.multiplatform-publishing.gradle.plugin", version = "1.0-milestone-3" }
 nokee-code-templates = { module = "dev.nokee.templates:nokee-code-templates", version = "latest.integration" }
-jetbrains.annotations = { module = "org.jetbrains:annotations", version = "26.0.2" }
+jetbrains-annotations = { module = "org.jetbrains:annotations", version = "26.0.2" }
 apache-commons-io = { module = "commons-io:commons-io", version = "2.18.0" }
 apache-commons-lang3 = { module = "org.apache.commons:commons-lang3", version = "3.18.0" }
 google-guava = { module = "com.google.guava:guava", version = "33.4.6-jre" }
