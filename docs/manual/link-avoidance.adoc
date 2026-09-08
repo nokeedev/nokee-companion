@@ -1,44 +1,109 @@
 = Link Avoidance
 
-Link avoidance narrows the up-to-date checking of a link task's input libraries to the parts that can change the link result.
+Link avoidance speeds up a build by reusing the previous link result more often.
 
-Picture a shared library where you changed how one function computes its result.
-Its bytes now differ from the last build, which would marks an expensive link task out-of-date.
-However, the linker reads only a few parts of that library, the export table among them.
-Your edit left all of them untouched.
-In those cases, the build can safely reuse the previous link result.
+Linking is one of the slow parts of a native build.
+A link task usually runs again whenever one of its input files changes.
+The task compares those files byte for byte.
+Those bytes can hold executable code, read-only and writable data, relocation information, debug information, and internal symbols.
+Most code change disturbs enough of them to look like a different library.
 
-Without link avoidance, the link tasks snapshot the input libraries byte-for-byte.
-Any change in the byte content of an input library results in a relink.
-These changes can be in executable code, read-only and writable data, relocation information, debug information, or internal symbols.
+An object file's content becomes part of the link result, so every byte of it counts.
+A static library is an archive of object files, and the same rule covers it.
+The linker puts off linking a dependent shared library until the program runs.
+What that run-time link needs is a small part of the library, and a link task can snapshot that part alone.
 
+Anything that links against a shared library is a _consumer_ of that library.
+Its link result depends on the symbols the library exports, where each _exported symbol_ is a name plus a few things recorded about it.footnote:[Its type and its binding, plus its size where the binary format records one.]
+A handful of other records matter as well.
+The exported symbols and those records make up the library's <<linker-facing-representation,linker-facing representation>>.
+Everything else in the library can change while the consumer's link result stays the same.
+
+Changes to a shared library come in two kinds.
+
+API change:: Adds an exported symbol, removes one, renames one, or changes something recorded about one.
+Every consumer must relink.
+
+Implementation change:: Leaves every exported symbol as it was.
+The code inside the library works differently, and no consumer needs to relink.
+
+_Link avoidance_ lets the link task distinguish the two kinds of change.
+It narrows the snapshot to the library's <<linker-facing-representation,linker-facing representation>>, so an implementation change leaves the link task up to date and nothing relinks.
+The build decides which kind you made.
+It compares that representation against the one from the last build.
+
+Link avoidance stays off until you turn on link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkAbiAware.java#L113[the link task's property].
+Overlinking avoidance is a separate feature, and it limits how far past the direct consumers a relink reaches.
+// TODO: add link to overlinking avoidance once written
+
+== Expected savings
+
+Start from a shared library under active development, and count its consumers.
+With link avoidance, those consumers' link tasks stay up-to-date through any implementation change.
+A shared library with eight consumers keeps eight link tasks from running.
+
+Most edits are implementation changes.
+You edit a function body.
+The declarations in the header come out the same, so the export table does too.
+The saving repeats on every edit of that kind.
+
+The feature costs the time it takes to <<input-normalization,normalize the dependent library>> into its <<linker-facing-representation,linker-facing representation>>.
+The link task reads the export table and the few records beside it instead of hashing every byte of the file.
+Those reads cost less than one link.
+
+The saving comes from the consumer's link task, so link avoidance does nothing for a shared library without consumers.
+The first build after you enable it links everything once, the same as before.
+Compilation is a separate question, so editing a public header still recompiles every consumer.
+Incremental compilation is what limits that work.
+
+[#linker-facing-representation]
 == The linker-facing representation
 
 Only a small part of a dependent shared library matters to the linker.
 That part is its _linker-facing representation_.
 That representation covers:
 
-Exported symbols:: Each symbol's name, plus the attributes the linker resolves against.
-ELF packs binding and type into one field and records size separately.
-Mach-O records binding.
+Exported symbols:: Each symbol's name, plus whichever attributes the format records alongside it.
+Which attributes those are comes down to <<binary-formats,the format>>.footnote:[ELF lets one name live at several versions, and the linker records which version it bound to, so moving a symbol between versions changes a consumer's link result while the name stays as it was. Producing versions takes an explicit version script, which is why little outside the system libraries carries any.]
 
-Library identity:: The `DT_SONAME` dynamic tag on ELF, the `LC_ID_DYLIB` load command on Mach-O, and the DLL name on PE.
-`LC_ID_DYLIB` also carries a compatibility version that the linker copies into its consumers.
+Library identity:: The name a consumer records, so the dynamic linker can find the library again at run time.
 
-Required runtime dependencies:: The `DT_NEEDED` tags on ELF, which the linker follows to resolve symbols through second-level dependencies.
-PE and Mach-O record nothing the linker needs here.
+Required runtime dependencies:: The libraries the linker follows to resolve symbols through second-level dependencies.
 
-Target architecture:: The machine type recorded in the library's header.
-A linker refuses a library built for another architecture, whatever its exports say.
+Target compatibility:: The machine the library was built for, the kind of file it is, and the platform release it targets.
+A linker refuses a library failing any of these, whatever its exports say.
 
-Symbol versioning:: On ELF, one symbol name can exist at several versions, listed in `.gnu.version_d`.
-The linker records which version it bound to, so moving a symbol between versions changes the link result even though its name holds still.
-
+How much of each a library carries comes down to <<binary-formats,the binary format>>.
 The link task can safely ignore any change that leaves this information intact.
 
+.Reading the linker-facing representation from a built library
+[#reading-a-library%collapsible]
+====
+ELF::
+Exported symbols::: `readelf --dyn-syms libfoo.so`
+Library identity::: `readelf -d libfoo.so`, the `SONAME` tag
+Required runtime dependencies::: `readelf -d libfoo.so`, the `NEEDED` tags
+Target compatibility::: `readelf -h libfoo.so`
+All four at once::: `readelf -hdW --dyn-syms libfoo.so`
+
+Mach-O::
+Exported symbols::: `dyld_info -exports libfoo.dylib`
+Library identity::: `otool -D libfoo.dylib`
+Required runtime dependencies::: `dyld_info -linked_dylibs libfoo.dylib`
+Target compatibility::: `dyld_info -platform libfoo.dylib`
+Everything but the identity::: `dyld_info -platform -linked_dylibs -exports libfoo.dylib`
+
+PE::
+Exported symbols::: `dumpbin /EXPORTS foo.lib`
+Library identity::: `dumpbin /EXPORTS foo.lib`, the DLL name at the head
+Required runtime dependencies::: `dumpbin /DEPENDENTS foo.dll`
+Target compatibility::: `dumpbin /HEADERS foo.dll`
+====
+
+[#input-normalization]
 == Input normalization
 
-During input snapshotting, the link task normalizes each shared library into its linker-facing representation.
+During input snapshotting, the link task normalizes each shared library into its <<linker-facing-representation,linker-facing representation>>.
 
 The link task captures object files byte-for-byte, whether local or dependent.
 Their content lands directly in the linker result.
@@ -56,7 +121,7 @@ The fallback keeps the result correct.
 The build then relinks as often as it would without link avoidance.
 
 While ruling out a stale link result, you may want link avoidance out of the way.
-Every byte change then forces a relink again.
+Every byte change then forces another relink.
 The other reason to turn it off is a toolchain producing output the normalization does not fully cover.
 You can link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkAbiAware.java#L113[restore byte-for-byte snapshotting for all input libraries with a link task property].
 
@@ -69,27 +134,64 @@ Only the names an object file publishes can take part.
 Those are its _global symbols_.
 
 Two things produce a global symbol: a definition compiled into this library, and a language rule saying the name is visible to other object files.
-C calls that rule _external linkage_, and other languages spell it differently.
-The chapters on xref:../reference/exported-symbols-in-c.adoc[exported symbols in C] and xref:../reference/exported-symbols-in-cpp.adoc[exported symbols in C++] map each language's code changes onto the export table.
+C and C++ both call that rule _external linkage_.
+The chapters on xref:../reference/exported-symbols-in-c.adoc[exported symbols in C] and xref:../reference/exported-symbols-in-cpp.adoc[exported symbols in C++] show how each code change affects a library's global symbols.
 
-A global symbol carries more than a name.
-The binary format decides what metadata travels with it, and the linker reads that too.
+<<toolchain,The toolchain>> names each global symbol and chooses which of them become exported symbols.
+What that exported symbol keeps of the global symbol comes down to <<binary-formats,the binary format>>.
 
-The toolchain then decides which global symbols reach the export table:
+[#toolchain]
+== Toolchain
 
-Explicit:: You mark each symbol for export, e.g. MSVC toolchains.
+A compiler encodes each declaration into a <<symbol-names,symbol name>>, and an <<export-rules,export rule>> picks which of those names a library exports.
 
-Implicit:: The toolchain exports every global symbol, e.g. GCC-based toolchains.
+[#symbol-names]
+=== Symbol names
 
-A module-definition file or a version script overrides either rule for the names listed in it.
+A symbol name starts from the identifier in the source, and some ABIs encode more of the declaration into it.footnote:[link:https://itanium-cxx-abi.github.io/cxx-abi/abi.html[Itanium C++ ABI] and link:https://learn.microsoft.com/en-us/cpp/build/reference/decorated-names?view=msvc-170[Microsoft's decorated names reference] each set out what their names carry.]
+How much they encode varies, so one declaration can get two different names from two toolchains.
+
+Change something the name encodes and you rename the exported symbol.
+The chapters on xref:../reference/exported-symbols-in-c.adoc[exported symbols in C] and xref:../reference/exported-symbols-in-cpp.adoc[exported symbols in C++] cover which code changes reach the name in each language.
+
+[#export-rules]
+=== Export rules
+
+A global symbol must still pass the toolchain's export rule before it reaches the export table.
+
+GCC and Clang:: Every global symbol reaches a shared library's export table.
+`+__attribute__((visibility("hidden")))+` keeps one name out, and `-fvisibility=hidden` keeps all of them out.
+A build using that flag marks each name it wants exported with `+__attribute__((visibility("default")))+`, or lists them in a version script.
+Targeting Windows swaps this for an auto-export heuristic, which exports every global symbol only while the build declares no explicit exports.
+
+MSVC:: No global symbol reaches a DLL's export table on its own.
+Exporting one takes `+__declspec(dllexport)+` on its declaration, or an entry in a module-definition file.
+
+[#binary-formats]
+== Binary formats
+
+A binary format settles what an exported symbol records, so an edit can reach one format's export table and leave another's alone.
+
+ELF:: The `.dynsym` entry keeps a symbol's name, type, binding, and size.footnote:[link:https://refspecs.linuxfoundation.org/elf/gabi4+/contents.html[System V ABI, ELF chapters]]
+`DT_SONAME` carries the library's own name, `DT_NEEDED` tags name its second-level dependencies, and `.gnu.version_d` lists the versions one symbol name lives at.
+The header's `e_machine` names the architecture, `e_type` says whether the file is a shared object, and `e_flags` carries the ABI variant a linker refuses to mix.
+
+Mach-O:: The export trie keeps a name, an address, and a few flags, thread-local and weak-definition among them.footnote:[A trie shares storage between names with a common prefix. `<mach-o/loader.h>` in the macOS SDK defines it alongside the load commands.]
+`LC_ID_DYLIB` carries the library's name along with a compatibility version the linker copies into its consumers.
+`LC_BUILD_VERSION` records the platform, the minimum OS version, and the SDK the library was built against, and a linker refuses a dylib built for another platform.
+
+PE:: The export directory keeps a name, an ordinal, and an address.footnote:[link:https://learn.microsoft.com/en-us/windows/win32/debug/pe-format[PE format specification]]
+It keeps nothing else, so a metadata change reaches a PE export table only when it reaches the name.
+A consumer links against the import library rather than the DLL, and the machine type recorded there is what a linker checks.
+
+NOTE: A PE image's subsystem and DLL flag stay out, since they describe the file a linker produces rather than one it consumes.
 
 == API and implementation changes
 
 An *implementation change* rearranges what happens inside a symbol that already exists.
 You swap a loop for a lookup table, or fix an off-by-one.
-The library's bytes move.
-Its linker-facing representation holds still.
-The consumer's link tasks stay up-to-date.
+The library's bytes differ afterwards.
+Its linker-facing representation stays the same, so every consumer's link task stays up-to-date.
 
 An *API change* alters the set of symbols the library offers.
 You add a function, remove one, rename one, or change its signature.
@@ -103,5 +205,5 @@ The compiler emits a fresh symbol into the library to hold it.
 Under a toolchain that exports implicitly, that symbol joins the export table.
 That one-line edit is an API change.footnote:[Which edits emit new symbols depends on the language and the toolchain, and xref:../reference/exported-symbols-in-cpp.adoc[exported symbols in C++\] works through them.]
 
-TIP: When a relink surprises you, compare the exported symbols of the two builds.
-Matching names mean the difference sits elsewhere in the linker-facing representation, such as a symbol's size or the target architecture.
+TIP: When a relink surprises you, <<reading-a-library,list the exported symbols>> of the library from each build and compare.
+Matching names narrow the difference to the rest of the <<linker-facing-representation,linker-facing representation>>, such as a symbol's size or the target architecture.

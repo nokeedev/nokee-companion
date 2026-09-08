@@ -1,15 +1,17 @@
 = Exported Symbols in C
 
-This chapter maps a change in C code to its effect on a library's exported symbols.
+This chapter maps changes in C code to their effects on a library's exported symbols.
 
 An _API change_ adds, removes, or renames an exported symbol, or changes what one of them records.
-An _implementation change_ leaves every exported symbol as it was.
+An _implementation change_ leaves every exported symbol unchanged.
 
 A consumer importing a symbol compiles a declaration of it, and the definition it binds to lives in the library.
 Those two have to agree on more than the name.
 The exported symbol records only some of what they agree on, so an edit can change what a caller has to do while leaving that record alone.
 The linker sees nothing wrong and binds them anyway.
 Realigning the two takes a _rebuild_: the consumer's source runs through the compiler again, so its declaration matches the definition the library exports now.
+Relinking the consumer runs the same object files through the linker again.
+Those object files already hold the stale declaration, so only the compiler can fix it.
 
 NOTE: A shared public header usually keeps both sides agreeing without any help, since the consumer and the library compile the same text.
 The linker knows nothing about headers, so this chapter speaks about the declaration each side compiled.
@@ -36,7 +38,7 @@ A definition also supplies the thing the name stands for.
 `void f(void);`:: Declares only.
 
 Only a definition puts a name in the export table.
-A declaration on its own leaves a reference for the linker to satisfy from somewhere else.
+A declaration on its own leaves a reference for the linker to satisfy elsewhere.
 
 The definition also has to sit in a translation unit compiled into this library.
 One living in the consumer, or in another library, puts nothing in this one.
@@ -52,8 +54,7 @@ A file-scope declaration gets it unless the declaration says `static`.footnote:c
 Internal linkage:: The name refers to one entity inside its own translation unit.
 `static` at file scope gives it.footnote:c622p3[ISO/IEC 9899:2018 §6.2.2p3]
 
-No linkage:: Each declaration refers to something of its own.
-Block-scope objects, type names, tags, members, enumeration constants, and parameters have it.footnote:c622p6[ISO/IEC 9899:2018 §6.2.2p6]
+No linkage:: Each declaration refers to something of its own.footnote:c622p6[ISO/IEC 9899:2018 §6.2.2p6]
 
 External linkage and a definition together produce a _global symbol_, the only kind a toolchain can export.
 
@@ -64,7 +65,7 @@ Type names, tags, members, enumeration constants, and parameters produce no symb
 [#global-symbols]
 === Global symbols
 
-A global symbol is a name in an object file the linker can resolve from another object file.
+A global symbol is a name in an object file that the linker can resolve from another object file.
 It is the unit the export step works on, and it carries what the language decided about the name.
 
 Its type records whether the name is an object, a function, or a thread-local object.
@@ -76,25 +77,8 @@ A change to any of these is an API change even when every exported name stays as
 [#toolchain-export-rules]
 === Toolchain export rules
 
-A global symbol still has to pass the toolchain's export rule.
-
-[[gcc-export-rule]]GCC:: Every global symbol reaches a shared library's export table.
-Visibility attributes and version scripts are what keep names out.
-Targeting Windows swaps this for an auto-export heuristic, which exports every global symbol only while the build declares no explicit exports.
-
-Clang:: Same as <<gcc-export-rule,GCC>>.
-
-MSVC:: No global symbol reaches a DLL's export table on its own.
-Exporting one takes `+__declspec(dllexport)+` on its declaration, or an entry in a module-definition file.
-
-How much of the global symbol survives into the export table depends on the binary format.
-
-ELF:: The `.dynsym` entry keeps the record intact, name and type and binding and size alike.
-
-Mach-O:: The export trie keeps the name, an address, and a few flags, thread-local and weak-definition among them.
-
-PE:: The export directory keeps a name, an ordinal, and an address.
-Nothing else survives, so a metadata change reaches a PE export table only when it reaches the name.
+A global symbol still has to pass the toolchain's export rule, and how much of that symbol the export table records comes down to the binary format.
+The link avoidance chapter covers xref:../manual/link-avoidance.adoc#export-rules[which global symbols each toolchain exports] and xref:../manual/link-avoidance.adoc#binary-formats[what each binary format records].
 
 == Change summary
 
@@ -120,7 +104,7 @@ See <<file-scope-definitions>>.
 -void f(void) { }
 ----
 
-API change because the global symbol it wrote disappears with it.
+API change because the global symbol it wrote disappears.
 See <<file-scope-definitions>>.
 
 [#renaming-a-file-scope-definition]
@@ -203,7 +187,7 @@ See <<definition-placement>>.
  }
 ----
 
-API change because the library stops defining the symbol and imports it instead.
+API change because the library no longer defines the symbol and instead imports it.
 See <<definition-placement>>.
 
 [#changing-a-functions-body]
@@ -352,7 +336,8 @@ See <<inline-functions>>.
 +_Thread_local int counter;
 ----
 
-API change on ELF and Mach-O because thread storage shows up on the exported symbol.
+API change because thread storage duration changes the symbol's type.
+Whether that reaches the export table depends on the binary format.
 See <<thread-local-objects>>.
 
 [#changing-a-functions-calling-convention]
@@ -364,7 +349,7 @@ See <<thread-local-objects>>.
 +void __stdcall f(void) { }
 ----
 
-API change on 32-bit Windows because Windows x86 decoration folds the calling convention into the symbol name.
+Implementation change, *except* where the decorated name encodes the calling convention, because the standard says nothing about calling conventions.
 See <<calling-conventions>>.
 
 [#changing-a-parameters-type]
@@ -376,7 +361,7 @@ See <<calling-conventions>>.
 +void f(double x) { }
 ----
 
-Implementation change, and an API change on 32-bit Windows under `+__stdcall+` or `+__fastcall+` when the parameter list's total size changes, because a C symbol name records no parameter types.
+Implementation change, *except* where the decorated name encodes the parameter list's size in bytes and the new type changes that size, because the standard gives an external name one meaning across the whole program.footnote:c622p2[]
 See <<function-signatures>>.
 
 [#changing-a-functions-return-type]
@@ -400,7 +385,7 @@ See <<function-signatures>>.
 +void f(int a, int b) { }
 ----
 
-Implementation change, and an API change on 32-bit Windows under `+__stdcall+` or `+__fastcall+`, because a C symbol name records no parameter list.
+Implementation change, *except* where the decorated name encodes the parameter list's size in bytes, because the standard gives an external name one meaning across the whole program.footnote:c622p2[]
 See <<function-signatures>>.
 
 [#reordering-a-functions-parameters]
@@ -462,7 +447,7 @@ See <<function-signatures>>.
 ----
 
 API change because the marker flips the export rule's decision for that name.
-See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
+See <<export-markers>> and xref:../manual/link-avoidance.adoc#export-rules[what each toolchain exports by default].
 
 [#unexporting-a-name-that-was-exported]
 === Unexporting a name that was exported
@@ -482,7 +467,7 @@ See <<export-markers>> for the spelling each toolchain uses and what each export
 ----
 
 API change because the marker flips the export rule's decision for that name.
-See <<export-markers>> for the spelling each toolchain uses and what each exports by default.
+See <<export-markers>> and xref:../manual/link-avoidance.adoc#export-rules[what each toolchain exports by default].
 
 [#making-a-definition-weak]
 === Making a definition weak
@@ -513,7 +498,7 @@ See <<aliases>>.
 At file scope, definitions have either internal or external linkage, decided by the `static` keyword.
 The toolchain never exports a definition with internal linkage, so any change to an internally linked definition is an implementation change.
 A definition with external linkage produces a global symbol, and <<toolchain-export-rules,the toolchain's export rule>> decides whether to export it.
-When the toolchain exports it, adding or removing the `static` keyword is an API change, and so is adding, removing, or renaming the definition.
+When the toolchain exports it, adding or removing the `static` keyword is an API change; so are adding, removing, or renaming the definition.
 
 NOTE: At file scope, the C standard considers a declaration of a variable without an initializer, e.g. `int counter;`, as a tentative definition.footnote:c692p2[]
 When the translation unit holds no other definition for that variable, the tentative definition becomes the definition with an initializer of zero, and it produces a global symbol.
@@ -525,7 +510,7 @@ A library holds several translation units.
 Moving a definition from one to another leaves the exported symbols alone, so the edit is an implementation change.
 
 Moving a definition to a different library is an API change for both.
-The first library stops defining the symbol and stops exporting it.
+The first library stops defining and exporting the symbol.
 Code there that still calls the function imports the symbol instead.
 The second library defines it now, and <<toolchain-export-rules,its export rule>> decides whether that symbol reaches the export table.
 
@@ -533,7 +518,7 @@ The second library defines it now, and <<toolchain-export-rules,its export rule>
 == Constant objects
 
 `const` qualifies the object's type.
-At file scope the object then lives in read-only memory.
+At file scope, the object then lives in read-only memory.
 An exported symbol records the same name, type, binding, and size either way, so adding or removing `const` is an implementation change.
 
 IMPORTANT: Reaching for `const` where a `#define` would do leaves you with a file-scope definition the toolchain can export, so adding one is an API change.footnote:[C++ gives a namespace-scope `const` object internal linkage, so the same declaration behaves differently there.]
@@ -548,7 +533,7 @@ Adding an `inline` definition to a header is an implementation change, and so is
 One translation unit still has to supply the external definition, either by declaring the function `extern` or by declaring it without `inline`.
 That translation unit writes the global symbol, so adding or removing that declaration is an API change.
 
-A header saying `static inline` gives every including translation unit a local symbol of its own, and no global symbol appears anywhere.
+A header with `static inline` gives every including translation unit its own local symbol, and no global symbol appears anywhere.
 Every edit to it is an implementation change.
 
 NOTE: `-std=gnu89` and `-fgnu89-inline` invert the two forms under GCC and Clang, where `inline` alone writes an external definition and `extern inline` writes none.
@@ -569,7 +554,6 @@ A PE exported symbol carries no trace of it, so the edit stays an implementation
 <<global-symbols,A global symbol>> records nothing about a function's calling convention, so any change to the convention is an implementation change.
 
 NOTE: Microsoft's link:https://learn.microsoft.com/en-us/cpp/build/reference/decorated-names?view=msvc-170#FormatC[Windows x86 name decoration for C] is the exception, since it folds the convention into the symbol name.
-`void f(void)` becomes `_f` under `+__cdecl+`, `_f@0` under `+__stdcall+`, and `@f@0` under `+__fastcall+`.
 Switching a function from one convention to another renames the symbol, so the edit is an API change.
 
 [#function-signatures]
@@ -577,7 +561,8 @@ Switching a function from one convention to another renames the symbol, so the e
 
 <<global-symbols,A global symbol>> records nothing about a function's parameter types or its return type, so any change to the signature is an implementation change.
 
-IMPORTANT: A C symbol name carries no parameter types, so the linker binds a caller compiled against the old signature to the new definition without complaint.
+IMPORTANT: A C symbol name carries no parameter types, so the linker cannot detect the mismatch.
+It binds a caller compiled against the old signature to the new definition.
 The call passes the wrong argument types, and every consumer needs a rebuild.
 
 NOTE: Microsoft's link:https://learn.microsoft.com/en-us/cpp/build/reference/decorated-names?view=msvc-170#FormatC[Windows x86 name decoration for C] is the exception.
@@ -593,24 +578,19 @@ None of that reaches a symbol.
 Adding a field, changing a field's type, swapping two of them, or adjusting alignment is an implementation change.
 
 IMPORTANT: A consumer compiled against the old struct reads the old offsets out of the new object.
-The linker sees an identical library and reuses the previous link result, so every consumer needs a rebuild.
+Nothing in the export table records the change, so the linker cannot detect the mismatch.
+Every consumer needs a rebuild.
 
-NOTE: An exported object of that struct records its size on ELF, so a struct growing by a field grows the object with it.
-A struct growing that way is an API change on ELF.
+NOTE: An exported object of that struct records its size on ELF, and a struct growing by a field grows the object with it.
+That size reaches a consumer only through a copy relocation, which a linker emits when the consumer's own code was compiled without `-fPIC` or `-fPIE` and linked into a non-position-independent executable.
+Such a consumer sizes its own `.bss` copy from the old value, and the loader reports the mismatch at run time rather than the linker catching it.
+Every other consumer reads the object through the global offset table, so the size never reaches its link result.
 
 [#export-markers]
 == Export markers
 
 An export marker acts on <<toolchain-export-rules,the toolchain's export rule>>, deciding whether a global symbol becomes an exported symbol.
 A marker that flips that decision is an API change.
-
-MSVC exports no global symbol on its own, so `+__declspec(dllexport)+` on a declaration is what puts a name in a DLL's export table.
-Removing the marker keeps the name out again.
-A module-definition file does the same job for the names it lists.
-
-GCC and Clang export every global symbol by default.
-`+__attribute__((visibility("hidden")))+` keeps one name out of the export table, and `-fvisibility=hidden` applies that to all of them at once.
-A build using that flag then marks each name it wants exported with `+__attribute__((visibility("default")))+`.
 
 NOTE: A marker that agrees with the default export rules changes nothing, making the edit an implementation change.
 

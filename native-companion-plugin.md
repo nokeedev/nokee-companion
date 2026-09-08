@@ -99,6 +99,7 @@ Here's summary of all features available:
 - _(disabled)_ [**objects-lifecycle-tasks**](#feature-objects-lifecycle-tasks): Adds lifecycle task to assemble a component's objects.
 - _(disabled)_ [**multiplatform-publishing**](#feature-multiplatform-publishing): Replace core publishing with Nokee's multiplatform publishing.
 - _(disabled)_ [**overlinking-avoidance**](#feature-overlinking-avoidance): Avoid overlinking by disabling "second-level" dependencies during linking.
+- _(disabled)_ [**link-avoidance**](#feature-link-avoidance): Reuses the previous link result when a change to a dependent shared library cannot affect it.
 
 ### Feature: native-task-object-files-extension
 
@@ -171,6 +172,12 @@ The multiplatform publishing plugin allow attributes mutation of the platform's 
 ### Feature: overlinking-avoidance
 
 
+
+### Feature: link-avoidance
+
+Snapshots only the parts of a dependent shared library that can change a consumer's link result.
+A change leaving those parts alone keeps every consumer's link task up-to-date, so the build reuses the previous link result.
+Visit the [link avoidance chapter](docs/manual/link-avoidance.adoc) to learn more, and the [link avoidance sample]({ref-sample-cpp-link-avoidance}) walks through one change of each kind.
 
 ## Dependency Management
 
@@ -305,3 +312,4 @@ Each `CppBinary` has their respective `TaskProvider`'s configure method to avoid
 [ref-sample-cpp-with-assembly-sources]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-with-assembly-sources
 [ref-javadoc-TestedComponentDependency.Modifier]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/TestedComponentDependency.java
 [ref-sample-cpp-unit-test-tested-component-integration]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-unit-test-tested-component-integration
+[ref-sample-cpp-link-avoidance]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-link-avoidance
