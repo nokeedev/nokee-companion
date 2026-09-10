@@ -152,6 +152,56 @@ class LinkAvoidanceFunctionalTests {
 				""".formatted("dev.nokee.nativeplatform.tasks.LinkExecutableTask")));
 			});
 		}
+
+		@Test
+		@Disabled // not yet implemented
+		void relinkWhenExportedSymbolSizeChangesForNonPositionIndependentExecutable() {
+			assumeTrue(SystemUtils.IS_OS_LINUX, "copy relocations are an ELF concept"); // TODO: assert binary format not OS
+
+			// st_size is its own field in Elf64_Sym, apart from the name and from the binding and type packed
+			// into st_info, so growing an exported data object leaves all three untouched. It reaches a consumer
+			// only through a copy relocation: non-PIC code computes the object's address into a register straight
+			// from the instruction stream, so the linker has to hand it an address it knows at link time. It does
+			// that by reserving st_size bytes in the consumer's own .bss, pointing the code there, and leaving an
+			// R_*_COPY for the loader to memcpy the contents across at startup. That reservation is what freezes
+			// the size into the link result. Nothing fails at link time; an unrelinked consumer shows up at run
+			// time, as the loader reporting that the symbol "has different size in shared object".
+			//
+			// The reservation exists because the consumer's code cannot reach the library's storage at all. The
+			// address is encoded in the instruction bits and has to be final when the linker writes the file,
+			// while the library's base address is not chosen until load time. Patching the instructions later
+			// would need writable code pages, and a linker does not rewrite a direct address computation into a
+			// GOT load, so the only lever left is to put the object where the linker already knows the address.
+			//
+			// The copy leaves one live object rather than two, the loader throwing a switch as it goes. Left
+			// alone, the library reads and writes its own storage. Once a consumer takes a copy, the consumer
+			// comes first in the global symbol lookup order, so the loader fills the library's own GOT slot with
+			// the consumer's address and both sides work on the consumer's .bss while the library's storage goes
+			// unused. The R_*_COPY carries the library's initializer in before main runs, and it carries only as
+			// many bytes as the consumer reserved. A stale size therefore causes no divergence between the two:
+			// it leaves the library believing the object is larger than the reservation it now writes into, so
+			// library code walks off the end into whatever follows in the consumer's .bss.
+			//
+			// This case belongs to LinkExecutableTests rather than the shared tester because it cannot be made to
+			// happen for a shared library. A linker refuses to build one out of non-PIC objects at all, rejecting
+			// every relocation "against symbol X which may bind externally", so a shared library is PIC by
+			// construction, reads the object through the GOT, and never takes a copy. The fixture compiles with
+			// positionIndependentCode = true, which is why this test has to turn it off.
+			growableBuffer();
+			build.rootProject(project -> project.append(groovyDsl("""
+				tasks.named('compile') { positionIndependentCode = false }
+				tasks.named('link') { linkerArgs.add('-no-pie') }
+			""")));
+
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			// Rebuilt by the same compiler from the same source but for a larger object, so the exported name,
+			// its binding and its type are all identical and st_size is the only difference.
+			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+		}
+
 	}
 
 	@Nested
@@ -297,12 +347,47 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecuted(hasItem(":link")));
 		}
 
-		private Path fooComponent() {
+		Path fooComponent() {
 			return build.getLocation().resolve("src/foo/cpp");
 		}
 
-		private Path mainComponent() {
+		Path mainComponent() {
 			return build.getLocation().resolve("src/main/cpp");
+		}
+
+		void growableBuffer() {
+			SourceFile.of("impl2.cpp", "char my_buffer[64] = {};").writeToDirectory(fooComponent());
+			SourceFile.of("main.cpp", """
+					#include <cstdio>
+					extern char my_buffer[];
+					int main() {
+						my_buffer[0] = 'H';
+						my_buffer[1] = 'i';
+						my_buffer[2] = '\\0';
+
+						std::puts(my_buffer);
+						return 0;
+					}
+				""").writeToDirectory(mainComponent());
+			build.rootProject(sharedLibComponent("foo"));
+		}
+
+		@Test
+		void doesNotRelinkWhenExportedSymbolSizeChangesForPositionIndependentConsumer() {
+			assumeTrue(SystemUtils.IS_OS_LINUX, "copy relocations are an ELF concept"); // TODO: assert binary format not OS
+
+			// PIC code loads an object's address out of the GOT, which the loader fills in, so nothing about the
+			// object has to be known at link time. No .bss reservation is made, no copy relocation is emitted and
+			// my_buffer stays an UND entry of size 0, which leaves the library's st_size out of the link result
+			// entirely. This holds for both link kinds: a shared library is PIC by construction, and an executable
+			// built from PIC objects behaves the same way whether or not it is linked -pie.
+			growableBuffer();
+
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@Test
@@ -489,41 +574,6 @@ class LinkAvoidanceFunctionalTests {
 
 		@Test
 		@Disabled // not yet implemented
-		void relinkWhenExportedSymbolSizeChanges() {
-			assumeTrue(SystemUtils.IS_OS_LINUX, "st_size is an ELF concept"); // TODO: assert binary format not OS
-
-			// st_size is its own field in Elf64_Sym, apart from the name and from the binding and type packed
-			// into st_info, so growing an exported data object leaves all three untouched. The linker reserves
-			// st_size bytes in a non-PIE consumer's own .bss and emits a copy relocation, which is what makes
-			// the size part of what the consumer was linked against. Nothing fails at link time: a consumer
-			// left unrelinked shows up at run time instead, as the loader reporting that the symbol "has
-			// different size in shared object".
-			SourceFile.of("impl2.cpp", "char my_buffer[64] = {};").writeToDirectory(fooComponent());
-			SourceFile.of("main.cpp", """
-					#include <cstdio>
-					extern char my_buffer[];
-					int main() {
-						my_buffer[0] = 'H';
-						my_buffer[1] = 'i';
-						my_buffer[2] = '\\0';
-
-						std::puts(my_buffer);
-						return 0;
-					}
-				""").writeToDirectory(mainComponent());
-			build.rootProject(sharedLibComponent("foo"));
-
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
-
-			// Rebuilt by the same compiler from the same source but for a larger object, so the exported name,
-			// its binding and its type are all identical and st_size is the only difference.
-			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
-
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
-		}
-
-		@Test
-		@Disabled // not yet implemented
 		void relinkWhenExportedSymbolBecomesThreadLocal() {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "STT_TLS is an ELF concept"); // TODO: assert binary format not OS
 
@@ -543,6 +593,42 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
 			SourceFile.of("impl2.cpp", "__thread int counter = 0;").writeToDirectory(fooComponent());
+
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+		}
+
+		@Test
+		@Disabled // not yet implemented
+		void relinkWhenExportedSymbolMovesToAnotherVersion() {
+			assumeTrue(SystemUtils.IS_OS_LINUX, "symbol versioning is a GNU extension to ELF"); // TODO: assert binary format not OS
+
+			// A version script lets one name live at several versions. The linker binds a reference to the
+			// default version and writes that version's name into the consumer's own .gnu.version_r, so the
+			// consumer records greet@V1 rather than greet. Moving the symbol to V2 leaves .dynsym untouched -
+			// same st_name, same st_info, same st_shndx - while every consumer's link result now names V2.
+			// ElfBinaryHasher hashes .dynsym entries and reads .dynamic only far enough to find DT_SONAME, so
+			// .gnu.version_d and .gnu.version reach neither half of ElfHashCode and the link stays up-to-date.
+			var fixture = new Fixture();
+			fixture.writeToProject(build);
+			build.rootProject(sharedLibComponent("foo"));
+
+			// Two scripts rather than one edited in place: the version script is not a tracked input of the
+			// link task, so switching which path linkerArgs names is what makes linkFoo itself rerun.
+			write(build.getLocation().resolve("v1.map"), "V1 { global: *; };\n");
+			write(build.getLocation().resolve("v2.map"), "V2 { global: *; };\n");
+			build.rootProject(project -> project.append(groovyDsl("""
+				tasks.named('linkFoo', LinkSharedLibrary) {
+					linkerArgs.set(['-Wl,--version-script=' + file('v1.map').absolutePath])
+				}
+			""")));
+
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+
+			build.rootProject(project -> project.append(groovyDsl("""
+				tasks.named('linkFoo', LinkSharedLibrary) {
+					linkerArgs.set(['-Wl,--version-script=' + file('v2.map').absolutePath])
+				}
+			""")));
 
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
