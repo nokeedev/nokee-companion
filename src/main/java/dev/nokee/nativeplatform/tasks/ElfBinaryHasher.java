@@ -80,7 +80,7 @@ final class ElfBinaryHasher {
 		void visitArchitecture(int arch);
 		void visitOsAbi(int osabi);
 		void visitSoname(String soname);
-		void visitExport(String name, int info, int size);
+		void visitExport(String name, int info, long size);
 		void visitAbiVersion(int abiversion);
 		void visitType(int type);
 	}

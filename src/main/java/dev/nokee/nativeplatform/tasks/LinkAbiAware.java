@@ -129,12 +129,12 @@ public interface LinkAbiAware extends Task {
 							}
 
 							@Override
-							public void visitExport(String name, int type, int size) {
+							public void visitExport(String name, int type, long size) {
 								if (imports.contains(name)) {
 									System.out.println("export symbol '" + name + "' " + type + " -- " + size);
 									hasher.putString(name);
 									hasher.putInt(type);
-									hasher.putInt(size);
+									hasher.putLong(size);
 								}
 							}
 
@@ -163,12 +163,14 @@ public interface LinkAbiAware extends Task {
 						macho.visitSharedLib(MachOBlob.parse(new BSource(channel)), new MachOBinaryHasher.ExportOrInstallNameVisitor() {
 							@Override
 							public void visitInstallName(String installName) {
+								System.out.println("Install name " + installName);
 								hasher.putString(installName);
 							}
 
 							@Override
 							public void visitExportSymbol(String name, boolean weakBinding) {
 								if (imports.contains(name)) {
+									System.out.println("SYMBOLE '" + name + " ' " + weakBinding);
 									hasher.putString(name);
 									hasher.putBoolean(weakBinding);
 								}

@@ -286,7 +286,7 @@ abstract class ElfBlob {
 						}
 
 						@Override
-						public int size() {
+						public long size() {
 							return blob.st_size(symtab, sym);
 						}
 
@@ -310,7 +310,7 @@ abstract class ElfBlob {
 		int name();
 		int shndx();
 		int info();
-		int size();
+		long size();
 		int binding();
 	}
 
@@ -350,8 +350,8 @@ abstract class ElfBlob {
 		}
 
 		@Override
-		protected int st_size(ByteBuffer buf, long off) {
-			return asUnsigned(buf.get(requireInt(off + 16)));
+		protected long st_size(ByteBuffer buf, long off) {
+			return buf.getLong(requireInt(off + 16));
 		}
 
 		@Override
@@ -422,8 +422,8 @@ abstract class ElfBlob {
 		}
 
 		@Override
-		protected int st_size(ByteBuffer buf, long off) {
-			return asUnsigned(buf.get(requireInt(off + 8)));
+		protected long st_size(ByteBuffer buf, long off) {
+			return asUnsigned(buf.getInt(requireInt(off + 8)));
 		}
 
 		@Override
@@ -495,6 +495,6 @@ abstract class ElfBlob {
 	}
 
 	protected abstract int st_info(ByteBuffer buf, long off);
-	protected abstract int st_size(ByteBuffer buf, long off);
+	protected abstract long st_size(ByteBuffer buf, long off);
 	protected abstract int st_shndx(ByteBuffer buf, long off);
 }
