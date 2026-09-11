@@ -127,10 +127,10 @@ public interface LinkAbiAware extends Task {
 							}
 
 							@Override
-							public void visitExport(String name, int binding) {
+							public void visitExport(String name, int type) {
 								if (imports.contains(name)) {
 									hasher.putString(name);
-									hasher.putInt(binding);
+									hasher.putInt(type);
 								}
 							}
 

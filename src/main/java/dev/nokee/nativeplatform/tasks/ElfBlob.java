@@ -281,6 +281,10 @@ abstract class ElfBlob {
 							return blob.st_shndx(symtab, sym);
 						}
 
+						public int info() {
+							return blob.st_info(symtab, sym);
+						}
+
 						public int binding() {
 							return blob.st_info(symtab, sym) >> 4;
 						}
@@ -300,6 +304,7 @@ abstract class ElfBlob {
 	public interface ElfSymbol {
 		int name();
 		int shndx();
+		int info();
 		int binding();
 	}
 

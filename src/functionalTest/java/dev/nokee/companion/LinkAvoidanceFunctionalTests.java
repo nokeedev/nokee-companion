@@ -878,7 +878,7 @@ class LinkAvoidanceFunctionalTests {
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
 
-			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(args.withTasks(":link").withInfoLogging().toList())), becomesUpToDate());
 
 			// Unlike the machine, the OS ABI is not something a compiler flag asks for: it is emitted because
 			// of what the library contains. Assert the toolchain actually moved it, so a toolchain that does

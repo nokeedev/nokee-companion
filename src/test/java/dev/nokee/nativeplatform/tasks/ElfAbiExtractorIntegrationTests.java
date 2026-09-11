@@ -35,9 +35,9 @@ class ElfAbiExtractorIntegrationTests {
 				}
 
 				@Override
-				public void visitExport(String name, int binding) {
+				public void visitExport(String name, int info) {
 					var symbol = new MyExportedSymbol(name);
-					symbol.put("binding", binding);
+					symbol.put("binding", info);
 					result.add(symbol);
 				}
 			});
