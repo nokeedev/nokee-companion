@@ -80,7 +80,7 @@ final class ElfBinaryHasher {
 		void visitArchitecture(int arch);
 		void visitOsAbi(int osabi);
 		void visitSoname(String soname);
-		void visitExport(String name, int info);
+		void visitExport(String name, int info, int size);
 		void visitAbiVersion(int abiversion);
 		void visitType(int type);
 	}
@@ -109,7 +109,7 @@ final class ElfBinaryHasher {
 						if (sym.shndx() != SHN_UNDEF) {
 							String name = strtab.get(sym.name() & 0xFFFFFFFF);
 							if (!name.isEmpty()) {
-								visitor.visitExport(name, sym.info());
+								visitor.visitExport(name, sym.info(), sym.size());
 							}
 						}
 					});

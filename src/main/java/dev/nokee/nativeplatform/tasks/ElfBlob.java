@@ -285,6 +285,11 @@ abstract class ElfBlob {
 							return blob.st_info(symtab, sym);
 						}
 
+						@Override
+						public int size() {
+							return blob.st_size(symtab, sym);
+						}
+
 						public int binding() {
 							return blob.st_info(symtab, sym) >> 4;
 						}
@@ -305,6 +310,7 @@ abstract class ElfBlob {
 		int name();
 		int shndx();
 		int info();
+		int size();
 		int binding();
 	}
 
@@ -341,6 +347,11 @@ abstract class ElfBlob {
 		@Override
 		protected int st_info(ByteBuffer buf, long off) {
 			return asUnsigned(buf.get(requireInt(off + 4)));
+		}
+
+		@Override
+		protected int st_size(ByteBuffer buf, long off) {
+			return asUnsigned(buf.get(requireInt(off + 16)));
 		}
 
 		@Override
@@ -408,6 +419,11 @@ abstract class ElfBlob {
 		@Override
 		protected int st_info(ByteBuffer buf, long off) {
 			return asUnsigned(buf.get(requireInt(off + 12)));
+		}
+
+		@Override
+		protected int st_size(ByteBuffer buf, long off) {
+			return asUnsigned(buf.get(requireInt(off + 8)));
 		}
 
 		@Override
@@ -479,5 +495,6 @@ abstract class ElfBlob {
 	}
 
 	protected abstract int st_info(ByteBuffer buf, long off);
+	protected abstract int st_size(ByteBuffer buf, long off);
 	protected abstract int st_shndx(ByteBuffer buf, long off);
 }
