@@ -566,9 +566,18 @@ class LinkAvoidanceFunctionalTests {
 			build.rootProject(sharedLibComponent("foo"));
 		}
 
-		@Test
-		void doesNotRelinkWhenExportedSymbolSizeChangesForPositionIndependentConsumer() {
+		@ParameterizedTest
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		void whenExportedSymbolSizeChangesForPositionIndependentConsumer(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "copy relocations are an ELF concept"); // TODO: assert binary format not OS
+
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
 
 			// PIC code loads an object's address out of the GOT, which the loader fills in, so nothing about the
 			// object has to be known at link time. No .bss reservation is made, no copy relocation is emitted and
@@ -581,7 +590,7 @@ class LinkAvoidanceFunctionalTests {
 
 			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
 		@ParameterizedTest
