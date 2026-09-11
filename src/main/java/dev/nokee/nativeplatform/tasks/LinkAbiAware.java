@@ -112,6 +112,7 @@ public interface LinkAbiAware extends Task {
 						elf.visitSharedLib(ElfBlob.parse(new BSource(channel)), new ElfBinaryHasher.SonameAndExportVisitor() {
 							@Override
 							public void visitArchitecture(int arch) {
+								System.out.println("ARCH " + arch);
 								hasher.putInt(arch);
 							}
 
@@ -169,11 +170,13 @@ public interface LinkAbiAware extends Task {
 
 							@Override
 							public void visitCpuType(int cputype) {
+								System.out.println("CPUTYPE " + cputype);
 								hasher.putInt(cputype);
 							}
 
 							@Override
 							public void visitCpuSubType(int cpusubtype) {
+								System.out.println("CPU SUBTYPE " + cpusubtype);
 								hasher.putInt(cpusubtype);
 							}
 						});

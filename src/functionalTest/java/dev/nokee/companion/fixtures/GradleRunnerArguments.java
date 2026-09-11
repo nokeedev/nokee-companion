@@ -92,9 +92,9 @@ public class GradleRunnerArguments implements Iterable<String> {
 		return new GradleRunnerArguments(Arrays.stream(tasks).map(Object::toString).toList(), gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 
-	public GradleRunnerArguments append(String arg) {
+	public GradleRunnerArguments append(String... arg) {
 		List<String> additionalArgs = new ArrayList<>(this.additionalArgs);
-		additionalArgs.add(arg);
+		additionalArgs.addAll(Arrays.asList(arg));
 		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, logging, configurationCache);
 	}
 

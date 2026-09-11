@@ -33,6 +33,7 @@ import java.util.stream.Stream;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.Notation.plugin;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
 import static dev.gradleplugins.buildscript.syntax.Syntax.*;
+import static dev.nokee.companion.fixtures.GradleRunnerArguments.forTasks;
 import static dev.nokee.companion.fixtures.GradleRunnerProperties.forConfigurationCacheEnabled;
 import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static dev.nokee.companion.fixtures.PathExtensions.write;
@@ -295,7 +296,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
 
@@ -316,7 +317,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			addedSymbol().writeToDirectory(fooComponent());
 
@@ -337,7 +338,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			// The consumer imports only greet(); an exported symbol it never references is not in the
 			// narrowed ABI, so adding one leaves the consumer's snapshot unchanged.
@@ -361,7 +362,7 @@ class LinkAvoidanceFunctionalTests {
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
 			fixture.lib.impl.withUnusedExportedSymbol().writeToDirectory(fooComponent());
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			// Changing the ABI of an exported symbol the consumer does not import (unused()'s signature) is
 			// absent from the narrowed ABI, so it must not relink.
@@ -385,7 +386,7 @@ class LinkAvoidanceFunctionalTests {
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
 			fixture.lib.impl.withUnusedExportedSymbol().writeToDirectory(fooComponent());
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			// Removing an exported symbol the consumer does not import leaves the narrowed ABI unchanged.
 			fixture.lib.impl.writeToDirectory(fooComponent()); // back to only greet()
@@ -409,7 +410,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withAddedStaticFunction().writeToDirectory(fooComponent());
 
@@ -432,7 +433,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withAddedStaticVariable().writeToDirectory(fooComponent());
 
@@ -455,7 +456,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withAddedAnonymousNamespaceFunction().writeToDirectory(fooComponent());
 
@@ -481,7 +482,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withAddedInlineFunction().writeToDirectory(fooComponent());
 
@@ -493,7 +494,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			assertThat(runs(runner.withArguments(args.withTasks(":clean", ":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
@@ -512,7 +513,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withRenamedAbiChange().writeToDirectory(fooComponent());
 
@@ -534,7 +535,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withWeakSymbolChange().writeToDirectory(fooComponent());
 
@@ -586,7 +587,7 @@ class LinkAvoidanceFunctionalTests {
 			// built from PIC objects behaves the same way whether or not it is linked -pie.
 			growableBuffer();
 
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
 
@@ -607,7 +608,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withVariableKindChange().writeToDirectory(fooComponent());
 
@@ -639,7 +640,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.addParameterChange().writeToDirectory(fooComponent());
 
@@ -660,7 +661,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withReturnTypeChange().writeToDirectory(fooComponent());
 
@@ -681,7 +682,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withVariableKindChange().writeToDirectory(fooComponent());
 
@@ -711,7 +712,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.addParameterChange().writeToDirectory(fooComponent());
 
@@ -732,7 +733,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture().usingExternC();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withReturnTypeChange().writeToDirectory(fooComponent());
 
@@ -761,7 +762,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			// relocating a library should not cause a relink
 			build.rootProject(project -> {
@@ -789,7 +790,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(staticLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
 
@@ -815,16 +816,42 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					toolChains.withType(GccCompatibleToolChain) {
+						target('macos:x86-64') {
+							cppCompiler.withArguments {
+								it.add('--target=x86_64-apple-darwin')
+								return it
+							}
+							linker.withArguments {
+								it.add('--target=x86_64-apple-darwin')
+								return it
+							}
+						}
+						target('linux:x86-64') {
+							cppCompiler.withArguments {
+								it.add('--target=x86_64-linux-gnu')
+								return it
+							}
+							linker.withArguments {
+								it.add('--target=x86_64-linux-gnu')
+								return it
+							}
+						}
+					}
+					def platform = providers.gradleProperty('arch').map {
+						def result = new DefaultNativePlatform("${host().operatingSystem.toFamilyName()}:${it}")
+						result.architecture(it)
+						return result
+					}.orElse(host())
+					tasks.named('compileFoo') { targetPlatform = platform }
+					tasks.named('linkFoo') { targetPlatform = platform }
+				"""));
+			});
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
-			build.rootProject(project -> project.append(groovyDsl("""
-				def newPlatform = new DefaultNativePlatform('other')
-				newPlatform.architecture('x86-64')
-				tasks.named('compileFoo') { targetPlatform = newPlatform }
-				tasks.named('linkFoo') { targetPlatform = newPlatform }
-			""")));
-
-			assertThat(runs(runner.withArguments(":link")), matcher);
+			assertThat(runs(runner.withArguments(":link", "-Parch=x86-64")), matcher);
 		}
 
 		@ParameterizedTest
@@ -848,7 +875,7 @@ class LinkAvoidanceFunctionalTests {
 			fixture.writeToProject(build);
 			build.rootProject(sharedLibComponent("foo"));
 
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			// Unlike the machine, the OS ABI is not something a compiler flag asks for: it is emitted because
 			// of what the library contains. Assert the toolchain actually moved it, so a toolchain that does
@@ -860,7 +887,7 @@ class LinkAvoidanceFunctionalTests {
 				f.write(ELFOSABI_FREEBSD);
 			}
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
+			assertThat(runs(runner.withArguments(args.withTasks(":link").append("-x", ":linkFoo").toList())), matcher);
 		}
 
 		@ParameterizedTest
@@ -897,7 +924,7 @@ class LinkAvoidanceFunctionalTests {
 				""").writeToDirectory(mainComponent());
 			build.rootProject(sharedLibComponent("foo"));
 
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			// Rebuilt by the same compiler from the same source but for a larger object, so the exported name,
 			// its binding and its type are all identical and st_size is the only difference.
@@ -933,7 +960,7 @@ class LinkAvoidanceFunctionalTests {
 				""").writeToDirectory(mainComponent());
 			build.rootProject(sharedLibComponent("foo"));
 
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			SourceFile.of("impl2.cpp", "__thread int counter = 0;").writeToDirectory(fooComponent());
 
@@ -973,7 +1000,7 @@ class LinkAvoidanceFunctionalTests {
 				}
 			""")));
 
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			build.rootProject(project -> project.append(groovyDsl("""
 				tasks.named('linkFoo', LinkSharedLibrary) {
@@ -1015,7 +1042,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			String sharedLibPath = OperatingSystem.current().getSharedLibraryName("other-lib/build/lib/main/debug/other-lib");
 			ExecutedBuild result = runs(runner.withArguments(":link", "-Padditional-lib=" + sharedLibPath));
