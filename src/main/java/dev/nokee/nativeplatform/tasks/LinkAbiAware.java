@@ -118,17 +118,20 @@ public interface LinkAbiAware extends Task {
 
 							@Override
 							public void visitOsAbi(int osabi) {
+								System.out.println("OS ABI " + osabi);
 								hasher.putInt(osabi);
 							}
 
 							@Override
 							public void visitSoname(String soname) {
+								System.out.println("SONAME " + soname);
 								hasher.putString(soname);
 							}
 
 							@Override
 							public void visitExport(String name, int type, int size) {
 								if (imports.contains(name)) {
+									System.out.println("export symbol '" + name + "' " + type + " -- " + size);
 									hasher.putString(name);
 									hasher.putInt(type);
 									hasher.putInt(size);
@@ -137,11 +140,13 @@ public interface LinkAbiAware extends Task {
 
 							@Override
 							public void visitAbiVersion(int abiversion) {
+								System.out.println("abiversion " + abiversion);
 								hasher.putInt(abiversion);
 							}
 
 							@Override
 							public void visitType(int type) {
+								System.out.println("type " + type);
 								hasher.putInt(type);
 							}
 						});

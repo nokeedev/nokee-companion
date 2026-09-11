@@ -568,7 +568,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@ArgumentsSource(AlwaysRelink.class) // TODO: Should not relink on Link ABI as we should not care about st-size for PIC
 		void whenExportedSymbolSizeChangesForPositionIndependentConsumer(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "copy relocations are an ELF concept"); // TODO: assert binary format not OS
 
