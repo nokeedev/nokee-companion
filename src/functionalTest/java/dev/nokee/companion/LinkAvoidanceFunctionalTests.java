@@ -170,6 +170,24 @@ class LinkAvoidanceFunctionalTests {
 		}
 	}
 
+	private static class StSizeParticularity implements ArgumentsProvider {
+		@Override
+		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+			if (SystemUtils.IS_OS_LINUX) {
+				return Stream.of(
+					Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+					Arguments.argumentSet("full ABI relink because of st_size", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
+					Arguments.argumentSet("narrow ABI relink because of st_size", "AbiSnapshotter.NARROW_ABI", tasksExecutedAndNotSkipped(hasItem(":link")))
+				);
+			}
+			return Stream.of(
+				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+			);
+		}
+	}
+
 	private static class AlwaysRelink implements ArgumentsProvider {
 		@Override
 		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
@@ -648,7 +666,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@ArgumentsSource(StSizeParticularity.class)
 		void whenReturnTypeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
