@@ -106,6 +106,28 @@ public final class GradleBuild {
 
 			return this;
 		}
+
+		public GradleProperties putAll(Map<String, ?> props) {
+			Properties properties = new Properties();
+
+			if (Files.exists(location)) {
+				try (Reader reader = Files.newBufferedReader(location)) {
+					properties.load(reader);
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
+			}
+
+			props.forEach((key, value) -> properties.put(key, value.toString()));
+
+			try (Writer writer = Files.newBufferedWriter(location, StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+				properties.store(writer, null);
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+
+			return this;
+		}
 	}
 
 	public static class GradleProject {

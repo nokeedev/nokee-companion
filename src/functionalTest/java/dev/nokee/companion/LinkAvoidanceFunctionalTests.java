@@ -26,6 +26,7 @@ import java.util.function.Consumer;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.Notation.plugin;
 import static dev.gradleplugins.buildscript.blocks.ApplyStatement.apply;
 import static dev.gradleplugins.buildscript.syntax.Syntax.*;
+import static dev.nokee.companion.fixtures.GradleRunnerProperties.forConfigurationCacheEnabled;
 import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static dev.nokee.companion.fixtures.PathExtensions.write;
 import static dev.nokee.elements.core.ProjectElement.ofMain;
@@ -47,7 +48,7 @@ class LinkAvoidanceFunctionalTests {
 		runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
 
 		build.properties(it -> {
-			it.put("org.gradle.configuration-cache", true);
+			it.putAll(forConfigurationCacheEnabled());
 			it.put("dev.nokee.native-companion.link-avoidance.enabled", true);
 		});
 		build.rootProject(project -> {
