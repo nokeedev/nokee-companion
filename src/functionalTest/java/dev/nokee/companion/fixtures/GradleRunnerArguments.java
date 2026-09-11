@@ -44,6 +44,10 @@ public class GradleRunnerArguments implements Iterable<String> {
 		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, Logging.QUIET, configurationCache);
 	}
 
+	public GradleRunnerArguments withLifecycleLogging() {
+		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, Logging.LIFECYCLE, configurationCache);
+	}
+
 	private enum Logging { LIFECYCLE, INFO, QUIET }
 	//endregion
 
