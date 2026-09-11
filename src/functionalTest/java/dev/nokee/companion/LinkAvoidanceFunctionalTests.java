@@ -14,7 +14,6 @@ import org.gradle.nativeplatform.toolchain.internal.plugins.StandardToolChainsPl
 import org.gradle.testkit.runner.GradleRunner;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -196,10 +195,18 @@ class LinkAvoidanceFunctionalTests {
 			});
 		}
 
-		@Test
-		@Disabled // not yet implemented
-		void relinkWhenExportedSymbolSizeChangesForNonPositionIndependentExecutable() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenExportedSymbolSizeChangesForNonPositionIndependentExecutable(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "copy relocations are an ELF concept"); // TODO: assert binary format not OS
+
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
 
 			// st_size is its own field in Elf64_Sym, apart from the name and from the binding and type packed
 			// into st_info, so growing an exported data object leaves all three untouched. It reaches a consumer
@@ -242,7 +249,7 @@ class LinkAvoidanceFunctionalTests {
 			// its binding and its type are all identical and st_size is the only difference.
 			SourceFile.of("impl2.cpp", "char my_buffer[128] = {};").writeToDirectory(fooComponent());
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
 	}
@@ -924,10 +931,18 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@Test
-		@Disabled // not yet implemented
-		void relinkWhenExportedSymbolMovesToAnotherVersion() {
+		@ParameterizedTest
+		@ArgumentsSource(AlwaysRelink.class)
+		void whenExportedSymbolMovesToAnotherVersion(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			assumeTrue(SystemUtils.IS_OS_LINUX, "symbol versioning is a GNU extension to ELF"); // TODO: assert binary format not OS
+
+			build.rootProject(project -> {
+				project.append(groovyDsl("""
+					tasks.named('link') {
+						linkAbi.linkAbiSnapshotting = %s
+					}
+				""".formatted(linkAbi)));
+			});
 
 			// A version script lets one name live at several versions. The linker binds a reference to the
 			// default version and writes that version's name into the consumer's own .gnu.version_r, so the
@@ -957,7 +972,7 @@ class LinkAvoidanceFunctionalTests {
 				}
 			""")));
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
 		@ParameterizedTest
