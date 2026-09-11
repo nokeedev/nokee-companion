@@ -9,10 +9,7 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.reflect.TypeOf;
-import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.InputFiles;
-import org.gradle.api.tasks.Internal;
-import org.gradle.api.tasks.Nested;
+import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
 
 import javax.inject.Inject;
@@ -135,6 +132,7 @@ public interface LinkAbiAware extends Task {
 		}
 
 		@InputFiles
+		@PathSensitive(PathSensitivity.NAME_ONLY) // because of Windows/MSVC, others use soname/installName
 		protected abstract ConfigurableFileCollection getLibraryFiles();
 
 		void close() {
