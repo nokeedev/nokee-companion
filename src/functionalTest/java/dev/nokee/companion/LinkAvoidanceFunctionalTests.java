@@ -818,7 +818,7 @@ class LinkAvoidanceFunctionalTests {
 			build.rootProject(sharedLibComponent("foo"));
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
-					toolChains.withType(GccCompatibleToolChain) {
+					toolChains.withType(Clang) {
 						target('macos:x86-64') {
 							cppCompiler.withArguments {
 								it.add('--target=x86_64-apple-darwin')
@@ -829,29 +829,32 @@ class LinkAvoidanceFunctionalTests {
 								return it
 							}
 						}
-						target('linux:x86-64') {
-							cppCompiler.withArguments {
-								it.add('--target=x86_64-linux-gnu')
-								return it
-							}
-							linker.withArguments {
-								it.add('--target=x86_64-linux-gnu')
-								return it
-							}
+					}
+					toolChains.withType(Gcc) {
+						target('linux:i686') {
+							cppCompiler.executableName = 'i686-linux-gnu-g++-10'
+							linker.executableName = 'i686-linux-gnu-gcc-10'
 						}
 					}
 					def platform = providers.gradleProperty('arch').map {
-						def result = new DefaultNativePlatform("${host().operatingSystem.toFamilyName()}:${it}")
-						result.architecture(it)
+						def result = null
+						if (host().operatingSystem.toFamilyName() == 'macos') {
+							result = new DefaultNativePlatform("${host().operatingSystem.toFamilyName()}:x86-64")
+							result.architecture('x86-64')
+						} else if (host().operatingSystem.toFamilyName() == 'linux') {
+							result = new DefaultNativePlatform("${host().operatingSystem.toFamilyName()}:i686")
+							result.architecture('i686')
+						}
+
 						return result
 					}.orElse(host())
 					tasks.named('compileFoo') { targetPlatform = platform }
 					tasks.named('linkFoo') { targetPlatform = platform }
 				"""));
 			});
-			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
+			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			assertThat(runs(runner.withArguments(":link", "-Parch=x86-64")), matcher);
+			assertThat(runs(runner.withArguments(":link", "-Parch=other")), matcher);
 		}
 
 		@ParameterizedTest
