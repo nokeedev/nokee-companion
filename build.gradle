@@ -63,7 +63,7 @@ testing {
 			dependencies {
 				implementation libs.apache.commons.io
 				implementation libs.mockito.core
-				implementation 'dev.gradleplugins:gradle-api:latest.release'
+				implementation gradleTestKit()
 				implementation libs.hamcrest.core
 				implementation libs.nokee.hamcrest
 				implementation testFixtures('dev.nokee.commons:commons-gradle:latest.integration')
