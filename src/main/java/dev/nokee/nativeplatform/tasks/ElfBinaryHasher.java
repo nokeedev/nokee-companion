@@ -1,5 +1,6 @@
 package dev.nokee.nativeplatform.tasks;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.MappedByteBuffer;
 import java.util.*;
@@ -98,7 +99,7 @@ final class ElfBinaryHasher {
 			ElfBlob.ElfStringTable strtab = loadDynstr(dynsym);
 			try (strtab) {
 				if (dynamic != null && strtab != null) {
-					visitor.visitSoname(extractSoname(blob, strtab, dynamic.offset(), dynamic.size()));
+					Optional.ofNullable(extractSoname(blob, strtab, dynamic.offset(), dynamic.size())).ifPresent(visitor::visitSoname);
 				}
 
 				if (dynsym == null) {
@@ -120,6 +121,7 @@ final class ElfBinaryHasher {
 		}
 	}
 
+	@Nullable
 	private String extractSoname(ElfBlob blob, ElfBlob.ElfStringTable strtab, long dynOff, long dynSize) throws IOException {
 		int entSize = blob.dt_entsize();
 		int count = (int) (dynSize / entSize);
