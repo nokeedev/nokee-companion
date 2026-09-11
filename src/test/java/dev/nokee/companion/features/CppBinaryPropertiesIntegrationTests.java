@@ -125,7 +125,7 @@ class CppBinaryPropertiesIntegrationTests {
 					boolean expectedValue = !binary.isDebuggable();
 					access.debuggabilityOf(binary).mut(it -> !it);
 
-					assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(OPTIMIZED_ATTRIBUTE), is(expectedValue));
+					assertThat(access.runtimeElementsOf(binary).get().getAttributes().getAttribute(DEBUGGABLE_ATTRIBUTE), is(expectedValue));
 					assertThat(access.linkTaskOf(binary).get().getDebuggable(), providerOf(expectedValue));
 				}
 			}
