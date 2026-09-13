@@ -24,6 +24,7 @@ import java.util.concurrent.Callable;
 import static dev.nokee.nativeplatform.tasks.ArchiveBlob.skipSymbolTables;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_DYN;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_REL;
+import static dev.nokee.nativeplatform.tasks.ElfBlob.STT_OBJECT;
 import static dev.nokee.nativeplatform.tasks.MachOBlob.*;
 
 // This class is considered private for the moment
@@ -134,7 +135,13 @@ public interface LinkAbiAware extends Task {
 									System.out.println("export symbol '" + name + "' " + type + " -- " + size);
 									hasher.putString(name);
 									hasher.putInt(type);
-									hasher.putLong(size);
+
+									// The size account for the length of a function size, which the linker don't care.
+									//   The linker only care for the size for copy-relocation.
+									// TODO: Technically, we should only snapshot the size if we are compiling an NON-PIC executable
+									if ((type & 0xF) == STT_OBJECT) {
+										hasher.putLong(size);
+									}
 								}
 							}
 
