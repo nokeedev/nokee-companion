@@ -119,6 +119,7 @@ class LinkAvoidanceFunctionalTests {
 					toolChain = targetPlatform.map { toolChains.getForPlatform(it) }
 					targetPlatform = host()
 					systemIncludes.from(toolChain.zip(targetPlatform) { toolchain, platform -> toolchain.select(platform).getSystemLibraries(ToolType.CPP_COMPILER).includeDirs })
+					debuggable = true
 				}
 
 				tasks.withType(AbstractLinkTask).configureEach {
