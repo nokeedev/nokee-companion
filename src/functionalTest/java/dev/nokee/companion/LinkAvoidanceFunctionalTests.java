@@ -666,7 +666,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(StSizeParticularity.class)
+		@ArgumentsSource(AvoidOnLinkAbiAndUp.class) // TODO: Linux is up-to-date on all -> is this the ABI itself that use the same assembly languages?
 		void whenReturnTypeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -717,7 +717,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@ArgumentsSource(StSizeParticularity.class)
 		void whenParameterCountChangesInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
