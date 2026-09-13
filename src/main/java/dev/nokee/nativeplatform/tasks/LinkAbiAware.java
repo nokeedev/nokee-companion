@@ -24,7 +24,9 @@ import java.util.concurrent.Callable;
 import static dev.nokee.nativeplatform.tasks.ArchiveBlob.skipSymbolTables;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_DYN;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.ET_REL;
+import static dev.nokee.nativeplatform.tasks.ElfBlob.STT_NOTYPE;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.STT_OBJECT;
+import static dev.nokee.nativeplatform.tasks.ElfBlob.STT_TLS;
 import static dev.nokee.nativeplatform.tasks.MachOBlob.*;
 
 // This class is considered private for the moment
@@ -130,16 +132,20 @@ public interface LinkAbiAware extends Task {
 							}
 
 							@Override
-							public void visitExport(String name, int type, long size) {
+							public void visitExport(String name, int info, long size) {
 								if (imports.contains(name)) {
-									System.out.println("export symbol '" + name + "' " + type + " -- " + size);
+									System.out.println("export symbol '" + name + "' " + info + " -- " + size);
 									hasher.putString(name);
-									hasher.putInt(type);
+
+									// st_info packs the binding in the high nibble and the type in the low one.
+									// The binding is snapshot whole: weak and strong resolve differently.
+									hasher.putInt(info >> 4);
+									hasher.putInt(abiKind(info));
 
 									// The size account for the length of a function size, which the linker don't care.
 									//   The linker only care for the size for copy-relocation.
 									// TODO: Technically, we should only snapshot the size if we are compiling an NON-PIC executable
-									if ((type & 0xF) == STT_OBJECT) {
+									if ((info & 0xF) == STT_OBJECT) {
 										hasher.putLong(size);
 									}
 								}
@@ -221,6 +227,25 @@ public interface LinkAbiAware extends Task {
 					return hasher.hash();
 				}
 			};
+
+			// The type an exported symbol carries in the low nibble of st_info, reduced to the one distinction
+			// a consumer's link result depends on.
+			//
+			// STT_TLS is that distinction. A thread-local symbol is reached through its own relocations, and
+			// ld refuses to mix the two: a TLS definition against a non-TLS reference, or the reverse, is a
+			// hard error rather than a silently wrong link.
+			//
+			// Every other type collapses. The linker resolves an undefined symbol by name and never checks
+			// the type, so calling a data symbol, or reading a function as data, links clean either way and
+			// faults at run time instead — and relinking against the changed library produces the very same
+			// binary, so STT_FUNC and STT_OBJECT buy nothing by staying apart. STT_GNU_IFUNC collapses too:
+			// the consumer emits an ordinary jump slot against the name, and the loader is what calls the
+			// resolver, so a symbol moving between STT_FUNC and STT_GNU_IFUNC leaves the consumer's
+			// relocations, and its bytes, unchanged.
+			private static int abiKind(int info) {
+				int type = info & 0xF;
+				return type == STT_TLS ? type : STT_NOTYPE;
+			}
 
 			public abstract HashCode hash(Path path, ImportSymbols imports);
 		}

@@ -41,7 +41,9 @@ abstract class ElfBlob {
 	private static final long DT_NULL = 0;
 	private static final int STB_GLOBAL = 1;
 	private static final int STB_WEAK = 2;
+	public static final int STT_NOTYPE = 0; // low nibble of st_info
 	public static final int STT_OBJECT = 1; // low nibble of st_info
+	public static final int STT_TLS = 6; // low nibble of st_info
 	private static final int SHN_UNDEF = 0;
 
 	public static boolean isElfMagic(byte[] h) {
