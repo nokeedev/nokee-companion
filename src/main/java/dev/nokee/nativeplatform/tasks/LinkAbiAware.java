@@ -136,10 +136,21 @@ public interface LinkAbiAware extends Task {
 							}
 
 							@Override
-							public void visitExport(String name, int info, long size) {
+							public void visitExport(String name, int info, long size, String version, boolean defaultVersion) {
 								if (imports.contains(name)) {
-									System.out.println("export symbol '" + name + "' " + info + " -- " + size);
+									System.out.println("export symbol '" + name + "' " + info + " -- " + size + " @ " + version + (defaultVersion ? " (default)" : ""));
 									hasher.putString(name);
+
+									// A versioned symbol binds its consumer to that version: the linker writes the
+									// version into the consumer's own .gnu.version_r, and the loader refuses a library
+									// that no longer defines it. .dynstr holds the bare name either way, so the version
+									// has to be snapshot next to the name rather than read out of it.
+									hasher.putString(version == null ? "" : version);
+
+									// Which of a name's versions is the default decides what an unversioned reference
+									// binds to, so two libraries defining the same name at the same versions still
+									// hand a consumer different implementations when the default moves between them.
+									hasher.putBoolean(defaultVersion);
 
 									// st_info packs the binding in the high nibble and the type in the low one.
 									// The binding is snapshot whole: weak and strong resolve differently.

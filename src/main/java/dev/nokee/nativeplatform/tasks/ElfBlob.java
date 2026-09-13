@@ -45,6 +45,9 @@ abstract class ElfBlob {
 	public static final int STT_OBJECT = 1; // low nibble of st_info
 	public static final int STT_TLS = 6; // low nibble of st_info
 	private static final int SHN_UNDEF = 0;
+	public static final int VER_NDX_LOCAL = 0; // for .gnu.version, the symbol is local to the library
+	public static final int VER_NDX_GLOBAL = 1; // for .gnu.version, the symbol carries no version of its own
+	public static final int VER_NDX_HIDDEN = 0x8000; // for .gnu.version, the definition is not the default for its name
 
 	public static boolean isElfMagic(byte[] h) {
 		return h.length >= 4 && h[0] == ELFMAG0 && h[1] == ELFMAG1 && h[2] == ELFMAG2 && h[3] == ELFMAG3;
@@ -274,8 +277,14 @@ abstract class ElfBlob {
 
 				@Override
 				public ElfSymbol next() {
-					int sym = (int) (i++ * entsize);
+					int index = i++;
+					int sym = (int) (index * entsize);
 					return new ElfSymbol() {
+						@Override
+						public int index() {
+							return index;
+						}
+
 						public int name() {
 							return blob.st_name(symtab, sym);
 						}
@@ -310,11 +319,95 @@ abstract class ElfBlob {
 	}
 
 	public interface ElfSymbol {
+		/** Where this symbol sits in its table, which is how {@code .gnu.version} refers back to it. */
+		int index();
+
 		int name();
 		int shndx();
 		int info();
 		long size();
 		int binding();
+	}
+
+	/**
+	 * The {@code .gnu.version} section: one half-word per {@code .dynsym} entry, giving the version index the
+	 * symbol is bound to. A half-word is two bytes in either ELF class, so this needs no per-class accessor.
+	 */
+	public static final class ElfVersymTable implements AutoCloseable {
+		private static final int ENTSIZE = 2;
+
+		private final MappedByteBuffer versym;
+		private final long count;
+
+		public ElfVersymTable(ElfSectionHeader section) {
+			ElfBlob blob = section.owner().blob;
+			this.versym = (MappedByteBuffer) blob.source.mmap(section.offset(), section.size()).order(blob.order);
+			this.count = section.size() / ENTSIZE;
+		}
+
+		/**
+		 * The raw entry for the symbol at {@code symbolIndex}, or {@code VER_NDX_GLOBAL} past the end.
+		 * {@code VER_NDX_HIDDEN} is left in place: one name can be defined at several versions at once, and
+		 * the definition without that bit is the one an unversioned reference binds to, so it separates two
+		 * otherwise identical entries rather than decorating one.
+		 */
+		public int get(int symbolIndex) {
+			if (symbolIndex < 0 || symbolIndex >= count) {
+				return VER_NDX_GLOBAL;
+			}
+			return asUnsigned(versym.getShort(symbolIndex * ENTSIZE));
+		}
+
+		@Override
+		public void close() {
+			MappedBufferUtils.unmap(versym);
+		}
+	}
+
+	/**
+	 * The {@code .gnu.version_d} section: a chain of version definitions, each holding a chain of auxiliary
+	 * records whose first entry names the version. Every field is a half-word or a word, so, as with
+	 * {@link ElfVersymTable}, the layout does not vary with the ELF class.
+	 */
+	public static final class ElfVerdefTable implements AutoCloseable {
+		private static final int VD_NDX = 4; // half-word, the index .gnu.version refers to
+		private static final int VD_CNT = 6; // half-word, how many auxiliary records follow
+		private static final int VD_AUX = 12; // word, offset from this definition to its first auxiliary record
+		private static final int VD_NEXT = 16; // word, offset from this definition to the next, zero ends the chain
+		private static final int VDA_NAME = 0; // word, offset of the version name into .dynstr
+
+		private final MappedByteBuffer verdef;
+		private final long size;
+
+		public ElfVerdefTable(ElfSectionHeader section) {
+			ElfBlob blob = section.owner().blob;
+			this.verdef = (MappedByteBuffer) blob.source.mmap(section.offset(), section.size()).order(blob.order);
+			this.size = section.size();
+		}
+
+		/** Walks the chain, handing each definition's index and the offset of its name in {@code .dynstr}. */
+		public void forEach(VerdefVisitor visitor) {
+			int off = 0;
+			while (off >= 0 && off + VD_NEXT < size) {
+				int aux = verdef.getInt(off + VD_AUX);
+				if (asUnsigned(verdef.getShort(off + VD_CNT)) > 0 && aux != 0) {
+					visitor.visitVersionDefinition(asUnsigned(verdef.getShort(off + VD_NDX)), asUnsigned(verdef.getInt(off + aux + VDA_NAME)));
+				}
+
+				int next = verdef.getInt(off + VD_NEXT);
+				if (next <= 0) break; // a non-advancing offset would loop forever
+				off += next;
+			}
+		}
+
+		public interface VerdefVisitor {
+			void visitVersionDefinition(int index, long nameOffset);
+		}
+
+		@Override
+		public void close() {
+			MappedBufferUtils.unmap(verdef);
+		}
 	}
 
 	public interface ElfSectionHeader {
