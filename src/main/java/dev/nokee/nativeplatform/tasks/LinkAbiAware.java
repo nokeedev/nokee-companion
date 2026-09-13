@@ -430,6 +430,11 @@ public interface LinkAbiAware extends Task {
 			}
 
 			@Override
+			protected void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor) {
+
+			}
+
+			@Override
 			protected void visitElf(Path path, ElfBlob blob, Step1Visitor visitor) {
 				switch (blob.e_type()) {
 					case ET_REL:
