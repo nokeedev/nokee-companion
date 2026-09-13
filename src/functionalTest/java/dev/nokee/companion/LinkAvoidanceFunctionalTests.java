@@ -903,7 +903,7 @@ class LinkAvoidanceFunctionalTests {
 			// not fails here instead of silently turning this into a test of nothing.
 			final long EI_OSABI = 7;
 			final int ELFOSABI_FREEBSD = 9;
-			try (RandomAccessFile f = new RandomAccessFile(build.getLocation().resolve(OperatingSystem.current().getSharedLibraryName("out/foo/foo")).toFile(), "rw")) {
+			try (RandomAccessFile f = new RandomAccessFile(build.getLocation().resolve(OperatingSystem.current().getSharedLibraryName("build/out/foo/foo")).toFile(), "rw")) {
 				f.seek(EI_OSABI);
 				f.write(ELFOSABI_FREEBSD);
 			}
