@@ -79,6 +79,8 @@ public interface LinkAbiAware extends Task {
 							visitMachO(path, MachOBlob.parse(source), visitor);
 						} else if (ArchiveBlob.isArMagic(hdr.array())) {
 							visitArchive(path, ArchiveBlob.parse(source), visitor);
+						} else if (CoffBlob.isCoffMagic(hdr.array())) {
+							visitCoffObject(path, (CoffBlob.CoffObjectBlob) CoffBlob.parse(source), visitor);
 						} else {
 							throw new UnsupportedOperationException("Invalid file with signature '" + HexFormat.of().formatHex(hdr.array()) + "' on file '" + path + "'");
 						}
@@ -87,6 +89,8 @@ public interface LinkAbiAware extends Task {
 					}
 				}
 			}
+
+			protected abstract void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor);
 
 			protected abstract void visitElf(Path path, ElfBlob blob, Step1Visitor visitor);
 			protected void visitMachO(Path path, MachOBlob blob, Step1Visitor visitor) {
@@ -268,6 +272,11 @@ public interface LinkAbiAware extends Task {
 			}
 
 			@Override
+			protected void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor) {
+				coff.visitImports(blob, visitor::visitImport);
+			}
+
+			@Override
 			protected void visitElf(Path path, ElfBlob blob, Step1Visitor visitor) {
 				switch (blob.e_type()) {
 					case ET_REL:
@@ -327,6 +336,12 @@ public interface LinkAbiAware extends Task {
 		private static final class LibraryFiles extends InFiles {
 			public LibraryFiles(Set<FileSystemLocation> elements) {
 				super(elements);
+			}
+
+			@Override
+			protected void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor) {
+				// TODO: Should we have object files here??? We should just have ar file instead?
+				throw new UnsupportedOperationException("Why is there an object file here '" + path + "'");
 			}
 
 			@Override
