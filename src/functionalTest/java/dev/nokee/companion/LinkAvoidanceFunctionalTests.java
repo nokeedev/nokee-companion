@@ -142,8 +142,8 @@ class LinkAvoidanceFunctionalTests {
 		return new SourceFileElement() {
 			@Override
 			public SourceFile getSourceFile() {
-				return sourceFile("impl2.cpp", """
-						int foo() { return 32; }
+				return sourceFile("impl2.cpp", Fixture.EXPORT_DEFINES + """
+						MYLIB_EXPORT int foo() { return 32; }
 					""");
 			}
 		};
@@ -1068,7 +1068,7 @@ class LinkAvoidanceFunctionalTests {
 	}
 
 	private static class Fixture {
-		private static final String EXPORT_DEFINES = """
+		static final String EXPORT_DEFINES = """
 			#if defined(_WIN32) || defined(__CYGWIN__)
 			  #if defined(MYLIB_BUILD)
 			    #define MYLIB_EXPORT __declspec(dllexport)
