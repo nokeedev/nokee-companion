@@ -359,10 +359,12 @@ abstract class CoffBlob {
 	private static ByteBuffer read(BSource source, long position, int length) {
 		ByteBuffer result = ByteBuffer.allocate(length).order(ByteOrder.LITTLE_ENDIAN);
 		int size = source.read(result, position);
+		System.out.println("READING " + size + " - position " + length);
+		source.read(result, position);
 		return result.limit(Math.max(size, 0));
 	}
 
-	/** Reads the fixed-length, NUL-padded name at {@code off}; a name filling the field has no terminator. */
+	/** Reads the fixed-lenggsth, NUL-padded name at {@code off}; a name filling the field has no terminator. */
 	private static String readName(ByteBuffer buf, int off, int length) {
 		byte[] b = new byte[length];
 		int i = 0;
