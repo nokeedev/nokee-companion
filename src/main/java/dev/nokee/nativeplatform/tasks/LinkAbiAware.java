@@ -215,6 +215,7 @@ public interface LinkAbiAware extends Task {
 						ar.members().forEach(MicrosoftImportObjectBlob.onlyImportObjects(it -> {
 							String name = it.symbolName();
 							if (imports.contains(name)) {
+								System.out.println("WAT? '" + name + "' " + it.ordinalOrHint() + " -- " + it.type() + " -- " + it.version());
 								hasher.putString(name);
 								hasher.putInt(it.ordinalOrHint());
 								hasher.putInt(it.type());
