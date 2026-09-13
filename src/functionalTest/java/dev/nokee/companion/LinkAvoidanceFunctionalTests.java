@@ -759,8 +759,8 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
-		void whenLibraryChangeLocationButNotAbi(String linkAbi, Matcher<ExecutedBuild> matcher) {
+		@ValueSource(strings = { "AbiSnapshotter.NONE", "AbiSnapshotter.FULL_ABI", "AbiSnapshotter.NARROW_ABI" })
+		void whenLibraryChangeLocationButNotAbi(String linkAbi) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -791,7 +791,7 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
 		}
 
 		@ParameterizedTest
