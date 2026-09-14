@@ -171,6 +171,24 @@ class LinkAvoidanceFunctionalTests {
 		}
 	}
 
+	private static class StSizeParticularity implements ArgumentsProvider {
+		@Override
+		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+			if (SystemUtils.IS_OS_LINUX) {
+				return Stream.of(
+					Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
+					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksExecutedAndNotSkipped(hasItem(":link")))
+				);
+			}
+			return Stream.of(
+				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+			);
+		}
+	}
+
 	private static class AlwaysRelink implements ArgumentsProvider {
 		@Override
 		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
@@ -670,7 +688,10 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@ArgumentsSource(StSizeParticularity.class) // Theorically, it should be AvoidOnLinkAbiAndUp
+		//  The problems comes from the fact that we only need to capture the symbol st_size in ELF format
+		//  when linking non-PIE binaries. It's quite hard to determine this so, for now, we will accept over
+		//  relinks for correctness.
 		void whenFunctionBecomesVariableInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""

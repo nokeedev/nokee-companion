@@ -157,9 +157,25 @@ public interface LinkAbiAware extends Task {
 									hasher.putInt(info >> 4);
 									hasher.putInt(abiKind(info));
 
-									// The size account for the length of a function size, which the linker don't care.
-									//   The linker only care for the size for copy-relocation.
-									// TODO: Technically, we should only snapshot the size if we are compiling an NON-PIC executable
+									// A size reaches a link result only through a copy relocation, where the linker
+									// reserves st_size bytes in the consumer's own .bss and has the loader copy the
+									// library's storage across at startup. A library that later grows the object
+									// leaves that reservation too small, which the loader reports as the symbol
+									// having a different size in the shared object. It applies to any object, not
+									// just arrays: int to long long is caught the same way. Functions are left out
+									// because st_size on a function measures its body, which nothing in a consumer's
+									// link result depends on.
+									//
+									// TODO: Narrow this to the symbols that can actually take a copy relocation. It
+									//  is decided by whether the referencing code was compiled -fPIC, which reaches
+									//  an object through the GOT and needs nothing fixed at link time, and not by
+									//  whether the output is a non-PIC executable: -fPIE takes copy relocations too,
+									//  and it is the default on most distributions. That is not readable from the
+									//  symbol - an undefined symbol is NOTYPE GLOBAL UND whichever way it was
+									//  compiled - and only shows up in the relocations against it in the consumer's
+									//  own object files, GOT-based against direct. Those objects are read only under
+									//  NARROW_ABI, so the sharper check belongs there. Until then a name moving
+									//  between a function and a variable relinks, which is more than necessary.
 									if ((info & 0xF) == STT_OBJECT) {
 										hasher.putLong(size);
 									}
