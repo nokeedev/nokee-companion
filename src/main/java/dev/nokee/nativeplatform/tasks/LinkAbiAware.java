@@ -248,6 +248,7 @@ public interface LinkAbiAware extends Task {
 							if (imports.contains(name)) {
 								System.out.println("WAT? '" + name + "' " + it.ordinalOrHint() + " -- " + it.type() + " -- " + it.version());
 								hasher.putString(name);
+								hasher.putInt(it.machine());
 								hasher.putInt(it.ordinalOrHint());
 								hasher.putInt(it.type());
 								hasher.putInt(it.version());
