@@ -180,10 +180,52 @@ class LinkAvoidanceFunctionalTests {
 					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
 					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksExecutedAndNotSkipped(hasItem(":link")))
 				);
+			} else if (SystemUtils.IS_OS_WINDOWS) {
+				return Stream.of(
+					Arguments.argumentSet("no ABI does not relink", "AbiSnapshotter.NONE", tasksSkipped(hasItem(":link"))),
+					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+				);
 			}
 			return Stream.of(
 				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
 				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+			);
+		}
+	}
+
+	private static class ImportLibraryParticularity implements ArgumentsProvider {
+		@Override
+		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+			if (SystemUtils.IS_OS_WINDOWS) {
+				return Stream.of(
+					Arguments.argumentSet("no ABI does not relink", "AbiSnapshotter.NONE", tasksSkipped(hasItem(":link"))),
+					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+				);
+			}
+			return Stream.of(
+				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+			);
+		}
+	}
+
+	private static class AvoidOnNarrowOnlyOrWindows implements ArgumentsProvider {
+		@Override
+		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
+			if (SystemUtils.IS_OS_WINDOWS) {
+				return Stream.of(
+					Arguments.argumentSet("no ABI does not relink", "AbiSnapshotter.NONE", tasksSkipped(hasItem(":link"))),
+					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
+					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
+				);
+			}
+			return Stream.of(
+				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
+				Arguments.argumentSet("full ABI relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
 				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
 			);
 		}
@@ -302,7 +344,7 @@ class LinkAvoidanceFunctionalTests {
 
 	abstract class LinkAvoidanceTester {
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@ArgumentsSource(ImportLibraryParticularity.class)
 		void doesNotRelinkOnImplementationOnlyChange(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -414,7 +456,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@ArgumentsSource(ImportLibraryParticularity.class)
 		void whenStaticFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -460,7 +502,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@ArgumentsSource(ImportLibraryParticularity.class)
 		void whenAnonymousNamespaceFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -483,7 +525,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		@ArgumentsSource(AvoidOnNarrowOnlyOrWindows.class)
 		void whenUnusedInlineFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -667,7 +709,7 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class) // TODO: Linux is up-to-date on all -> is this the ABI itself that use the same assembly languages?
+		@ArgumentsSource(ImportLibraryParticularity.class) // TODO: Linux is up-to-date on all -> is this the ABI itself that use the same assembly languages?
 		void whenReturnTypeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
