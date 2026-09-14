@@ -329,7 +329,6 @@ abstract class CoffBlob {
 			long pointerToSymbolTable = blob.pointerToSymbolTable();
 			long base = pointerToSymbolTable + (long) blob.numberOfSymbols() * SYMBOL_SIZE;
 			long size = pointerToSymbolTable == 0 ? 0 : sizeAt(blob.source, base);
-			assert !(size <= STRING_TABLE_SIZE_LENGTH);
 			this.strtab = blob.source.mmap(base, size);
 		}
 
