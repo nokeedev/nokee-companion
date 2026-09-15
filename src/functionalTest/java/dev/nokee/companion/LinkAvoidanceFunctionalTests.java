@@ -536,7 +536,7 @@ class LinkAvoidanceFunctionalTests {
 		@BinaryFormatTest
 		@ElfFormat({true, false, false})
 		@MachOFormat({true, false, false})
-		@PeFormat({true, false, false})
+		@PeFormat({false, false, false}) // because static variables are not part of the import library
 		void whenStaticVariableAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -721,7 +721,7 @@ class LinkAvoidanceFunctionalTests {
 		@BinaryFormatTest
 		@ElfFormat({true, true, true})
 		@MachOFormat({true, true, true})
-		@PeFormat({true, true, true})
+		@PeFormat({true, true, true}) // because type record symbol type (function vs variable)
 		void whenSymbolTypeChangesFromFunctionToVariable(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -1003,7 +1003,7 @@ class LinkAvoidanceFunctionalTests {
 			});
 			assertThat(theBuild(runner.withArguments(":link")), becomesUpToDate());
 
-			assertThat(runs(runner.withArguments(":link", "-Parch=other")), matcher);
+			assertThat(runs(runner.withArguments(args.withTasks(":link", "-Parch=other").toList())), matcher);
 		}
 
 		@BinaryFormatTest
