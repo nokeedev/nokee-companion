@@ -935,6 +935,7 @@ class LinkAvoidanceFunctionalTests {
 			var fixture = new Fixture();
 			fixture.writeToProject(build);
 			build.rootProject(staticLibComponent("foo"));
+			build.rootProject(project -> project.append(groovyDsl("tasks.named('compile') { macros.put('MYLIB_STATIC', null) }")));
 			assertThat(theBuild(runner.withArguments(forTasks(":link"))), becomesUpToDate());
 
 			fixture.lib.impl.withImplementationOnlyChange().writeToDirectory(fooComponent());
