@@ -677,12 +677,14 @@ public interface LinkAbiAware extends Task {
 			//  - @Input set of unresolved symbols
 			//  - @InputFiles set of failed parsed shared libs
 			//  - @Input map of relative path to shared lib to HashCode of link ABI
-			getLibraryFiles().from(useAbi.flatMap(linkAbi -> {
+			Property<Object> files = objects.property(Object.class).value(useAbi.flatMap(linkAbi -> {
 				if (linkAbi.equals(AbiSnapshotter.NONE)) {
 					return getLibs().getElements();
 				}
 				return step2.map(it -> (Object) it.inputFiles).orElse(getLibs().getElements());
 			}));
+			files.finalizeValueOnRead();
+			getLibraryFiles().from(files);
 			getUnresolvedImports().set(useAbi.flatMap(linkAbi -> {
 				if (linkAbi.equals(AbiSnapshotter.NONE)) {
 					return null;
