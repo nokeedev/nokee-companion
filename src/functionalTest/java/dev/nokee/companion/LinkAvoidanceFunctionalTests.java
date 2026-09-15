@@ -779,7 +779,7 @@ class LinkAvoidanceFunctionalTests {
 		// TODO: Linux is up-to-date on all -> is this the ABI itself that use the same assembly languages?
 		@ElfFormat({true, false, false})
 		@MachOFormat({true, false, false})
-		@PeFormat({false, false, false})
+		@PeFormat({true, true, false}) // because name mangling includes return type
 		void whenReturnTypeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -805,7 +805,7 @@ class LinkAvoidanceFunctionalTests {
 		// to determine this so, for now, we will accept over relinks for correctness.
 		@ElfFormat({true, true, true})
 		@MachOFormat({true, false, false})
-		@PeFormat({false, false, false})
+		@PeFormat({true, true, false}) // because type record symbol type (function vs variable)
 		void whenFunctionBecomesVariableInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -860,7 +860,7 @@ class LinkAvoidanceFunctionalTests {
 		@BinaryFormatTest
 		@ElfFormat({true, false, false})
 		@MachOFormat({true, false, false})
-		@PeFormat({true, false, false})
+		@PeFormat({false, false, false}) // because nothing records return type for extern C
 		void whenReturnTypeChangesInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
