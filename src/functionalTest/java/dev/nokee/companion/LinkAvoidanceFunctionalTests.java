@@ -835,9 +835,9 @@ class LinkAvoidanceFunctionalTests {
 		}
 
 		@BinaryFormatTest
-		@ElfFormat({true, false, false})
+		@ElfFormat({true, false, false}) // because st_size include parameter information which we don't snapshot
 		@MachOFormat({true, false, false})
-		@PeFormat({true, false, false})
+		@PeFormat({false, false, false}) // because nothing record parameter information
 		void whenParameterCountChangesInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -1304,12 +1304,12 @@ class LinkAvoidanceFunctionalTests {
 			// changing, or removing unused() must not relink the consumer. unused() has external linkage, so
 			// it genuinely reaches the exported symbol table (the debug variant is unoptimized).
 			public SourceFileElement withUnusedExportedSymbol() {
-				return ofFile(getSourceFile().withContent(__ -> externC("int greet() { return 32; }") + "\nint unused() { return 7; }"));
+				return ofFile(getSourceFile().withContent(__ -> externC("MYLIB_EXPORT int greet() { return 32; }") + "\nint unused() { return 7; }"));
 			}
 
 			// Changes unused()'s ABI (its signature, i.e. its exported symbol) while leaving greet() intact.
 			public SourceFileElement withUnusedExportedSymbolAbiChange() {
-				return ofFile(getSourceFile().withContent(__ -> externC("int greet() { return 32; }") + "\nint unused(int value) { return value; }"));
+				return ofFile(getSourceFile().withContent(__ -> externC("MYLIB_EXPORT int greet() { return 32; }") + "\nint unused(int value) { return value; }"));
 			}
 
 			// The following changes add a symbol that is private to this compilation unit (internal
