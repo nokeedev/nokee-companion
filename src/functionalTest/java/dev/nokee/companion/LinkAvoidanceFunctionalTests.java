@@ -98,6 +98,7 @@ class LinkAvoidanceFunctionalTests {
 						source.from(fileTree("src/$name/cpp"))
 						includes.from("src/$name/headers")
 						macros.put('MYLIB_BUILD', null)
+						macros.put('MYLIB_STATIC', null)
 					}
 
 					def createTask = tasks.register("create${name.capitalize()}", CreateStaticLibrary) {
@@ -1209,16 +1210,18 @@ class LinkAvoidanceFunctionalTests {
 
 	private static class Fixture {
 		static final String EXPORT_DEFINES = """
-			#if defined(_WIN32) || defined(__CYGWIN__)
-			  #if defined(MYLIB_BUILD)
-			    #define MYLIB_EXPORT __declspec(dllexport)
-			  #else
-			    #define MYLIB_EXPORT __declspec(dllimport)
-			  #endif
+			#if defined(MYLIB_STATIC)
+			#  define MYLIB_EXPORT
+			#elif defined(_WIN32) || defined(__CYGWIN__)
+			#  if defined(MYLIB_BUILD)
+			#    define MYLIB_EXPORT __declspec(dllexport)
+			#  else
+			#    define MYLIB_EXPORT __declspec(dllimport)
+			#  endif
 			#elif defined(__GNUC__) || defined(__clang__)
-			  #define MYLIB_EXPORT __attribute__((visibility("default")))
+			#  define MYLIB_EXPORT __attribute__((visibility("default")))
 			#else
-			  #define MYLIB_EXPORT
+			#  define MYLIB_EXPORT
 			#endif
 			""";
 		private enum SymbolKind { FUNCTION, VARIABLE }
