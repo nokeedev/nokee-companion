@@ -17,16 +17,18 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 
 class ArchiveBlobIntegrationTests {
-	private static void blob(Path path, Consumer<? super ArchiveBlob> action) throws IOException {
+	private static void blob(Path path, Consumer<? super ArchiveBlob.ArchiveMembers> action) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			action.accept(ArchiveBlob.parse(new BSource(channel)));
+			try (ArchiveBlob.ArchiveMembers members = ArchiveBlob.parse(new BSource(channel)).members()) {
+				action.accept(members);
+			}
 		}
 	}
 
 	@Test
 	void nullDevice() throws IOException {
 		blob(fixture("dev-null.a"), it -> {
-			var iter = it.members().iterator();
+			var iter = it.iterator();
 
 			var e0 = iter.next();
 			assertThat(e0.identifier(), equalTo("null"));
@@ -40,7 +42,7 @@ class ArchiveBlobIntegrationTests {
 	@ValueSource(strings = { "llvm", "gnu" })
 	void shortNames(String standard) throws IOException {
 		blob(fixture(standard + "-short-names.a"), it -> {
-			var iter = it.members().iterator();
+			var iter = it.iterator();
 			assertThat(iter.hasNext(), is(true));
 
 			var e0 = iter.next();
@@ -63,7 +65,7 @@ class ArchiveBlobIntegrationTests {
 	@ValueSource(strings = { "gnu", "llvm" })
 	void longNames(String standard) throws IOException {
 		blob(fixture(standard + "-long-names.a"), it -> {
-			var iter = it.members().iterator();
+			var iter = it.iterator();
 			assertThat(iter.hasNext(), is(true));
 
 			var e0 = iter.next();
@@ -82,7 +84,7 @@ class ArchiveBlobIntegrationTests {
 	@ValueSource(strings = { "gnu", "llvm" })
 	void nameWithSpaces(String standard) throws IOException {
 		blob(fixture(standard + "-name-with-spaces.a"), it -> {
-			var iter = it.members().iterator();
+			var iter = it.iterator();
 			assertThat(iter.hasNext(), is(true));
 
 			var e0 = iter.next();

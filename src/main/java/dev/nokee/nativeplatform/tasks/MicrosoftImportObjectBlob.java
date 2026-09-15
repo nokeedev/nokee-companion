@@ -2,6 +2,7 @@ package dev.nokee.nativeplatform.tasks;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
 import java.util.function.Consumer;
 
 import static dev.nokee.nativeplatform.tasks.ArchiveBlob.skipSymbolTables;
@@ -25,7 +26,7 @@ import static dev.nokee.nativeplatform.tasks.BinaryUtils.readCString;
 // Care was taken to avoid as many condition and allocation as possible
 // See https://github.com/tpn/winsdk-10/blob/master/Include/10.0.16299.0/um/winnt.h#L18344
 // TODO: implements common BinaryBlob interface
-final class MicrosoftImportObjectBlob {
+final class MicrosoftImportObjectBlob implements AutoCloseable {
 	private static final int IMPORT_OBJECT_SIG1 = 0x0000; // IMAGE_FILE_MACHINE_UNKNOWN
 	private static final int IMPORT_OBJECT_SIG2 = 0xFFFF;
 
@@ -118,13 +119,23 @@ final class MicrosoftImportObjectBlob {
 		return data;
 	}
 
+	@Override
+	public void close() {
+		if (data instanceof MappedByteBuffer) {
+			MappedBufferUtils.unmap((MappedByteBuffer) data);
+		}
+		data = null;
+	}
+
 	public static Consumer<ArchiveBlob.ArchiveMember> onlyImportObjects(Consumer<? super MicrosoftImportObjectBlob> action) {
 		ByteBuffer hdr = ByteBuffer.allocate(8);
 		return it -> {
 			BSource source = it.file();
 			source.read(hdr.clear());
 			if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
-				action.accept(MicrosoftImportObjectBlob.parse(source));
+				try (MicrosoftImportObjectBlob blob = MicrosoftImportObjectBlob.parse(source)) {
+					action.accept(blob);
+				}
 			}
 		};
 	}

@@ -34,10 +34,14 @@ class CoffBlobIntegrationTests {
 		try (FileChannel channel = FileChannel.open(path)) {
 			ByteBuffer sig = ByteBuffer.allocate(4);
 			List<String> result = new ArrayList<>();
-			for (ArchiveBlob.ArchiveMember member : ArchiveBlob.parse(new BSource(channel)).members()) {
-				member.file().read(sig.clear());
-				if (MicrosoftImportObjectBlob.isImportObjectMagic(sig.array())) {
-					result.add(MicrosoftImportObjectBlob.parse(member.file()).symbolName());
+			try (ArchiveBlob.ArchiveMembers members = ArchiveBlob.parse(new BSource(channel)).members()) {
+				for (ArchiveBlob.ArchiveMember member : members) {
+					member.file().read(sig.clear());
+					if (MicrosoftImportObjectBlob.isImportObjectMagic(sig.array())) {
+						try (MicrosoftImportObjectBlob blob = MicrosoftImportObjectBlob.parse(member.file())) {
+							result.add(blob.symbolName());
+						}
+					}
 				}
 			}
 			return result;
@@ -47,10 +51,12 @@ class CoffBlobIntegrationTests {
 	/** Reads every member of a library, each of which is a blob in its own right. */
 	private static void members(Path path, Consumer<? super CoffBlob> action) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
-			var iter = ArchiveBlob.parse(new BSource(channel)).members().iterator();
-			assertThat(iter.hasNext(), is(true));
-			while (iter.hasNext()) {
-				action.accept(CoffBlob.parse(iter.next().file()));
+			try (ArchiveBlob.ArchiveMembers members = ArchiveBlob.parse(new BSource(channel)).members()) {
+				var iter = members.iterator();
+				assertThat(iter.hasNext(), is(true));
+				while (iter.hasNext()) {
+					action.accept(CoffBlob.parse(iter.next().file()));
+				}
 			}
 		}
 	}

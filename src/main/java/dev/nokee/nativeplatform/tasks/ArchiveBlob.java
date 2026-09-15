@@ -86,13 +86,22 @@ final class ArchiveBlob {
 		return new ArchiveBlob(source, hdr.clear());
 	}
 
-	public Iterable<ArchiveMember> members() {
-		return new Iterable<ArchiveMember>() {
+	public ArchiveMembers members() {
+		return new ArchiveMembers() {
+			private GnuLongNameTable lnt;
+
+			@Override
+			public void close() {
+				if (lnt != null) {
+					lnt.close();
+					lnt = null;
+				}
+			}
+
 			@Override
 			public Iterator<ArchiveMember> iterator() {
 				return new Iterator<ArchiveMember>() {
 					private long position = AR_MAGIC.length;
-					private GnuLongNameTable lnt;
 
 					@Override
 					public boolean hasNext() {
@@ -203,7 +212,7 @@ final class ArchiveBlob {
 		return new String(buf, off, len, US_ASCII);
 	}
 
-	private static final class GnuLongNameTable {
+	private static final class GnuLongNameTable implements AutoCloseable {
 		private final MappedByteBuffer lnt;
 
 		private GnuLongNameTable(MappedByteBuffer lnt) {
@@ -253,6 +262,11 @@ final class ArchiveBlob {
 			byte[] b = new byte[end - offset];
 			lnt.get(offset, b);
 			return newString(b, 0, b.length);
+		}
+
+		@Override
+		public void close() {
+			MappedBufferUtils.unmap(lnt);
 		}
 	}
 
@@ -306,8 +320,16 @@ final class ArchiveBlob {
 		return parseDecimal(buf, extendedSizeBegin, i - extendedSizeBegin);
 	}
 
+	/** The members of an archive, which must be closed once walked. */
+	public interface ArchiveMembers extends Iterable<ArchiveMember>, AutoCloseable {
+		@Override
+		void close();
+	}
+
 	public interface ArchiveMember {
 		BSource file();
+
+		/** Only readable until the {@link ArchiveMembers} it came from is closed. */
 		String identifier();
 	}
 }

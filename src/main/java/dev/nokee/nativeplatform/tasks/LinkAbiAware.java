@@ -243,17 +243,19 @@ public interface LinkAbiAware extends Task {
 					PrimitiveHasher hasher = Hashing.newPrimitiveHasher();
 					try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
 						ArchiveBlob ar = ArchiveBlob.parse(new BSource(channel));
-						ar.members().forEach(MicrosoftImportObjectBlob.onlyImportObjects(it -> {
-							String name = it.symbolName();
-							if (imports.contains(name)) {
-								System.out.println("WAT? '" + name + "' " + it.ordinalOrHint() + " -- " + it.type() + " -- " + it.version());
-								hasher.putString(name);
-								hasher.putInt(it.machine());
-								hasher.putInt(it.ordinalOrHint());
-								hasher.putInt(it.type());
-								hasher.putInt(it.version());
-							}
-						}));
+						try (ArchiveBlob.ArchiveMembers members = ar.members()) {
+							members.forEach(MicrosoftImportObjectBlob.onlyImportObjects(it -> {
+								String name = it.symbolName();
+								if (imports.contains(name)) {
+									System.out.println("WAT? '" + name + "' " + it.ordinalOrHint() + " -- " + it.type() + " -- " + it.version());
+									hasher.putString(name);
+									hasher.putInt(it.machine());
+									hasher.putInt(it.ordinalOrHint());
+									hasher.putInt(it.type());
+									hasher.putInt(it.version());
+								}
+							}));
+						}
 					} catch (IOException e) {
 						throw new RuntimeException(e);
 					}
@@ -337,27 +339,29 @@ public interface LinkAbiAware extends Task {
 				// ignore, library will be snapshot byte-for-byte, users should not put static library here
 
 				ByteBuffer hdr = ByteBuffer.allocate(8);
-				blob.members().forEach(skipSymbolTables(member -> {
-					BSource source = member.file();
-					source.read(hdr.clear());
-					if (ElfBlob.isElfMagic(hdr.array())) {
-						ElfBlob elf = ElfBlob.parse(source);
-						assert elf.e_type() == ET_REL;
-						LinkAbiExtension.elf.visitImports(elf, visitor::visitImport);
-					} else if (MachOBlob.isMachOMagic(hdr.array())) {
-						MachOBlob macho = MachOBlob.parse(source);
-						assert macho instanceof MachOBlob.MachOImageBlob && ((MachOImageBlob) macho).filetype() == MH_OBJECT;
-						LinkAbiExtension.macho.visitImports(macho, visitor::visitImport);
-					} else if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
-						// skip import objects
-					} else if (CoffBlob.isCoffMagic(hdr.array())) {
-						CoffBlob coff = CoffBlob.parse(source);
-						assert coff instanceof CoffBlob.CoffObjectBlob;
-						LinkAbiExtension.coff.visitImports((CoffBlob.CoffObjectBlob) coff, visitor::visitImport);
-					} else {
-						throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
-					}
-				}));
+				try (ArchiveBlob.ArchiveMembers members = blob.members()) {
+					members.forEach(skipSymbolTables(member -> {
+						BSource source = member.file();
+						source.read(hdr.clear());
+						if (ElfBlob.isElfMagic(hdr.array())) {
+							ElfBlob elf = ElfBlob.parse(source);
+							assert elf.e_type() == ET_REL;
+							LinkAbiExtension.elf.visitImports(elf, visitor::visitImport);
+						} else if (MachOBlob.isMachOMagic(hdr.array())) {
+							MachOBlob macho = MachOBlob.parse(source);
+							assert macho instanceof MachOBlob.MachOImageBlob && ((MachOImageBlob) macho).filetype() == MH_OBJECT;
+							LinkAbiExtension.macho.visitImports(macho, visitor::visitImport);
+						} else if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
+							// skip import objects
+						} else if (CoffBlob.isCoffMagic(hdr.array())) {
+							CoffBlob coff = CoffBlob.parse(source);
+							assert coff instanceof CoffBlob.CoffObjectBlob;
+							LinkAbiExtension.coff.visitImports((CoffBlob.CoffObjectBlob) coff, visitor::visitImport);
+						} else {
+							throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
+						}
+					}));
+				}
 			}
 		}
 
@@ -406,27 +410,29 @@ public interface LinkAbiAware extends Task {
 			protected void visitArchive(Path path, ArchiveBlob blob, Step1Visitor visitor) {
 				MutableBoolean isImportLib = new MutableBoolean(false);
 				ByteBuffer hdr = ByteBuffer.allocate(8);
-				blob.members().forEach(skipSymbolTables(member -> {
-					BSource source = member.file();
-					source.read(hdr.clear());
-					if (ElfBlob.isElfMagic(hdr.array())) {
-						ElfBlob elf = ElfBlob.parse(source);
-						assert elf.e_type() == ET_REL;
-						LinkAbiExtension.elf.visitImports(elf, visitor::visitImport);
-					} else if (MachOBlob.isMachOMagic(hdr.array())) {
-						MachOBlob macho = MachOBlob.parse(source);
-						assert macho instanceof MachOBlob.MachOImageBlob && ((MachOImageBlob) macho).filetype() == MH_OBJECT;
-						LinkAbiExtension.macho.visitImports(macho, visitor::visitImport);
-					} else if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
-						isImportLib.setValue(true); // mark this static lib as import lib
-					} else if (CoffBlob.isCoffMagic(hdr.array())) {
-						CoffBlob coff = CoffBlob.parse(source);
-						assert coff instanceof CoffBlob.CoffObjectBlob;
-						LinkAbiExtension.coff.visitImports((CoffBlob.CoffObjectBlob) coff, visitor::visitImport);
-					} else {
-						throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
-					}
-				}));
+				try (ArchiveBlob.ArchiveMembers members = blob.members()) {
+					members.forEach(skipSymbolTables(member -> {
+						BSource source = member.file();
+						source.read(hdr.clear());
+						if (ElfBlob.isElfMagic(hdr.array())) {
+							ElfBlob elf = ElfBlob.parse(source);
+							assert elf.e_type() == ET_REL;
+							LinkAbiExtension.elf.visitImports(elf, visitor::visitImport);
+						} else if (MachOBlob.isMachOMagic(hdr.array())) {
+							MachOBlob macho = MachOBlob.parse(source);
+							assert macho instanceof MachOBlob.MachOImageBlob && ((MachOImageBlob) macho).filetype() == MH_OBJECT;
+							LinkAbiExtension.macho.visitImports(macho, visitor::visitImport);
+						} else if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
+							isImportLib.setValue(true); // mark this static lib as import lib
+						} else if (CoffBlob.isCoffMagic(hdr.array())) {
+							CoffBlob coff = CoffBlob.parse(source);
+							assert coff instanceof CoffBlob.CoffObjectBlob;
+							LinkAbiExtension.coff.visitImports((CoffBlob.CoffObjectBlob) coff, visitor::visitImport);
+						} else {
+							throw new RuntimeException("unknown member '" + member.identifier() + "' from '" + path + "'");
+						}
+					}));
+				}
 
 				if (isImportLib.asBoolean()) {
 					visitor.visitImportLibrary(path);
