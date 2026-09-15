@@ -23,10 +23,16 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.support.AnnotationConsumer;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -42,8 +48,6 @@ import static dev.nokee.elements.nativebase.NativeSourceElement.ofSources;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class LinkAvoidanceFunctionalTests {
 	GradleBuild build;
@@ -149,96 +153,137 @@ class LinkAvoidanceFunctionalTests {
 		};
 	}
 
-	private static class AvoidOnNarrowOnly implements ArgumentsProvider {
-		@Override
-		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
-			return Stream.of(
-				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("full ABI relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-			);
-		}
-	}
+	/** The binary format of the library the {@code :link} task consumes, which is the host's own format. */
+	private enum BinaryFormat {
+		ELF, MACH_O, PE;
 
-	private static class AvoidOnLinkAbiAndUp implements ArgumentsProvider {
-		@Override
-		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
-			return Stream.of(
-				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
-				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-			);
-		}
-	}
-
-	private static class StSizeParticularity implements ArgumentsProvider {
-		@Override
-		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
-			if (SystemUtils.IS_OS_LINUX) {
-				return Stream.of(
-					Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
-					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
-					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksExecutedAndNotSkipped(hasItem(":link")))
-				);
+		public static BinaryFormat current() {
+			if (SystemUtils.IS_OS_MAC_OSX) {
+				return MACH_O;
 			} else if (SystemUtils.IS_OS_WINDOWS) {
-				return Stream.of(
-					Arguments.argumentSet("no ABI does not relink", "AbiSnapshotter.NONE", tasksSkipped(hasItem(":link"))),
-					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
-					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-				);
+				return PE;
 			}
-			return Stream.of(
-				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
-				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-			);
+			return ELF;
 		}
 	}
 
-	private static class ImportLibraryParticularity implements ArgumentsProvider {
-		@Override
-		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
-			if (SystemUtils.IS_OS_WINDOWS) {
-				return Stream.of(
-					Arguments.argumentSet("no ABI does not relink", "AbiSnapshotter.NONE", tasksSkipped(hasItem(":link"))),
-					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
-					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-				);
-			}
-			return Stream.of(
-				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
-				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-			);
+	/**
+	 * The ABI snapshotting modes a test runs against, in the order the binary format annotations expect their
+	 * flags. Each constant knows how to turn a relink expectation into an argument set: the {@code AbiSnapshotter}
+	 * expression the build script is given, and the matcher the resulting build must satisfy.
+	 */
+	private enum AbiSnapshotting {
+		NONE("no ABI"), FULL_ABI("full ABI"), NARROW_ABI("narrow ABI");
+
+		private final String displayName;
+
+		AbiSnapshotting(String displayName) {
+			this.displayName = displayName;
+		}
+
+		public Arguments argumentSet(boolean relinks) {
+			return Arguments.argumentSet(displayName + (relinks ? " relinks" : " does not relink"), "AbiSnapshotter." + name(), relinks ? tasksExecutedAndNotSkipped(hasItem(":link")) : tasksSkipped(hasItem(":link")));
 		}
 	}
 
-	private static class AvoidOnNarrowOnlyOrWindows implements ArgumentsProvider {
+	/**
+	 * Turns one binary format annotation's flags into the argument sets of the test method it is on. The provider
+	 * for a format other than the host's contributes nothing, leaving the host format's annotation to supply every
+	 * argument set.
+	 */
+	static abstract class BinaryFormatArgumentsProvider implements ArgumentsProvider {
+		private final BinaryFormat format;
+		private boolean[] relinks;
+
+		protected BinaryFormatArgumentsProvider(BinaryFormat format) {
+			this.format = format;
+		}
+
+		protected final void relinks(boolean[] relinks) {
+			if (relinks.length != AbiSnapshotting.values().length) {
+				throw new IllegalArgumentException("@%s expects one flag per ABI snapshotting mode, i.e. %d, but got %d".formatted(getClass().getEnclosingClass().getSimpleName(), AbiSnapshotting.values().length, relinks.length));
+			}
+			this.relinks = relinks;
+		}
+
 		@Override
 		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
-			if (SystemUtils.IS_OS_WINDOWS) {
-				return Stream.of(
-					Arguments.argumentSet("no ABI does not relink", "AbiSnapshotter.NONE", tasksSkipped(hasItem(":link"))),
-					Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksSkipped(hasItem(":link"))),
-					Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-				);
+			if (BinaryFormat.current() != format) {
+				return Stream.empty();
 			}
-			return Stream.of(
-				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("full ABI relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksSkipped(hasItem(":link")))
-			);
+			return Arrays.stream(AbiSnapshotting.values()).map(it -> it.argumentSet(relinks[it.ordinal()]));
 		}
 	}
 
-	private static class AlwaysRelink implements ArgumentsProvider {
-		@Override
-		public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
-			return Stream.of(
-				Arguments.argumentSet("no ABI relinks", "AbiSnapshotter.NONE", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("full ABI does not relink", "AbiSnapshotter.FULL_ABI", tasksExecutedAndNotSkipped(hasItem(":link"))),
-				Arguments.argumentSet("narrow ABI does not relink", "AbiSnapshotter.NARROW_ABI", tasksExecutedAndNotSkipped(hasItem(":link")))
-			);
+	/**
+	 * A {@link ParameterizedTest} over every {@code AbiSnapshotter} mode, whose expectations come from the
+	 * {@link ElfFormat}, {@link MachOFormat} and {@link PeFormat} annotations on the same method.
+	 *
+	 * <p>A method that declares no annotation for the host's binary format does not run there, which is how a
+	 * behaviour only one format can exhibit - a copy relocation, an import library - is expressed.
+	 */
+	@Target(ElementType.METHOD)
+	@Retention(RetentionPolicy.RUNTIME)
+	@ParameterizedTest(allowZeroInvocations = true)
+	@interface BinaryFormatTest {}
+
+	/** How {@code :link} behaves against an ELF library, one flag per {@link AbiSnapshotting} mode in declaration order. */
+	@Target(ElementType.METHOD)
+	@Retention(RetentionPolicy.RUNTIME)
+	@ArgumentsSource(ElfFormat.Provider.class)
+	@interface ElfFormat {
+		/** {@code true} where the mode relinks, {@code false} where it leaves {@code :link} up-to-date. */
+		boolean[] value();
+
+		final class Provider extends BinaryFormatArgumentsProvider implements AnnotationConsumer<ElfFormat> {
+			public Provider() {
+				super(BinaryFormat.ELF);
+			}
+
+			@Override
+			public void accept(ElfFormat annotation) {
+				relinks(annotation.value());
+			}
+		}
+	}
+
+	/** How {@code :link} behaves against a Mach-O library, one flag per {@link AbiSnapshotting} mode in declaration order. */
+	@Target(ElementType.METHOD)
+	@Retention(RetentionPolicy.RUNTIME)
+	@ArgumentsSource(MachOFormat.Provider.class)
+	@interface MachOFormat {
+		/** {@code true} where the mode relinks, {@code false} where it leaves {@code :link} up-to-date. */
+		boolean[] value();
+
+		final class Provider extends BinaryFormatArgumentsProvider implements AnnotationConsumer<MachOFormat> {
+			public Provider() {
+				super(BinaryFormat.MACH_O);
+			}
+
+			@Override
+			public void accept(MachOFormat annotation) {
+				relinks(annotation.value());
+			}
+		}
+	}
+
+	/** How {@code :link} behaves against a PE library, one flag per {@link AbiSnapshotting} mode in declaration order. */
+	@Target(ElementType.METHOD)
+	@Retention(RetentionPolicy.RUNTIME)
+	@ArgumentsSource(PeFormat.Provider.class)
+	@interface PeFormat {
+		/** {@code true} where the mode relinks, {@code false} where it leaves {@code :link} up-to-date. */
+		boolean[] value();
+
+		final class Provider extends BinaryFormatArgumentsProvider implements AnnotationConsumer<PeFormat> {
+			public Provider() {
+				super(BinaryFormat.PE);
+			}
+
+			@Override
+			public void accept(PeFormat annotation) {
+				relinks(annotation.value());
+			}
 		}
 	}
 
@@ -257,11 +302,9 @@ class LinkAvoidanceFunctionalTests {
 			});
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true}) // copy relocations are an ELF concept
 		void whenExportedSymbolSizeChangesForNonPositionIndependentExecutable(String linkAbi, Matcher<ExecutedBuild> matcher) {
-			assumeTrue(SystemUtils.IS_OS_LINUX, "copy relocations are an ELF concept"); // TODO: assert binary format not OS
-
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -343,8 +386,10 @@ class LinkAvoidanceFunctionalTests {
 	}
 
 	abstract class LinkAvoidanceTester {
-		@ParameterizedTest
-		@ArgumentsSource(ImportLibraryParticularity.class)
+		@BinaryFormatTest
+		@ElfFormat({true, false, false})
+		@MachOFormat({true, false, false})
+		@PeFormat({false, false, false}) // a PE consumer links against the import library, which an implementation change leaves alone
 		void doesNotRelinkOnImplementationOnlyChange(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -364,8 +409,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true})
+		@MachOFormat({true, true, true})
+		@PeFormat({true, true, true})
 		void whenNewExportedSymbol(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -385,8 +432,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, false})
+		@MachOFormat({true, true, false})
+		@PeFormat({true, true, false})
 		void whenExportedSymbolNotUsedByConsumerIsAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -408,8 +457,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, false})
+		@MachOFormat({true, true, false})
+		@PeFormat({true, true, false})
 		void whenExportedSymbolNotUsedByConsumerChangesAbi(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -432,8 +483,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AvoidOnNarrowOnly.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, false})
+		@MachOFormat({true, true, false})
+		@PeFormat({true, true, false})
 		void whenExportedSymbolNotUsedByConsumerIsRemoved(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -455,8 +508,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(ImportLibraryParticularity.class)
+		@BinaryFormatTest
+		@ElfFormat({true, false, false})
+		@MachOFormat({true, false, false})
+		@PeFormat({false, false, false})
 		void whenStaticFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -478,8 +533,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@BinaryFormatTest
+		@ElfFormat({true, false, false})
+		@MachOFormat({true, false, false})
+		@PeFormat({true, false, false})
 		void whenStaticVariableAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -501,8 +558,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(ImportLibraryParticularity.class)
+		@BinaryFormatTest
+		@ElfFormat({true, false, false})
+		@MachOFormat({true, false, false})
+		@PeFormat({false, false, false})
 		void whenAnonymousNamespaceFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -524,8 +583,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AvoidOnNarrowOnlyOrWindows.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, false})
+		@MachOFormat({true, true, false})
+		@PeFormat({false, false, false})
 		void whenUnusedInlineFunctionAdded(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -560,8 +621,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":clean", ":link").toList())), tasksExecutedAndNotSkipped(hasItem(":link")));
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true})
+		@MachOFormat({true, true, true})
+		@PeFormat({true, true, true})
 		void whenRemovedExportedSymbol(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -581,10 +644,11 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		// TODO: assert toolchain capability not binary format
+		@ElfFormat({true, true, true}) // weak symbols require GCC/Clang, so PE is left out
+		@MachOFormat({true, true, true})
 		void whenSymbolStrongnessTransition(String linkAbi, Matcher<ExecutedBuild> matcher) {
-			assumeFalse(SystemUtils.IS_OS_WINDOWS, "Weak symbols require GCC/Clang"); // TODO: assert toolchain capability not OS
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -628,11 +692,10 @@ class LinkAvoidanceFunctionalTests {
 			build.rootProject(sharedLibComponent("foo"));
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class) // TODO: Should not relink on Link ABI as we should not care about st-size for PIC
+		@BinaryFormatTest
+		// TODO: Should not relink on Link ABI as we should not care about st-size for PIC
+		@ElfFormat({true, true, true}) // copy relocations are an ELF concept
 		void whenExportedSymbolSizeChangesForPositionIndependentConsumer(String linkAbi, Matcher<ExecutedBuild> matcher) {
-			assumeTrue(SystemUtils.IS_OS_LINUX, "copy relocations are an ELF concept"); // TODO: assert binary format not OS
-
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -655,8 +718,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true})
+		@MachOFormat({true, true, true})
+		@PeFormat({true, true, true})
 		void whenSymbolTypeChangesFromFunctionToVariable(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -687,8 +752,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true})
+		@MachOFormat({true, true, true})
+		@PeFormat({true, true, true})
 		void whenParameterCountChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -708,8 +775,11 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(ImportLibraryParticularity.class) // TODO: Linux is up-to-date on all -> is this the ABI itself that use the same assembly languages?
+		@BinaryFormatTest
+		// TODO: Linux is up-to-date on all -> is this the ABI itself that use the same assembly languages?
+		@ElfFormat({true, false, false})
+		@MachOFormat({true, false, false})
+		@PeFormat({false, false, false})
 		void whenReturnTypeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -729,11 +799,13 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(StSizeParticularity.class) // Theorically, it should be AvoidOnLinkAbiAndUp
-		//  The problems comes from the fact that we only need to capture the symbol st_size in ELF format
-		//  when linking non-PIE binaries. It's quite hard to determine this so, for now, we will accept over
-		//  relinks for correctness.
+		@BinaryFormatTest
+		// Theorically, ELF should relink on no ABI only, like Mach-O does. The problems comes from the fact that
+		// we only need to capture the symbol st_size in ELF format when linking non-PIE binaries. It's quite hard
+		// to determine this so, for now, we will accept over relinks for correctness.
+		@ElfFormat({true, true, true})
+		@MachOFormat({true, false, false})
+		@PeFormat({false, false, false})
 		void whenFunctionBecomesVariableInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -762,8 +834,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@BinaryFormatTest
+		@ElfFormat({true, false, false})
+		@MachOFormat({true, false, false})
+		@PeFormat({true, false, false})
 		void whenParameterCountChangesInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -783,8 +857,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AvoidOnLinkAbiAndUp.class)
+		@BinaryFormatTest
+		@ElfFormat({true, false, false})
+		@MachOFormat({true, false, false})
+		@PeFormat({true, false, false})
 		void whenReturnTypeChangesInC(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -804,9 +880,11 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ValueSource(strings = { "AbiSnapshotter.NONE", "AbiSnapshotter.FULL_ABI", "AbiSnapshotter.NARROW_ABI" })
-		void whenLibraryChangeLocationButNotAbi(String linkAbi) {
+		@BinaryFormatTest
+		@ElfFormat({false, false, false})
+		@MachOFormat({false, false, false})
+		@PeFormat({false, false, false})
+		void whenLibraryChangeLocationButNotAbi(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -837,11 +915,13 @@ class LinkAvoidanceFunctionalTests {
 				"""));
 			});
 
-			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), tasksSkipped(hasItem(":link")));
+			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true})
+		@MachOFormat({true, true, true})
+		@PeFormat({true, true, true})
 		void whenStaticLibraryImplementationChanges(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -861,8 +941,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true})
+		@MachOFormat({true, true, true})
+		@PeFormat({true, true, true})
 		void whenLibraryTargetsAnotherMachine(String linkAbi, Matcher<ExecutedBuild> matcher) {
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
@@ -924,11 +1006,9 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(":link", "-Parch=other")), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true}) // EI_OSABI only exists in ELF
 		void whenLibraryTargetsAnotherOsAbi(String linkAbi, Matcher<ExecutedBuild> matcher) throws IOException {
-			assumeTrue(SystemUtils.IS_OS_LINUX, "EI_OSABI only exists in ELF"); // TODO: assert binary format not OS
-
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -960,11 +1040,9 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").append("-x", ":linkFoo").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true}) // st_size is an ELF concept
 		void whenExportedSymbolSizeChanges(String linkAbi, Matcher<ExecutedBuild> matcher) { // TODO: Not sure if this is true
-			assumeTrue(SystemUtils.IS_OS_LINUX, "st_size is an ELF concept"); // TODO: assert binary format not OS
-
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -1003,12 +1081,10 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		// TODO: Is this really just ELF?
+		@ElfFormat({true, true, true}) // STT_TLS is an ELF concept
 		void whenExportedSymbolBecomesThreadLocal(String linkAbi, Matcher<ExecutedBuild> matcher) {
-			// TODO: Is this really just on Linux?
-			assumeTrue(SystemUtils.IS_OS_LINUX, "STT_TLS is an ELF concept"); // TODO: assert binary format not OS
-
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
@@ -1037,11 +1113,9 @@ class LinkAvoidanceFunctionalTests {
 			assertThat(runs(runner.withArguments(args.withTasks(":link").toList())), matcher);
 		}
 
-		@ParameterizedTest
-		@ArgumentsSource(AlwaysRelink.class)
+		@BinaryFormatTest
+		@ElfFormat({true, true, true}) // symbol versioning is a GNU extension to ELF
 		void whenExportedSymbolMovesToAnotherVersion(String linkAbi, Matcher<ExecutedBuild> matcher) {
-			assumeTrue(SystemUtils.IS_OS_LINUX, "symbol versioning is a GNU extension to ELF"); // TODO: assert binary format not OS
-
 			build.rootProject(project -> {
 				project.append(groovyDsl("""
 					tasks.named('link') {
