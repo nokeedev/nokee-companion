@@ -903,11 +903,14 @@ class LinkAvoidanceFunctionalTests {
 					def platform = providers.gradleProperty('arch').map {
 						def result = null
 						if (host().operatingSystem.toFamilyName() == 'macos') {
-							result = new DefaultNativePlatform("${host().operatingSystem.toFamilyName()}:x86-64")
+							result = new DefaultNativePlatform("macos:x86-64")
 							result.architecture('x86-64')
 						} else if (host().operatingSystem.toFamilyName() == 'linux') {
-							result = new DefaultNativePlatform("${host().operatingSystem.toFamilyName()}:i686")
+							result = new DefaultNativePlatform("linux:i686")
 							result.architecture('i686')
+						} else if (host().operatingSystem.toFamilyName() == 'windows') {
+							result = new DefaultNativePlatform("windows:x86")
+							result.architecture('x86')
 						}
 
 						return result

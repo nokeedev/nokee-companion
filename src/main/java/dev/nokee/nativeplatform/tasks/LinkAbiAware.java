@@ -301,6 +301,7 @@ public interface LinkAbiAware extends Task {
 
 			@Override
 			protected void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor) {
+				System.out.println("Visiting '" + path + "'");
 				coff.visitImports(blob, visitor::visitImport);
 			}
 
@@ -452,63 +453,63 @@ public interface LinkAbiAware extends Task {
 		}
 
 		// However, libs files for full link ABI are processed differently
-		private static final class FullLibraryFiles extends InFiles {
-			public FullLibraryFiles(Set<FileSystemLocation> elements) {
-				super(elements);
-			}
-
-			@Override
-			protected void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor) {
-
-			}
-
-			@Override
-			protected void visitElf(Path path, ElfBlob blob, Step1Visitor visitor) {
-				switch (blob.e_type()) {
-					case ET_REL:
-						// ignores
-						break;
-					case ET_DYN:
-						visitor.visitSharedLibrary(path, SharedLibFormat.ELF);
-						break;
-					default: throw new UnsupportedOperationException("invalid elf type '" + blob.e_type() + "' on file '" + path + "'");
-				}
-			}
-
-			@Override
-			protected void visitMachO(Path path, MachOImageBlob blob, Step1Visitor visitor) {
-				switch (blob.filetype()) {
-					case MH_OBJECT:
-						// ignores
-						break;
-					case MH_DYLIB:
-					case MH_DYLIB_STUB:
-						visitor.visitSharedLibrary(path, SharedLibFormat.MACHO);
-						break;
-					default: throw new UnsupportedOperationException("invalid mach-o type '" + blob.filetype() + "' on file '" + path + "'");
-				}
-			}
-
-			@Override
-			protected void visitArchive(Path path, ArchiveBlob blob, Step1Visitor visitor) {
-				ByteBuffer hdr = ByteBuffer.allocate(8);
-				boolean isImportLib = false;
-				for (ArchiveBlob.ArchiveMember member : blob.members()) {
-					BSource source = member.file();
-					source.read(hdr.clear());
-					if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
-						isImportLib = true;
-						break;
-					}
-				}
-
-				if (isImportLib) {
-					visitor.visitImportLibrary(path);
-				} else {
-					visitor.visitStaticLibrary(path);
-				}
-			}
-		}
+//		private static final class FullLibraryFiles extends InFiles {
+//			public FullLibraryFiles(Set<FileSystemLocation> elements) {
+//				super(elements);
+//			}
+//
+//			@Override
+//			protected void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor) {
+//
+//			}
+//
+//			@Override
+//			protected void visitElf(Path path, ElfBlob blob, Step1Visitor visitor) {
+//				switch (blob.e_type()) {
+//					case ET_REL:
+//						// ignores
+//						break;
+//					case ET_DYN:
+//						visitor.visitSharedLibrary(path, SharedLibFormat.ELF);
+//						break;
+//					default: throw new UnsupportedOperationException("invalid elf type '" + blob.e_type() + "' on file '" + path + "'");
+//				}
+//			}
+//
+//			@Override
+//			protected void visitMachO(Path path, MachOImageBlob blob, Step1Visitor visitor) {
+//				switch (blob.filetype()) {
+//					case MH_OBJECT:
+//						// ignores
+//						break;
+//					case MH_DYLIB:
+//					case MH_DYLIB_STUB:
+//						visitor.visitSharedLibrary(path, SharedLibFormat.MACHO);
+//						break;
+//					default: throw new UnsupportedOperationException("invalid mach-o type '" + blob.filetype() + "' on file '" + path + "'");
+//				}
+//			}
+//
+//			@Override
+//			protected void visitArchive(Path path, ArchiveBlob blob, Step1Visitor visitor) {
+//				ByteBuffer hdr = ByteBuffer.allocate(8);
+//				boolean isImportLib = false;
+//				for (ArchiveBlob.ArchiveMember member : blob.members()) {
+//					BSource source = member.file();
+//					source.read(hdr.clear());
+//					if (MicrosoftImportObjectBlob.isImportObjectMagic(hdr.array())) {
+//						isImportLib = true;
+//						break;
+//					}
+//				}
+//
+//				if (isImportLib) {
+//					visitor.visitImportLibrary(path);
+//				} else {
+//					visitor.visitStaticLibrary(path);
+//				}
+//			}
+//		}
 
 		private static final class Step1Result {
 			private final ImportSymbols imports;
@@ -626,6 +627,7 @@ public interface LinkAbiAware extends Task {
 					files.accept(new Step1Visitor() {
 						@Override
 						public void visitImport(String name) {
+							System.out.println("Finding import: " + name);
 							imports.add(name);
 						}
 
