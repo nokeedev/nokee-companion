@@ -1,0 +1,12 @@
+LIB_1.0 {
+	global:
+		compat;
+	local:
+		*;
+};
+
+LIB_2.0 {
+	global:
+		compat;
+		stable;
+} LIB_1.0;

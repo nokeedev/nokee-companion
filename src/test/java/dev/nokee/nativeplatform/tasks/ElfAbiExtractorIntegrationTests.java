@@ -1,93 +1,149 @@
 package dev.nokee.nativeplatform.tasks;
 
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static dev.nokee.commons.hamcrest.gradle.ThrowableMatchers.throwsException;
-import static dev.nokee.nativeplatform.tasks.AbiMatchers.*;
+import static dev.nokee.nativeplatform.tasks.AbiMatchers.strongFunction;
+import static dev.nokee.nativeplatform.tasks.AbiMatchers.strongVariable;
+import static dev.nokee.nativeplatform.tasks.AbiMatchers.threadLocalVariable;
+import static dev.nokee.nativeplatform.tasks.AbiMatchers.versionDefinition;
+import static dev.nokee.nativeplatform.tasks.AbiMatchers.weakFunction;
+import static dev.nokee.nativeplatform.tasks.AbiMatchers.weakVariable;
+import static dev.nokee.nativeplatform.tasks.Fixtures.fixture;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.emptyIterable;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 
 /**
- * Integration tests for ELF ABI extraction via NativeLibraryAbiExtractor.
+ * Integration tests for what {@link ElfBinaryHasher} reports about an ELF shared library.
  *
- * Prebuilt binaries live in src/test/resources/fixtures/. See each
- * fixture directory's BUILD file for the commands to produce them.
+ * <p>Each test reads a prebuilt binary from src/test/resources/fixtures through {@link ElfAbi}, which
+ * records the same visitor callbacks the hasher hashes. Both architectures are read for every fixture,
+ * because the reader resolves every offset and size from the image rather than assuming a layout.
  */
 class ElfAbiExtractorIntegrationTests {
-	private static final ElfBinaryHasher reader = new ElfBinaryHasher();
-
-	private static Collection<ExportedSymbol> extract(Path path) throws IOException {
-		try (FileChannel channel = FileChannel.open(path)) {
-			List<ExportedSymbol> result = new ArrayList<>();
-			reader.visitSharedLib(ElfBlob.parse(new BSource(channel)), new ElfBinaryHasher.SonameAndExportVisitor() {
-				@Override
-				public void visitSoname(String soname) {
-
-				}
-
-				@Override
-				public void visitExport(String name, int info, long size, String version, boolean defaultVersion) {
-					var symbol = new MyExportedSymbol(name);
-					symbol.put("binding", info);
-					result.add(symbol);
-				}
-			});
-			return result;
-		}
+	private static ElfAbi library(String arch) throws IOException {
+		return ElfAbi.read(fixture("library-exports/elf/" + arch + "/libexports.so"));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "aarch64", "x86_64"})
-	void extractSharedLibraryWithNamedExports(String arch) throws IOException {
-		Collection<ExportedSymbol> model = extract(fixture("named-exports/" + arch + "/libnamed.so"));
-		assertThat(model, containsInAnyOrder(
-			strongElfSymbol("greet"),
-			strongElfSymbol("value"),
-			strongElfSymbol("compute")
-		));
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void reportsEveryExportedSymbolWithItsBindingAndType(String arch) throws IOException {
+		assertThat(library(arch).exports(), containsInAnyOrder(
+			strongFunction("strong_func"),
+			weakFunction("weak_func"),
+			strongVariable("strong_var").ofSize(4),
+			weakVariable("weak_var").ofSize(4),
+			strongFunction("uses_internals")));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "aarch64", "x86_64"})
-	void extractSharedLibraryWithNoExports(String arch) throws IOException {
-		Collection<ExportedSymbol> model = extract(fixture("no-exports/" + arch + "/libno_exports.so"));
-		assertThat(model, emptyIterable());
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void doesNotReportSymbolsTheLibraryKeepsToItself(String arch) throws IOException {
+		// One is hidden and the other has internal linkage, so neither reaches the dynamic symbol table.
+		assertThat(names(library(arch)), not(hasItem("hidden_func")));
+		assertThat(names(library(arch)), not(hasItem("internal_func")));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "aarch64", "x86_64"})
-	void extractSharedLibraryDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		Collection<ExportedSymbol> model = extract(fixture("weak-symbols/" + arch + "/libweak.so"));
-		assertThat(model, containsInAnyOrder(
-			weakElfSymbol("weak_var"),
-			strongElfSymbol("strong_var"),
-			strongElfSymbol("strong_func"),
-			weakElfSymbol("weak_func")
-		));
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void doesNotReportSymbolsTheLibraryImports(String arch) throws IOException {
+		// The library links against libc, so its dynamic symbol table also holds what it leaves
+		// undefined. Those are what the library asks of others rather than what it offers.
+		assertThat(names(library(arch)), not(hasItem("__cxa_finalize")));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "aarch64", "x86_64"})
-	void extractStaticArchiveReturnsStaticLibraryModel(String arch) throws IOException {
-		assertThat(() -> extract(fixture("static-archive/" + arch + "/libstatic.a")), throwsException(instanceOf(IllegalArgumentException.class)));
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void reportsNoVersionWhenLibraryIsBuiltWithoutVersionScript(String arch) throws IOException {
+		// .gnu.version and .gnu.version_d are both absent from such a library, so nothing binds a symbol
+		// to a version and every symbol is the definition an unversioned reference reaches.
+		assertThat(each(library(arch), ElfAbi.Export::version), everyItem(nullValue()));
+		assertThat(each(library(arch), ElfAbi.Export::defaultVersion), everyItem(is(true)));
 	}
 
-	private static Path fixture(String relativePath) {
-		try {
-			return Paths.get(ElfAbiExtractorIntegrationTests.class
-				.getResource("/fixtures/" + relativePath).toURI());
-		} catch (Exception e) {
-			throw new RuntimeException("Fixture not found: " + relativePath
-				+ " — build it per the BUILD file", e);
-		}
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void reportsSoname(String arch) throws IOException {
+		assertThat(library(arch).sonames(), contains("libexports.so"));
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "x86_64, 62", "aarch64, 183" })
+	void reportsArchitecture(String arch, int machine) throws IOException {
+		assertThat(library(arch).architecture(), is(machine));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void reportsOsAbiAndItsVersion(String arch) throws IOException {
+		assertThat(library(arch).osAbi(), is(ElfAbi.ELFOSABI_NONE));
+		assertThat(library(arch).abiVersion(), is(0));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void reportsNoExportedSymbolForLibraryThatExportsNothing(String arch) throws IOException {
+		ElfAbi abi = ElfAbi.read(fixture("no-exports/elf/" + arch + "/libnoexports.so"));
+
+		assertThat(abi.exports(), emptyIterable());
+		assertThat(abi.sonames(), contains("libnoexports.so")); // the library is read, it just offers nothing
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void reportsVersionEachExportedSymbolIsDefinedAt(String arch) throws IOException {
+		ElfAbi abi = ElfAbi.read(fixture("versioned-exports/elf/" + arch + "/libversioned.so"));
+
+		assertThat(abi.exports(), containsInAnyOrder(
+			// One name defined at two versions: an unversioned reference binds to the LIB_2.0
+			// definition, and only a reference naming LIB_1.0 reaches the other.
+			strongFunction("compat").atDefaultVersion("LIB_2.0"),
+			strongFunction("compat").atNonDefaultVersion("LIB_1.0"),
+			strongFunction("stable").atDefaultVersion("LIB_2.0"),
+			versionDefinition("LIB_1.0").atDefaultVersion("LIB_1.0"),
+			versionDefinition("LIB_2.0").atDefaultVersion("LIB_2.0")));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void reportsThreadLocalSymbolApartFromOrdinaryOne(String arch) throws IOException {
+		ElfAbi abi = ElfAbi.read(fixture("thread-local-exports/elf/" + arch + "/libthreadlocal.so"));
+
+		assertThat(abi.exports(), containsInAnyOrder(
+			threadLocalVariable("tls_var").ofSize(4),
+			strongVariable("plain_var").ofSize(4),
+			strongFunction("read_both")));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "aarch64" })
+	void refusesStaticLibrary(String arch) {
+		// An archive carries "!<arch>" where an ELF image carries its own magic. A static library is
+		// snapshotted byte for byte rather than read for an ABI, so the reader never sees one.
+		assertThat(() -> ElfAbi.read(fixture("static-archive/elf/" + arch + "/libstatic.a")),
+			throwsException(instanceOf(IllegalArgumentException.class)));
+	}
+
+	private static List<String> names(ElfAbi abi) {
+		return each(abi, ElfAbi.Export::name);
+	}
+
+	private static <T> List<T> each(ElfAbi abi, Function<ElfAbi.Export, T> field) {
+		return abi.exports().stream().map(field).collect(Collectors.toList());
 	}
 }

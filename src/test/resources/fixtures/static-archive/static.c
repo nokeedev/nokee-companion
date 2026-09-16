@@ -1,11 +1,9 @@
 /*
- * Object file compiled into a static archive.
+ * An object archived into a static library.
  *
- * The functions are not exported as a shared library ABI — they are linked
- * directly into the consumer at build time.
- *
- * Used to verify that the ABI extractor returns StaticLibraryAbiModel for
- * Unix static archives (.a) so that they are tracked byte-to-byte.
+ * A static library is not a shared library, and the readers say so by refusing to parse one: the
+ * archive's "!<arch>" magic is neither ELF's nor Mach-O's. Nothing in this source is read, so it
+ * only has to compile.
  */
 
 int add(int a, int b) { return a + b; }
