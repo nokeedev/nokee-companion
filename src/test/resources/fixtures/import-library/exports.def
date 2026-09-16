@@ -1,0 +1,6 @@
+LIBRARY exports.dll
+EXPORTS
+	add
+	counter DATA
+	hidden_one @1 NONAME
+	hidden_two @2 NONAME

@@ -1,93 +1,109 @@
 package dev.nokee.nativeplatform.tasks;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static dev.nokee.commons.hamcrest.gradle.ThrowableMatchers.throwsException;
-import static dev.nokee.nativeplatform.tasks.AbiMatchers.*;
+import static dev.nokee.nativeplatform.tasks.Fixtures.fixture;
+import static dev.nokee.nativeplatform.tasks.MachOAbi.CPU_SUBTYPE_ARM64_ALL;
+import static dev.nokee.nativeplatform.tasks.MachOAbi.CPU_SUBTYPE_X86_64_ALL;
+import static dev.nokee.nativeplatform.tasks.MachOAbi.CPU_TYPE_ARM64;
+import static dev.nokee.nativeplatform.tasks.MachOAbi.CPU_TYPE_X86_64;
+import static dev.nokee.nativeplatform.tasks.MachOAbi.Export.strong;
+import static dev.nokee.nativeplatform.tasks.MachOAbi.Export.weak;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.emptyIterable;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
 /**
- * Integration tests for Mach-O ABI extraction via NativeLibraryAbiExtractor.
+ * Integration tests for what {@link MachOBinaryHasher} reports about a Mach-O shared library.
  *
- * Prebuilt binaries live in src/test/resources/fixtures/. See each
- * fixture directory's BUILD file for the commands to produce them.
+ * <p>Each test reads a prebuilt binary from src/test/resources/fixtures through {@link MachOAbi}, which
+ * records the same visitor callbacks the hasher hashes. Mach-O spells a C symbol with a leading
+ * underscore, so every name here carries one.
  */
 class MachOAbiExtractorIntegrationTests {
-	private static final MachOBinaryHasher reader = new MachOBinaryHasher();
-
-	private static Collection<ExportedSymbol> extract(Path path) throws IOException {
-		try (FileChannel channel = FileChannel.open(path)) {
-			List<ExportedSymbol> result = new ArrayList<>();
-			reader.visitSharedLib(MachOBlob.parse(new BSource(channel)), new MachOBinaryHasher.ExportOrInstallNameVisitor() {
-				@Override
-				public void visitInstallName(String installName) {
-
-				}
-
-				@Override
-				public void visitExportSymbol(String name, boolean weakBinding) {
-					var symbol = new MyExportedSymbol(name);
-					symbol.put("isWeakBinding", weakBinding);
-					result.add(symbol);
-				}
-			});
-			return result;
-		}
+	private static MachOAbi library(String arch) throws IOException {
+		return MachOAbi.read(fixture("library-exports/macho/" + arch + "/libexports.dylib"));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "arm64", "x86_64" })
-	void extractDylibWithNamedExports(String arch) throws IOException {
-		Collection<ExportedSymbol> model = extract(fixture("named-exports/" + arch + "/libnamed.dylib"));
-		assertThat(model, containsInAnyOrder(
-			strongMachOSymbol("_compute"),
-			strongMachOSymbol("_greet"),
-			strongMachOSymbol("_value")
-		));
+	@ValueSource(strings = { "x86_64", "arm64" })
+	void reportsEveryExportedSymbolWithItsBinding(String arch) throws IOException {
+		assertThat(library(arch).exports(), containsInAnyOrder(
+			strong("_strong_func"),
+			weak("_weak_func"),
+			strong("_strong_var"),
+			weak("_weak_var"),
+			strong("_uses_internals")));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "arm64", "x86_64" })
-	void extractDylibWithNoExports(String arch) throws IOException {
-		Collection<ExportedSymbol> model = extract(fixture("no-exports/" + arch + "/libno_exports.dylib"));
-		assertThat(model, emptyIterable());
+	@ValueSource(strings = { "x86_64", "arm64" })
+	void doesNotReportSymbolsTheLibraryKeepsToItself(String arch) throws IOException {
+		// A hidden symbol becomes a private extern, which the link leaves out of the defined external
+		// range the reader walks; a symbol with internal linkage never reaches it either.
+		assertThat(names(library(arch)), not(hasItem("_hidden_func")));
+		assertThat(names(library(arch)), not(hasItem("_internal_func")));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "arm64", "x86_64" })
-	void extractDylibDistinguishesWeakFromStrongSymbols(String arch) throws IOException {
-		Collection<ExportedSymbol> model = extract(fixture("weak-symbols/" + arch + "/libweak.dylib"));
-		assertThat(model, containsInAnyOrder(
-			strongMachOSymbol("_strong_func"),
-			strongMachOSymbol("_strong_var"),
-			weakMachOSymbol("_weak_func"),
-			weakMachOSymbol("_weak_var")
-		));
+	@ValueSource(strings = { "x86_64", "arm64" })
+	void reportsInstallName(String arch) throws IOException {
+		assertThat(library(arch).installNames(), contains("@rpath/libexports.dylib"));
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "arm64", "x86_64" })
-	void extractStaticArchiveReturnsStaticLibraryModel(String arch) throws IOException {
-		assertThat(() -> extract(fixture("static-archive/" + arch + "/libstatic.a")), throwsException(instanceOf(IllegalArgumentException.class)));
+	@CsvSource({ "x86_64, 16777223, 3", "arm64, 16777228, 0" })
+	void reportsCpuTypeAndSubType(String arch, int cpuType, int cpuSubType) throws IOException {
+		assertThat(library(arch).cpuTypes(), contains(cpuType));
+		assertThat(library(arch).cpuSubTypes(), contains(cpuSubType));
 	}
 
-	private static Path fixture(String relativePath) {
-		try {
-			return Paths.get(MachOAbiExtractorIntegrationTests.class
-				.getResource("/fixtures/" + relativePath).toURI());
-		} catch (Exception e) {
-			throw new RuntimeException("Fixture not found: " + relativePath
-				+ " — build it per the BUILD file", e);
-		}
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "arm64" })
+	void reportsNoExportedSymbolForLibraryThatExportsNothing(String arch) throws IOException {
+		MachOAbi abi = MachOAbi.read(fixture("no-exports/macho/" + arch + "/libnoexports.dylib"));
+
+		assertThat(abi.exports(), emptyIterable());
+		assertThat(abi.installNames(), contains("@rpath/libnoexports.dylib")); // read, it just offers nothing
+	}
+
+	@Test
+	void reportsEveryImageOfUniversalBinary() throws IOException {
+		MachOAbi abi = MachOAbi.read(fixture("library-exports/macho/universal/libexports.dylib"));
+
+		// A universal binary holds an image per architecture and the reader walks every one of them, so
+		// each part is reported once per image — the exported symbols included.
+		assertThat(abi.cpuTypes(), contains(CPU_TYPE_X86_64, CPU_TYPE_ARM64));
+		assertThat(abi.cpuSubTypes(), contains(CPU_SUBTYPE_X86_64_ALL, CPU_SUBTYPE_ARM64_ALL));
+		assertThat(abi.installNames(), contains("@rpath/libexports.dylib", "@rpath/libexports.dylib"));
+		assertThat(abi.exports(), containsInAnyOrder(
+			strong("_strong_func"), weak("_weak_func"), strong("_strong_var"), weak("_weak_var"), strong("_uses_internals"),
+			strong("_strong_func"), weak("_weak_func"), strong("_strong_var"), weak("_weak_var"), strong("_uses_internals")));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "x86_64", "arm64" })
+	void refusesStaticLibrary(String arch) {
+		// An archive carries "!<arch>" where a Mach-O image carries its own magic. A static library is
+		// snapshotted byte for byte rather than read for an ABI, so the reader never sees one.
+		assertThat(() -> MachOAbi.read(fixture("static-archive/macho/" + arch + "/libstatic.a")),
+			throwsException(instanceOf(IllegalArgumentException.class)));
+	}
+
+	private static List<String> names(MachOAbi abi) {
+		return abi.exports().stream().map(MachOAbi.Export::name).collect(Collectors.toList());
 	}
 }

@@ -1,14 +1,11 @@
 package dev.nokee.nativeplatform.tasks;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -17,34 +14,15 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
 /**
- * Integration tests for {@link CoffBlob}: the symbols an object imports, and the symbols an import library
- * exports. Fixtures live in src/test/resources/fixtures/object-imports/; see that directory's BUILD file
- * for the commands to produce them. 64-bit COFF C symbols carry no leading underscore.
+ * Integration tests for {@link CoffBlob}: the symbols an object imports, whether it is read on its own or
+ * as a member of a library. Fixtures live in src/test/resources/fixtures/object-imports/; see that
+ * directory's BUILD file for the commands to produce them. 64-bit COFF C symbols carry no leading
+ * underscore.
  */
 class CoffBlobIntegrationTests {
 	private static void blob(Path path, Consumer<? super CoffBlob> action) throws IOException {
 		try (FileChannel channel = FileChannel.open(path)) {
 			action.accept(CoffBlob.parse(new BSource(channel)));
-		}
-	}
-
-	private static List<String> importLib(Path path) throws IOException {
-		// TODO: Move this into utility class for listing all "export symbols" of a import library
-		//   Care must be taken that the archive may contain a mixed object list... but we can probably safely ignore this at the moment.
-		try (FileChannel channel = FileChannel.open(path)) {
-			ByteBuffer sig = ByteBuffer.allocate(4);
-			List<String> result = new ArrayList<>();
-			try (ArchiveBlob.ArchiveMembers members = ArchiveBlob.parse(new BSource(channel)).members()) {
-				for (ArchiveBlob.ArchiveMember member : members) {
-					member.file().read(sig.clear());
-					if (MicrosoftImportObjectBlob.isImportObjectMagic(sig.array())) {
-						try (MicrosoftImportObjectBlob blob = MicrosoftImportObjectBlob.parse(member.file())) {
-							result.add(blob.symbolName());
-						}
-					}
-				}
-			}
-			return result;
 		}
 	}
 
@@ -59,11 +37,6 @@ class CoffBlobIntegrationTests {
 				}
 			}
 		}
-	}
-
-	@Test
-	void readsExportSymbols() throws IOException {
-		assertThat(importLib(fixtureex("hello.lib")), containsInAnyOrder("_hello", "_bye"));
 	}
 
 	@ParameterizedTest
@@ -182,29 +155,6 @@ class CoffBlobIntegrationTests {
 	}
 
 	private static Path fixture(String arch, String fileName) {
-		try {
-			return Paths.get(CoffBlobIntegrationTests.class
-				.getResource("/fixtures/object-imports/coff/" + arch + "/" + fileName).toURI());
-		} catch (Exception e) {
-			throw new RuntimeException("Fixture not found for " + arch + " — build it per the BUILD file", e);
-		}
-	}
-
-	private static Path fixtureex(String fileName) {
-		try {
-			return Paths.get(CoffBlobIntegrationTests.class
-				.getResource("/fixtures/windows-import-lib/" + fileName).toURI());
-		} catch (Exception e) {
-			throw new RuntimeException("Fixture not found for " + "ddd" + " — build it per the BUILD file", e);
-		}
-	}
-
-	private static List<String> symbols(CoffBlob blob) {
-		assert blob instanceof CoffBlob.CoffObjectBlob;
-		List<String> result = new ArrayList<>();
-		for (CoffBlob.CoffSymbol symbol : ((CoffBlob.CoffObjectBlob) blob).symbols()) {
-			result.add(symbol.name());
-		}
-		return result;
+		return Fixtures.fixture("object-imports/coff/" + arch + "/" + fileName);
 	}
 }
