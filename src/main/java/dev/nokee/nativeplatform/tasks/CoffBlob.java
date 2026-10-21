@@ -358,7 +358,6 @@ abstract class CoffBlob {
 	private static ByteBuffer read(BSource source, long position, int length) {
 		ByteBuffer result = ByteBuffer.allocate(length).order(ByteOrder.LITTLE_ENDIAN);
 		int size = source.read(result, position);
-		System.out.println("READING " + size + " - position " + length);
 		source.read(result, position);
 		return result.limit(Math.max(size, 0));
 	}

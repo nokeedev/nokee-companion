@@ -119,26 +119,22 @@ public interface LinkAbiAware extends Task {
 						elf.visitSharedLib(ElfBlob.parse(new BSource(channel)), new ElfBinaryHasher.SonameAndExportVisitor() {
 							@Override
 							public void visitArchitecture(int arch) {
-								System.out.println("ARCH " + arch);
 								hasher.putInt(arch);
 							}
 
 							@Override
 							public void visitOsAbi(int osabi) {
-								System.out.println("OS ABI " + osabi);
 								hasher.putInt(osabi);
 							}
 
 							@Override
 							public void visitSoname(String soname) {
-								System.out.println("SONAME " + soname);
 								hasher.putString(soname);
 							}
 
 							@Override
 							public void visitExport(String name, int info, long size, String version, boolean defaultVersion) {
 								if (imports.contains(name)) {
-									System.out.println("export symbol '" + name + "' " + info + " -- " + size + " @ " + version + (defaultVersion ? " (default)" : ""));
 									hasher.putString(name);
 
 									// A versioned symbol binds its consumer to that version: the linker writes the
@@ -184,13 +180,11 @@ public interface LinkAbiAware extends Task {
 
 							@Override
 							public void visitAbiVersion(int abiversion) {
-								System.out.println("abiversion " + abiversion);
 								hasher.putInt(abiversion);
 							}
 
 							@Override
 							public void visitType(int type) {
-								System.out.println("type " + type);
 								hasher.putInt(type);
 							}
 						});
@@ -207,14 +201,12 @@ public interface LinkAbiAware extends Task {
 						macho.visitSharedLib(MachOBlob.parse(new BSource(channel)), new MachOBinaryHasher.ExportOrInstallNameVisitor() {
 							@Override
 							public void visitInstallName(String installName) {
-								System.out.println("Install name " + installName);
 								hasher.putString(installName);
 							}
 
 							@Override
 							public void visitExportSymbol(String name, boolean weakBinding) {
 								if (imports.contains(name)) {
-									System.out.println("SYMBOLE '" + name + " ' " + weakBinding);
 									hasher.putString(name);
 									hasher.putBoolean(weakBinding);
 								}
@@ -222,13 +214,11 @@ public interface LinkAbiAware extends Task {
 
 							@Override
 							public void visitCpuType(int cputype) {
-								System.out.println("CPUTYPE " + cputype);
 								hasher.putInt(cputype);
 							}
 
 							@Override
 							public void visitCpuSubType(int cpusubtype) {
-								System.out.println("CPU SUBTYPE " + cpusubtype);
 								hasher.putInt(cpusubtype);
 							}
 						});
@@ -247,7 +237,6 @@ public interface LinkAbiAware extends Task {
 							members.forEach(MicrosoftImportObjectBlob.onlyImportObjects(it -> {
 								String name = it.symbolName();
 								if (imports.contains(name)) {
-									System.out.println("WAT? '" + name + "' " + it.ordinalOrHint() + " -- " + it.type() + " -- " + it.version());
 									hasher.putString(name);
 									hasher.putInt(it.machine());
 									hasher.putInt(it.ordinalOrHint());
@@ -303,7 +292,6 @@ public interface LinkAbiAware extends Task {
 
 			@Override
 			protected void visitCoffObject(Path path, CoffBlob.CoffObjectBlob blob, Step1Visitor visitor) {
-				System.out.println("Visiting '" + path + "'");
 				coff.visitImports(blob, visitor::visitImport);
 			}
 
@@ -633,7 +621,6 @@ public interface LinkAbiAware extends Task {
 					files.accept(new Step1Visitor() {
 						@Override
 						public void visitImport(String name) {
-							System.out.println("Finding import: " + name);
 							imports.add(name);
 						}
 
