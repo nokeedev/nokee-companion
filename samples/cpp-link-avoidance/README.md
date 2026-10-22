@@ -49,7 +49,7 @@ BUILD SUCCESSFUL
 
 Notice `:app:linkDebug` is `UP-TO-DATE` — no re-link occurred even though `lib` was rebuilt.
 
-## Unused ABI Change (Link Avoidance Kicks In)
+## ABI Change (Re-link Required)
 
 We add a new exported function `farewell()` to `lib`, which changes its ABI.
 
@@ -66,9 +66,9 @@ $ ./gradlew :app:assemble --console=verbose
 > Task :lib:compileDebugCpp
 > Task :lib:linkDebug
 > Task :app:compileDebugCpp UP-TO-DATE
-> Task :app:linkDebug UP-TO-DATE
+> Task :app:linkDebug
 
 BUILD SUCCESSFUL
 ```
 
-Notice `:app:linkDebug` did not execute this time, the consumer is not using the new symbol.
+Notice `:app:linkDebug` executed this time — the new symbol required a fresh link.
