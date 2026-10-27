@@ -32,7 +32,7 @@ It narrows the snapshot to the library's <<linker-facing-representation,linker-f
 The build decides which kind you made.
 It compares that representation against the one from the last build.
 
-Link avoidance stays off until you turn on link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkAbiAware.java#L113[the link task's property].
+Link avoidance stays off until you turn on link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkTask.java#L30-L59[the link task's property].
 Overlinking avoidance is a separate feature, and it limits how far past the direct consumers a relink reaches.
 // TODO: add link to overlinking avoidance once written
 
@@ -123,7 +123,7 @@ The build then relinks as often as it would without link avoidance.
 While ruling out a stale link result, you may want link avoidance out of the way.
 Every byte change then forces another relink.
 The other reason to turn it off is a toolchain producing output the normalization does not fully cover.
-You can link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkAbiAware.java#L113[restore byte-for-byte snapshotting for all input libraries with a link task property].
+You can link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkTask.java#L30-L59[restore byte-for-byte snapshotting for all input libraries with a link task property].
 
 == From source to export table
 
