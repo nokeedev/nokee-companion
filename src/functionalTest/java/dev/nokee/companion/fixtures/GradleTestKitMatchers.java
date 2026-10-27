@@ -47,7 +47,7 @@ public final class GradleTestKitMatchers {
 	public enum TaskOutcome { SUCCESS, FAILED, UP_TO_DATE, SKIPPED, FROM_CACHE, NO_SOURCE }
 
 	/** An executed task. Opaque: only matchers in this class can read it. */
-	public static final class ExecutedTask {
+	public static final class ExecutedTask implements HasOutput {
 		private final String path;
 		private final TaskOutcome outcome;
 		private final BuildResult source;
@@ -66,7 +66,8 @@ public final class GradleTestKitMatchers {
 			return outcome;
 		}
 
-		private String output() {
+		@Override
+		public String output() {
 			// NOTE: runnerkit is used here only because it already parses per-task Gradle output.
 			// This is a temporary borrow to be extracted from the model later.
 			return dev.gradleplugins.runnerkit.BuildResult.from(source.getOutput()).task(path).getOutput();
@@ -74,7 +75,7 @@ public final class GradleTestKitMatchers {
 	}
 
 	/** The outcome of a completed build. Opaque: only matchers in this class can read it. */
-	public static final class ExecutedBuild {
+	public static final class ExecutedBuild implements HasOutput {
 		private final BuildResult source;
 
 		private ExecutedBuild(BuildResult source) {
@@ -113,6 +114,11 @@ public final class GradleTestKitMatchers {
 		private List<dev.gradleplugins.runnerkit.BuildResult.Failure> failures() {
 			// NOTE: runnerkit borrowed only for its Gradle output parser; to be extracted later.
 			return dev.gradleplugins.runnerkit.BuildResult.from(source.getOutput()).getFailures();
+		}
+
+		@Override
+		public String output() {
+			return source.getOutput();
 		}
 	}
 
@@ -254,10 +260,14 @@ public final class GradleTestKitMatchers {
 		};
 	}
 
-	public static Matcher<ExecutedTask> output(Matcher<? super String> matcher) {
-		return new FeatureMatcher<ExecutedTask, String>(matcher, "a task with output", "output") {
+	public interface HasOutput {
+		String output();
+	}
+
+	public static Matcher<HasOutput> output(Matcher<? super String> matcher) {
+		return new FeatureMatcher<HasOutput, String>(matcher, "a task with output", "output") {
 			@Override
-			protected String featureValueOf(ExecutedTask actual) {
+			protected String featureValueOf(HasOutput actual) {
 				return actual.output();
 			}
 		};

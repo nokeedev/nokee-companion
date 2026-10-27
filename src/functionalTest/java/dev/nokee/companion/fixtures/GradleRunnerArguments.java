@@ -52,6 +52,10 @@ public class GradleRunnerArguments implements Iterable<String> {
 		return new GradleRunnerArguments(tasks, gradleUserHomeDirectory, additionalArgs, deprecationChecks, welcomeMessage, buildCache, stacktrace, Logging.LIFECYCLE, configurationCache);
 	}
 
+	public GradleRunnerArguments withGradleProperty(String propName, Object value) {
+		return append("-P" + propName + "=" + value);
+	}
+
 	private enum Logging { LIFECYCLE, INFO, QUIET }
 	//endregion
 

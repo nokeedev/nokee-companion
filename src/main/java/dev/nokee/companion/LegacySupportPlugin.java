@@ -6,7 +6,9 @@ import org.gradle.api.Project;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.PluginAware;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
+import org.gradle.api.tasks.Nested;
 
 import javax.inject.Inject;
 import java.util.LinkedHashSet;
@@ -71,6 +73,23 @@ import java.util.Set;
 		FeatureFlagsProblemReporter.forProject(project).report(feature.allKnownFeatureNames());
 	}
 
+	/*private*/ static abstract /*final*/ class FeatureFlags {
+		private final ProviderFactory providers;
+
+		@Inject
+		public FeatureFlags(ProviderFactory providers) {
+			this.providers = providers;
+		}
+
+		public Provider<Boolean> forName(String featureName) {
+			return providers.gradleProperty("dev.nokee.native-companion." + featureName + ".enabled").map(Boolean::valueOf);
+		}
+
+		public Provider<Boolean> allFeatures() {
+			return providers.gradleProperty("dev.nokee.native-companion.all-features.enabled").map(Boolean::valueOf);
+		}
+	}
+
 	/*private*/ static abstract /*final*/ class Extension implements NativeCompanionExtension {
 		private final Plugins<Project> plugins;
 
@@ -79,28 +98,39 @@ import java.util.Set;
 			this.plugins = Plugins.forProject(project);
 		}
 
+		@Nested
+		protected abstract FeatureFlags getFeatureFlags();
+
 		@Override
 		public void enableFeaturePreview(String featureName) {
-			plugins.apply("native-companion.features." + featureName);
+			final String pluginId = "native-companion.features." + featureName;
+			if (Extension.class.getClassLoader().getResource("META-INF/gradle-plugins/" + pluginId + ".properties") == null) {
+				throw new RuntimeException("The feature '" + featureName + "' is not known by the native-companion plugin."
+					+ "\n\tSee https://github.com/nokeedev/nokee-companion/blob/main/native-companion-plugin.md#features for more information");
+			}
+
+			boolean enabled = getFeatureFlags().forName(featureName).getOrElse(true);
+			if (enabled) {
+				plugins.apply(pluginId);
+			}
 		}
 	}
 
 	/*private*/ static abstract /*final*/ class FeaturePreviews {
 		private final Set<String> knownFeatureNames = new LinkedHashSet<>();
 		private final NativeCompanionExtension extension;
-		private final ProviderFactory providers;
 
 		@Inject
-		public FeaturePreviews(NativeCompanionExtension extension, ProviderFactory providers) {
+		public FeaturePreviews(NativeCompanionExtension extension) {
 			this.extension = extension;
-			this.providers = providers;
 		}
+
+		@Nested
+		protected abstract FeatureFlags getFeatureFlags();
 
 		public void apply(String featureName) {
 			knownFeatureNames.add(featureName);
-			boolean enabled = providers.gradleProperty("dev.nokee.native-companion." + featureName + ".enabled")
-				.orElse(providers.gradleProperty("dev.nokee.native-companion.all-features.enabled"))
-				.map(Boolean::valueOf).getOrElse(false);
+			boolean enabled = getFeatureFlags().forName(featureName).orElse(getFeatureFlags().allFeatures()).getOrElse(false);
 			if (enabled) {
 				extension.enableFeaturePreview(featureName);
 			}
