@@ -295,11 +295,11 @@ class LinkAvoidanceFunctionalTests {
 			build.rootProject(project -> {
 				project.append(staticImportClass(OperatingSystem.class));
 				project.append(groovyDsl("""
-					tasks.register('link', Class.forName('%s')) {
+					tasks.register('link', %s) {
 						source.from(tasks.named('compile').flatMap { it.objectFileDir }.map { it.asFileTree.matching { include('**/*.o', '**/*.obj') } })
 						linkedFile = layout.buildDirectory.file(current().getExecutableName('out/main/main'))
 					}
-				""".formatted("dev.nokee.nativeplatform.tasks.LinkExecutableTask")));
+				""".formatted("dev.nokee.nativeplatform.tasks.LinkTask.forExecutable()")));
 			});
 		}
 
@@ -366,7 +366,7 @@ class LinkAvoidanceFunctionalTests {
 		void setup() {
 			build.rootProject( project -> {
 				project.append(groovyDsl("""
-					tasks.register('link', Class.forName('%s')) {
+					tasks.register('link', %s) {
 						source.from(tasks.named('compile').flatMap { it.objectFileDir }.map { it.asFileTree.matching { include('**/*.o', '**/*.obj') } })
 						linkedFile = layout.buildDirectory.file(current().getSharedLibraryName('out/main/main'))
 
@@ -375,7 +375,7 @@ class LinkAvoidanceFunctionalTests {
 						}
 //						installName = targetPlatform.zip(linkedFile.locationOnly.map { it.asFile.name }) { (platform, installName) -> platform.operatingSystem.isMacOsX() ? null : installName }
 					}
-				""".formatted("dev.nokee.nativeplatform.tasks.LinkSharedLibraryTask")));
+				""".formatted("dev.nokee.nativeplatform.tasks.LinkTask.forSharedLibrary()")));
 			});
 		}
 	}
