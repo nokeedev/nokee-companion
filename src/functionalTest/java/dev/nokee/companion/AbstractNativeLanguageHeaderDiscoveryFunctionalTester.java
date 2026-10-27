@@ -6,7 +6,6 @@ import dev.nokee.commons.fixtures.GradleTaskUnderTestExtension;
 import dev.nokee.commons.fixtures.TaskUnderTest;
 import dev.nokee.commons.sources.GradleBuildElement;
 import dev.nokee.companion.fixtures.GradleRunnerArguments;
-import dev.nokee.companion.fixtures.GradleTestKitMatchers.ExecutedBuild;
 import org.apache.commons.io.FileUtils;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
@@ -20,7 +19,8 @@ import java.util.Arrays;
 
 import static dev.nokee.companion.fixtures.GradleTestKitMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 
 @ExtendWith({GradleProjectExtension.class, GradleTaskUnderTestExtension.class})
 public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
@@ -77,6 +77,25 @@ public interface AbstractNativeLanguageHeaderDiscoveryFunctionalTester {
 		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/a.cpp")));
 		assertThat(result.task(taskUnderTest), output(containsString("/src/main/cpp/b.cpp")));
 		assertThat(result.task(taskUnderTest), not(output(containsString("/src/main/cpp/c.cpp"))));
+	}
+
+	@Test
+	default void discoverConsistentHeaderGraphOnDuplicatedHeaders(TaskUnderTest taskUnderTest, @TempDir Path testDirectory, @GradleProject("project-for-gradle-34152-ex3") GradleBuildElement project) throws IOException {
+		GradleBuildElement build = project.writeToDirectory(testDirectory);
+		GradleRunner runner = GradleRunner.create().withProjectDir(build.getLocation().toFile()).withPluginClasspath().forwardOutput();
+		GradleRunnerArguments args = GradleRunnerArguments.create();
+
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
+
+		Files.write(build.file("src/main/headers/c.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
+		assertThat(succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList())).task(taskUnderTest), not(skipped()));
+
+		// align b/c.h with c.h (could have reverted c.h)
+		Files.write(build.file("src/main/headers/b/c.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
+		assertThat(theBuild(runner.withArguments(args.withTasks(taskUnderTest).toList())), becomesUpToDate());
+
+		Files.write(build.file("src/main/headers/b/c.h"), Arrays.asList("", "// some new lines", ""), StandardOpenOption.APPEND);
+		assertThat(succeeds(runner.withArguments(args.withTasks(taskUnderTest).toList())).task(taskUnderTest), not(skipped()));
 	}
 
 	@Test

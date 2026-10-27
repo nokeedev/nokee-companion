@@ -17,6 +17,8 @@
 package dev.nokee.companion.features;
 
 import org.gradle.internal.hash.HashCode;
+import org.gradle.internal.hash.Hasher;
+import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.vfs.FileSystemAccess;
 import org.gradle.language.nativeplatform.internal.Include;
 import org.gradle.language.nativeplatform.internal.IncludeDirectives;
@@ -103,6 +105,14 @@ class IncrementalCompileFilesFactory {
 		}
 	}
 
+	// Node identity for include edges
+	private static HashCode nodeIdOf(File file, HashCode contentHash) {
+		Hasher hasher = Hashing.newHasher();
+		hasher.putHash(contentHash);
+		hasher.putString(file.getParentFile().getAbsolutePath());
+		return hasher.hash();
+	}
+
 	private class DefaultIncrementalCompileSourceProcessor implements IncrementalCompileSourceProcessor {
 		private final CompilationState previous;
 		private final BuildableCompilationState current = new BuildableCompilationState();
@@ -180,7 +190,7 @@ class IncrementalCompileFilesFactory {
 			// Check each unique edge in the include file graph
 			Map<HashCode, File> includes = new HashMap<HashCode, File>(edgesOf(previousState).size());
 			Set<File> headers = new HashSet<File>();
-			includes.put(fileHash, sourceFile);
+			includes.put(nodeIdOf(sourceFile, fileHash), sourceFile);
 			for (IncludeFileEdge includeFileEdge : edgesOf(previousState)) {
 				File includedFrom = includeFileEdge.getIncludedBy() != null ? includes.get(includeFileEdge.getIncludedBy()) : null;
 				SourceIncludesResolver.IncludeFile includeFile = sourceIncludesResolver.resolveInclude(includedFrom, includeFileEdge.getIncludePath());
@@ -188,8 +198,8 @@ class IncrementalCompileFilesFactory {
 					// Include file not found (but previously was found)
 					return false;
 				}
-				HashCode hash = includeFile.getContentHash();
-				if (!hash.equals(includeFileEdge.getResolvedTo())) {
+				HashCode nodeId = nodeIdOf(includeFile.getFile(), includeFile.getContentHash());
+				if (!nodeId.equals(includeFileEdge.getResolvedTo())) {
 					// Include file changed
 					return false;
 				}
@@ -197,7 +207,7 @@ class IncrementalCompileFilesFactory {
 					// Collect for later, do not add until the graph is known to have not changed
 					headers.add(includeFile.getFile());
 				}
-				includes.put(hash, includeFile.getFile());
+				includes.put(nodeId, includeFile.getFile());
 			}
 			existingHeaders.addAll(headers);
 			return true;
@@ -253,7 +263,7 @@ class IncrementalCompileFilesFactory {
 					}
 					includeVisitResult.collectDependencies(includedFileDirectives);
 					included.add(includeVisitResult);
-					edges.add(new IncludeFileEdge(includeFile.getPath(), includeFile.isQuotedInclude() ? newHash : null, includeFile.getContentHash()));
+					edges.add(new IncludeFileEdge(includeFile.getPath(), includeFile.isQuotedInclude() ? nodeIdOf(file, newHash) : null, nodeIdOf(includeFile.getFile(), includeFile.getContentHash())));
 				}
 			}
 

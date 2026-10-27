@@ -421,6 +421,64 @@ class CppCompileTaskFunctionalTests implements AbstractNativeLanguageCompilation
 		return build;
 	}
 
+	/*
+	s.cpp -> a.h -> "c.h"
+	s.cpp -> b/a.h -> "c.h"
+
+	side-by-side to s.cpp: a.h, c.h
+	side-by-side in b/: a.h, c.h
+
+	both a.h and c.h are duplicate
+	 */
+	@GradleProject("project-for-gradle-34152-ex3")
+	public static GradleBuildElement makeProjectForGradle34152Ex3() throws IOException {
+		GradleBuildElement build = makeEmptyProject();
+		Files.write(build.file("src/main/cpp/a.cpp"), Arrays.asList(
+			"#include \"a.h\"",
+			"#include \"b/a.h\""
+		));
+
+		Files.write(build.file("src/main/headers/a.h"), Arrays.asList(
+			"// a.h and b/a.h have exact same content on purpose",
+			"#ifndef A_H_",
+			"#define A_H_",
+			"#include \"c.h\"",
+			"int a() { return 1; }",
+			"#endif"
+		));
+		Files.write(build.file("src/main/headers/b/a.h"), Arrays.asList(
+			"// a.h and b/a.h have exact same content on purpose",
+			"#ifndef A_H_",
+			"#define A_H_",
+			"#include \"c.h\"",
+			"int a() { return 1; }",
+			"#endif"
+		));
+		Files.write(build.file("src/main/headers/c.h"), Arrays.asList(
+			"// c.h and b/c.h have exact same content on purpose",
+			"#ifndef A_H_",
+			"#define A_H_",
+			"int c() { return 1; }",
+			"#endif"
+		));
+		Files.write(build.file("src/main/headers/b/c.h"), Arrays.asList(
+			"// c.h and b/c.h have exact same content on purpose",
+			"#ifndef A_H_",
+			"#define A_H_",
+			"int c() { return 1; }",
+			"#endif"
+		));
+
+		build.getBuildFile().append(groovyDsl("""
+			subject.configure {
+				source(files('src/main/cpp').asFileTree)
+				includes.from('src/main/headers')
+			}
+		"""));
+
+		return build;
+	}
+
 	/* dot header graph
 	s1.cpp -> a.h -> c.h
 	s1.cpp -> b.h -> dir/a.h -> [dir/]c.h
