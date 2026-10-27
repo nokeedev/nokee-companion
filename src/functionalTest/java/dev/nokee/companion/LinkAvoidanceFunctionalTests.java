@@ -980,8 +980,8 @@ class LinkAvoidanceFunctionalTests {
 					}
 					toolChains.withType(Gcc) {
 						target('linux:i686') {
-							cppCompiler.executable = 'i686-linux-gnu-g++-10'
-							linker.executable = 'i686-linux-gnu-gcc-10'
+							cppCompiler.executable = 'i686-linux-gnu-g++-16'
+							linker.executable = 'i686-linux-gnu-gcc-16'
 						}
 					}
 					def platform = providers.gradleProperty('arch').map {
