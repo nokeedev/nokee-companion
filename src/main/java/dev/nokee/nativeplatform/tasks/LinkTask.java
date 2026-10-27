@@ -2,6 +2,8 @@ package dev.nokee.nativeplatform.tasks;
 
 import org.gradle.api.Action;
 import org.gradle.api.Task;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
 import org.gradle.nativeplatform.tasks.LinkExecutable;
 import org.gradle.nativeplatform.tasks.LinkSharedLibrary;
@@ -23,6 +25,37 @@ public interface LinkTask extends Task {
 	 */
 	default void options(Action<? super NativeLinkOptions> action) {
 		action.execute(getOptions());
+	}
+
+	/**
+	 * {@return the property to configure what this task observes about its link libraries}
+	 */
+	@Internal
+	Property<LibrarySensitivity> getLibrarySensitivity();
+
+	/**
+	 * Which part of a library a link task observes.
+	 * A library change outside what the task observes leaves the task up-to-date.
+	 */
+	enum LibrarySensitivity {
+		/**
+		 * The whole library file, byte-for-byte.
+		 */
+		CONTENT,
+
+		/**
+		 * The library's linker-facing representation.
+		 * See the user manual for more information.
+		 */
+		LINK_ABI;
+
+		LinkAbiAware.AbiSnapshotter toSnapshotter() {
+			switch (this) {
+				case CONTENT: return LinkAbiAware.AbiSnapshotter.NONE;
+				case LINK_ABI: return LinkAbiAware.AbiSnapshotter.FULL_ABI;
+				default: throw new UnsupportedOperationException("unhandled library sensitivity '" + this + "'");
+			}
+		}
 	}
 
 	/**

@@ -28,8 +28,7 @@ import java.util.Set;
 import static dev.nokee.nativeplatform.tasks.ElfBlob.*;
 import static dev.nokee.nativeplatform.tasks.MachOBlob.*;
 
-// This class is considered private for the moment
-public interface LinkAbiAware extends Task {
+interface LinkAbiAware extends Task {
 	@Internal
 	Property<LinkAbiExtension> getExt_linkAbi();
 

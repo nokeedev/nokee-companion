@@ -1,10 +1,8 @@
 package dev.nokee.companion.features;
 
-import dev.nokee.nativeplatform.tasks.LinkAbiAware;
 import dev.nokee.nativeplatform.tasks.LinkTask;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.TaskContainer;
 
 import javax.inject.Inject;
@@ -17,6 +15,6 @@ abstract class LinkAvoidanceFeature implements Plugin<Project> {
 
 	@Override
 	public void apply(Project project) {
-		getTasks().withType(LinkAbiAware.class).configureEach(task -> task.getLinkAbi().getLinkAbiSnapshotting().set(LinkAbiAware.AbiSnapshotter.FULL_ABI));
+		getTasks().withType(LinkTask.class).configureEach(task -> task.getLibrarySensitivity().set(LinkTask.LibrarySensitivity.LINK_ABI));
 	}
 }

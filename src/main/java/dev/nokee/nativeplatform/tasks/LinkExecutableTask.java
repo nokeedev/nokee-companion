@@ -14,6 +14,7 @@ import java.util.Collections;
 	@Inject
 	public LinkExecutableTask() {
 		linkSuperClassLibsField();
+		getLinkAbi().getLinkAbiSnapshotting().set(getLibrarySensitivity().orElse(LibrarySensitivity.CONTENT).map(LinkTask.LibrarySensitivity::toSnapshotter));
 	}
 
 	//region libs override
