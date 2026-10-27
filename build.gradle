@@ -12,7 +12,7 @@ plugins {
 }
 
 group = 'dev.nokee'
-version = '1.0-milestone-56'
+version = '1.0-milestone-57'
 description = 'Quality-of-life enhancements for Gradle core native plugins.'
 
 repositories {
@@ -44,7 +44,8 @@ gradlePlugin {
 			implementationClass = 'dev.nokee.companion.LegacySupportPlugin'
 			displayName = 'Nokee Native Companion'
 			description = 'Provides quality-of-life enhancements for Gradle core native plugins.'
-			tags = ['c++', 'cpp', 'native', 'gradle-native', 'cpp-library', 'cpp-application']
+			// See https://github.com/gradle/plugin-portal-requests/issues/321 for the reason why `c++` tag name is commented.
+			tags = [/*'c++', */'cpp', 'native', 'gradle-native', 'cpp-library', 'cpp-application']
 		}
 	}
 
