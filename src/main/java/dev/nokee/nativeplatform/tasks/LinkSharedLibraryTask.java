@@ -1,8 +1,11 @@
 package dev.nokee.nativeplatform.tasks;
 
+import dev.nokee.nativeplatform.tasks.internal.WorkListenerAware;
+import dev.nokee.work.WorkCompletionListener;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.ListProperty;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.Internal;
 import org.gradle.nativeplatform.internal.LinkerSpec;
 import org.gradle.process.CommandLineArgumentProvider;
@@ -10,7 +13,7 @@ import org.gradle.process.CommandLineArgumentProvider;
 import javax.inject.Inject;
 import java.util.Collections;
 
-/*private*/ abstract /*final*/ class LinkSharedLibraryTask extends org.gradle.nativeplatform.tasks.LinkSharedLibrary implements LinkAbiAware, LinkTask {
+/*private*/ abstract /*final*/ class LinkSharedLibraryTask extends org.gradle.nativeplatform.tasks.LinkSharedLibrary implements LinkAbiAware, LinkTask, WorkListenerAware {
 	@Inject
 	public LinkSharedLibraryTask() {
 		linkSuperClassLibsField();
@@ -72,8 +75,18 @@ import java.util.Collections;
 	}
 
 	@Override
+	public Provider<LinkTask.WorkItem> getWorkPlan() {
+		return getSource().getElements().zip(getLibs().getElements(), (source, libs) -> LinkSupport.workPlan(this, createLinkerSpec()));
+	}
+
+	@Override
 	protected void link() {
-		super.link();
+		WorkCompletionListener listener = workListener();
+		if (listener == null) {
+			super.link();
+		} else {
+			LinkSupport.link(this, getDeleter(), getOperationLoggerFactory(), createLinkerSpec(), listener);
+		}
 		getLinkAbi().close();
 	}
 }

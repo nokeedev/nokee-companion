@@ -57,6 +57,13 @@ The companion plugin replace the following task:
 
   Replace **only** `CppBinary#compileTask`.
   The new task has several improvements, [per-source options]({ref-javadoc-CppCompileTask-source}), incremental after failure, compiler argument providers, properties for optimized, debuggable, position independent code and macros.
+  Supports the [work plan](docs/manual/work-observability.adoc#work-plan) and the [work completion listener](docs/manual/work-observability.adoc#work-completion-listener), with a work item for each source file it compiles.
+
+* `link<Variant>` - [LinkTask]({ref-javadoc-LinkTask})
+
+  Replace the link task of each executable and shared library binary.
+  The new task can snapshot dependent shared libraries by their linker-facing representation, see the [link-avoidance feature](#feature-link-avoidance).
+  Supports the [work plan](docs/manual/work-observability.adoc#work-plan) and the [work completion listener](docs/manual/work-observability.adoc#work-completion-listener), with a single work item producing the linked binary.
 
 ### Lifecycle Tasks
 
@@ -307,6 +314,7 @@ Each `CppBinary` has their respective `TaskProvider`'s configure method to avoid
 [ref-javadoc-CppCompileTask-source]: TODO
 [ref-javadoc-TestedComponentDependency]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/TestedComponentDependency.java
 [ref-javadoc-CppCompile]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/language/cpp/tasks/CppCompile.java
+[ref-javadoc-LinkTask]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/nativeplatform/tasks/LinkTask.java
 [ref-javadoc-CompileTasks]: https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/companion/CompileTasks.java
 [ref-sample-cpp-with-c-sources]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-with-c-sources
 [ref-sample-cpp-with-assembly-sources]: https://github.com/nokeedev/nokee-companion/tree/main/samples/cpp-with-assembly-sources

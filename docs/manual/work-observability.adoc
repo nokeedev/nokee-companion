@@ -1,0 +1,56 @@
+= Work Observability
+
+Gradle tracks a task by its inputs and outputs.
+The individual pieces of work making up the task aren't observable, such as each compilation a compile task executes.
+
+A task that supports work observability describes its work as a <<work-plan,work plan>>, which is a list of _work items_.
+Each work item is one piece of that work, written as the result it produces.
+For example, a compile task could describe each compilation as a work item, with its source file and the options it uses.
+The plan stays the same when the task changes how it performs the compilations.
+Since the work differs from one task to another, each task decides what its work items contain.
+
+The plan lists every work item the task is responsible for.
+How much of the plan the task executes depends on what changed since the last build.
+For example, a task that is up-to-date or restored from the build cache executes none of it.
+
+While the task runs, it can emit <<work-completion-listener,work completion events>>.
+Each event holds a work item along with its outcome, so a listener can tell which part of the plan the task executed and how it went.
+
+A task can support the work plan and the work completion events independently.
+
+[#work-plan]
+== Work plan
+
+A work plan holds all the work a task would do on a clean build, even when the task is up-to-date.
+
+Computing a plan doesn't execute the task, so the task's outputs and up-to-date state stay as they were.
+Some of the task's inputs can come from other tasks.
+Those tasks must run first to compute the plan correctly.
+The plan carries those dependencies.
+
+The plan is for tools that want to know a build's work without having Gradle do it.
+An IDE is one example, and so is a tool that performs the work items on its own.
+See the link:../../samples/cpp-compilation-database/README.md[compilation database] and link:../../samples/cpp-record-replay-via-work-plan/README.md[record and replay] samples.
+
+Whether a task supports the work plan, and what its work items contain, is part of that task's documentation.
+The task type marks the method returning its plan with the `@WorkPlan` annotation.
+
+[#work-completion-listener]
+== Work completion listener
+
+A work completion listener receives an event each time a task finishes one of its work items.
+Together with Gradle's link:https://docs.gradle.org/current/javadoc/org/gradle/tooling/events/OperationCompletionListener.html[`OperationCompletionListener`], which reports each finished task, you get a full view of how your tasks execute.
+Each event has an outcome of success or failure, so the task also emits an event for a work item that fails.
+
+Events come only from work the task executes.
+After a small change, an incremental task can execute a single work item and emit one event.
+
+Listening is opt-in.
+The build registers its listener as a shared build service under a link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/work/WorkCompletionListener.java#L34[well-known name], and each task that emits work completion events looks it up by that name.
+Without a registered listener, the tasks emit no events.
+A task type that emits these events carries the `@EmitsWorkCompletionEvents` annotation.
+
+For an example of registering a listener, see the link:https://github.com/nokeedev/nokee-companion/blob/main/src/main/java/dev/nokee/work/WorkCompletionListener.java[`WorkCompletionListener`] reference and the link:../../samples/cpp-log-executed-commands-via-work-listener/README.md[log executed commands] sample.
+
+Tasks can run in parallel, and one task can execute several work items at the same time.
+The listener receives events from many threads at once.

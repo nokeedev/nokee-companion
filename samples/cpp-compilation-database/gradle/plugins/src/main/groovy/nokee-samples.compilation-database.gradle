@@ -1,0 +1,42 @@
+import groovy.json.JsonOutput
+
+// Create a task that writes each work item of a compile task as a compilation database entry
+abstract class GenerateCompilationDatabase extends DefaultTask {
+	@Input
+	abstract ListProperty<Object /*CppCompile.WorkItem*/> getWorkPlan()
+
+	@OutputFile
+	abstract RegularFileProperty getDatabaseFile()
+
+	@TaskAction
+	void generate() {
+		def entries = workPlan.get().collect { workItem ->
+			// GCC and Clang name the object file after -o
+			def output = workItem.arguments[workItem.arguments.indexOf('-o') + 1]
+			[
+				directory: workItem.workingDirectory.absolutePath,
+				file: workItem.arguments.find { !it.startsWith('-') && !it.startsWith('@') && it != output },
+				output: output,
+				// Replace each options file with the arguments it holds
+				arguments: [workItem.executable] + workItem.arguments.collectMany { argument ->
+					argument.startsWith('@') ? optionsFileArguments(workItem.files[new File(argument.substring(1)).absolutePath]) : [argument]
+				}
+			]
+		}
+		databaseFile.get().asFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(entries))
+	}
+
+	// An options file holds one argument per line, quoted and escaped
+	static List<String> optionsFileArguments(String content) {
+		return content.readLines().findAll().collect { line ->
+			def argument = line.startsWith('"') && line.endsWith('"') ? line[1..-2] : line
+			argument.replaceAll(/\\(.)/, '$1')
+		}
+	}
+}
+
+// Register the task with the work plan of the debug compile task as input
+tasks.register('compilationDatabase', GenerateCompilationDatabase) {
+	workPlan.set(tasks.named('compileDebugCpp').flatMap { it.workPlan })
+	databaseFile = layout.projectDirectory.file('compile_commands.json')
+}

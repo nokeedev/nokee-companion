@@ -8,6 +8,11 @@ import dev.nokee.commons.gradle.tasks.options.SourceOptionsAware;
 import dev.nokee.language.cpp.tasks.CppCompile;
 import dev.nokee.language.nativebase.tasks.options.NativeCompileOptions;
 import dev.nokee.language.nativebase.tasks.options.PreprocessorOptions;
+import dev.nokee.nativeplatform.tasks.internal.WorkCompletionNotifier;
+import dev.nokee.nativeplatform.tasks.internal.WorkListenerAware;
+import dev.nokee.nativeplatform.tasks.internal.WorkListenerSupport;
+import dev.nokee.nativeplatform.tasks.internal.WorkPlanSupport;
+import dev.nokee.work.WorkCompletionListener;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -26,7 +31,6 @@ import org.gradle.internal.operations.logging.BuildOperationLogger;
 import org.gradle.internal.os.OperatingSystem;
 import org.gradle.internal.vfs.FileSystemAccess;
 import org.gradle.language.base.internal.compile.Compiler;
-import org.gradle.language.base.internal.compile.VersionAwareCompiler;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.plugins.CppBasePlugin;
 import org.gradle.language.nativeplatform.internal.incremental.CompilationStateCacheFactory;
@@ -65,7 +69,7 @@ import static dev.nokee.companion.features.ReflectionUtils.*;
 import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 @CacheableTask
-/*private*/ abstract /*final*/ class CppCompileTask extends CppCompile implements OptionsAware, SourceOptionsAware<NativeCompileOptions> {
+/*private*/ abstract /*final*/ class CppCompileTask extends CppCompile implements OptionsAware, SourceOptionsAware<NativeCompileOptions>, WorkListenerAware {
 	public static abstract class DefaultTaskOptions implements dev.nokee.commons.gradle.tasks.options.Options, CppCompile.Options {
 		private ListProperty<String> compilerArgs;
 		private SourceOptionsLookup allOptions;
@@ -204,32 +208,71 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 	protected void compile(InputChanges inputs) {
 		BuildOperationLogger operationLogger = this.getOperationLoggerFactory().newOperationLogger(this.getName(), this.getTemporaryDir());
 		IsolatableBuildOperationLogger.newLogger(operationLogger, logger -> {
-			NativeCompileSpec spec = createCompileSpec();
-			spec.setTargetPlatform(getTargetPlatform().get());
-			spec.setTempDir(getTemporaryDir());
-			spec.setObjectFileDir(getObjectFileDir().get().getAsFile());
-			spec.include(getIncludes());
-			spec.systemInclude(getSystemIncludes());
-			spec.source(getSource());
-			spec.setMacros(getMacros());
-			spec.args(getCompilerArgs().get());
-			for (CommandLineArgumentProvider argProvider : getOptions().getCompilerArgumentProviders().get()) {
-				argProvider.asArguments().forEach(spec.getArgs()::add);
-			}
-			spec.setPositionIndependentCode(isPositionIndependentCode());
-			spec.setDebuggable(isDebuggable());
-			spec.setOptimized(isOptimized());
-			spec.setIncrementalCompile(inputs.isIncremental());
-			spec.setOperationLogger(logger);
+			NativeCompileSpec spec = newCompileSpec(logger, inputs.isIncremental());
 
-			this.configureSpec(spec);
-
-			NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) getToolChain().get();
-			NativePlatformInternal nativePlatform = (NativePlatformInternal) getTargetPlatform().get();
-			PlatformToolProvider platformToolProvider = nativeToolChain.select(nativePlatform);
-
-			setDidWork(doCompile(spec, platformToolProvider).getDidWork());
+			setDidWork(doCompile(spec, platformToolProvider()).getDidWork());
 		});
+	}
+
+	private NativeCompileSpec newCompileSpec(BuildOperationLogger operationLogger, boolean incremental) {
+		NativeCompileSpec spec = createCompileSpec();
+		spec.setTargetPlatform(getTargetPlatform().get());
+		spec.setTempDir(getTemporaryDir());
+		spec.setObjectFileDir(getObjectFileDir().get().getAsFile());
+		spec.include(getIncludes());
+		spec.systemInclude(getSystemIncludes());
+		spec.source(getSource());
+		spec.setMacros(getMacros());
+		spec.args(getCompilerArgs().get());
+		for (CommandLineArgumentProvider argProvider : getOptions().getCompilerArgumentProviders().get()) {
+			argProvider.asArguments().forEach(spec.getArgs()::add);
+		}
+		spec.setPositionIndependentCode(isPositionIndependentCode());
+		spec.setDebuggable(isDebuggable());
+		spec.setOptimized(isOptimized());
+		spec.setIncrementalCompile(incremental);
+		spec.setOperationLogger(operationLogger);
+
+		this.configureSpec(spec);
+		return spec;
+	}
+
+	@Override
+	public Provider<List<WorkItem>> getWorkPlan() {
+		return getObjects().fileCollection().from(getSource(), getIncludes(), getSystemIncludes()).getElements().map(ignored -> computeWorkPlan());
+	}
+
+	private List<WorkItem> computeWorkPlan() {
+		if (getSource().isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		NativeCompileSpec spec = newCompileSpec(WorkPlanSupport.discardingOperationLogger(getTemporaryDir()), false);
+		PlatformToolProvider platformToolProvider = platformToolProvider();
+
+		List<NativeCompileSpec> specs = new ArrayList<>();
+		specs.add(spec);
+		SourceOptions<NativeCompileOptions> allOptions = getAllSourceOptions().getOrNull();
+		if (allOptions != null) {
+			for (NativeCompileSpec bucketSpec : newSourceSpecProvider(spec, allOptions).forFiles(spec.getSourceFiles())) {
+				spec.getSourceFiles().removeAll(bucketSpec.getSourceFiles());
+				specs.add(bucketSpec);
+			}
+		}
+
+		WorkPlanSupport.Recorder<WorkItem> recorder = new WorkPlanSupport.Recorder<>(CompileWorkItem::new);
+		for (NativeCompileSpec it : specs) {
+			if (!it.getSourceFiles().isEmpty()) {
+				recorder.capture(platformToolProvider.newCompiler(Cast.<Class<NativeCompileSpec>>uncheckedCast(it.getClass())), it);
+			}
+		}
+		return recorder.getItems();
+	}
+
+	private PlatformToolProvider platformToolProvider() {
+		NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) getToolChain().get();
+		NativePlatformInternal nativePlatform = (NativePlatformInternal) getTargetPlatform().get();
+		return nativeToolChain.select(nativePlatform);
 	}
 
 	// Copied from AbstractNativeSourceCompileTask#doCompile with support for per-source options
@@ -241,71 +284,22 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		SourceOptions<NativeCompileOptions> allOptions = getAllSourceOptions().getOrNull();
 		if (allOptions != null) {
-			PerSourceCompiler.SourceSpecProvider<T> sourceSpecProvider = new PerSourceCompiler.SourceSpecProvider<T>() {
-				@Override
-				public Iterable<T> forFiles(Collection<File> files) {
-					List<T> result = new ArrayList<>();
-					for (SourceOptions.Group<NativeCompileOptions> groupedOptions : allOptions.forFiles(getObjects().fileCollection().from(files).getAsFileTree()).groupedByOptions()) {
-						NativeCompileSpec newSpec = createCompileSpec();
-
-						//region Copy default spec to new spec
-						newSpec.setTargetPlatform(spec.getTargetPlatform());
-						newSpec.setTempDir(spec.getTempDir());
-						newSpec.getArgs().addAll(spec.getArgs());
-						newSpec.getSystemArgs().addAll(spec.getSystemArgs());
-						newSpec.setOperationLogger(spec.getOperationLogger());
-
-						newSpec.setObjectFileDir(spec.getObjectFileDir());
-						newSpec.getIncludeRoots().addAll(spec.getIncludeRoots());
-						newSpec.getSystemIncludeRoots().addAll(spec.getSystemIncludeRoots());
-						newSpec.setSourceFiles(spec.getSourceFiles());
-						newSpec.setRemovedSourceFiles(spec.getRemovedSourceFiles());
-						newSpec.setMacros(spec.getMacros());
-						newSpec.setPositionIndependentCode(spec.isPositionIndependentCode());
-						newSpec.setDebuggable(spec.isDebuggable());
-						newSpec.setOptimized(spec.isOptimized());
-						newSpec.setIncrementalCompile(spec.isIncrementalCompile());
-						newSpec.setPrefixHeaderFile(spec.getPrefixHeaderFile());
-						newSpec.setPreCompiledHeaderObjectFile(spec.getPreCompiledHeaderObjectFile());
-						newSpec.setPreCompiledHeader(spec.getPreCompiledHeader());
-						newSpec.setSourceFilesForPch(spec.getSourceFilesForPch());
-						//endregion
-
-						newSpec.setSourceFiles(groupedOptions.getSourceFiles()); // set only the bucket source
-						newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
-
-						// Namespace the temporary directory (i.e. where the options.txt will be written)
-						newSpec.setTempDir(new File(spec.getTempDir(), groupedOptions.getUniqueId()));
-
-						// Configure the bucket spec from the per-source options
-						newSpec.args(groupedOptions.getOptions().getCompilerArgs().get());
-						for (CommandLineArgumentProvider argumentProvider : groupedOptions.getOptions().getCompilerArgumentProviders().get()) {
-							argumentProvider.asArguments().forEach(newSpec.getArgs()::add);
-						}
-
-						result.add((T) newSpec);
-					}
-					try {
-						((AutoCloseable) getSourceOptions()).close(); // release some memory
-					} catch (Exception e) {
-						throw new RuntimeException(e);
-					}
-					return result;
+			PerSourceCompiler.SourceSpecProvider<T> bucketSpecProvider = newSourceSpecProvider(spec, allOptions);
+			PerSourceCompiler.SourceSpecProvider<T> sourceSpecProvider = files -> {
+				Iterable<T> result = bucketSpecProvider.forFiles(files);
+				try {
+					((AutoCloseable) getSourceOptions()).close(); // release some memory
+				} catch (Exception e) {
+					throw new RuntimeException(e);
 				}
+				return result;
 			};
 			WorkQueue queue = executor.noIsolation();
 			perSourceCompiler = new PerSourceCompiler<>(baseCompiler, sourceSpecProvider, queue);
 
 			// region Patching BuildOperationExecutor
 			try {
-				Compiler<T> compiler = baseCompiler;
-				while (!(compiler instanceof AbstractCompiler)) {
-					if (compiler instanceof VersionAwareCompiler) {
-						compiler = readFieldValue(getField(compiler.getClass(), "compiler"), compiler);
-					} else if (compiler instanceof OutputCleaningCompiler) {
-						compiler = readFieldValue(getField(compiler.getClass(), "compiler"), compiler);
-					}
-				}
+				AbstractCompiler<?> compiler = Objects.requireNonNull(WorkListenerSupport.unwrap(baseCompiler), "could not find native tool");
 
 				updateFieldValue(getField(AbstractCompiler.class, "buildOperationExecutor"), compiler, objects.newInstance(WorkerBackedBuildOperationExecutor.class, queue));
 				getLogger().debug("Patching the build operation executor was successful, enjoy light speed compilation!");
@@ -316,6 +310,11 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			//endregion
 		}
 
+		WorkCompletionListener workListener = workListener();
+		if (workListener != null) {
+			WorkListenerSupport.instrument(baseCompiler, new WorkCompletionNotifier(getPath(), workListener, CompileWorkItem::new));
+		}
+
 		Compiler<T> transactionalCompiler = perSourceCompiler;
 		if (getOptions().getIncrementalAfterFailure().getOrElse(false) && spec.isIncrementalCompile()) {
 			transactionalCompiler = new TransactionalCompiler<>(perSourceCompiler, outputFileDir(baseCompiler), getObjects(), getFileOperations());
@@ -323,6 +322,56 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 		Compiler<T> incrementalCompiler = getIncrementalCompiler().createCompiler(transactionalCompiler);
 		Compiler<T> loggingCompiler = BuildOperationLoggingCompilerDecorator.wrap(incrementalCompiler);
 		return loggingCompiler.execute(spec);
+	}
+
+	private <T extends NativeCompileSpec> PerSourceCompiler.SourceSpecProvider<T> newSourceSpecProvider(T spec, SourceOptions<NativeCompileOptions> allOptions) {
+		return new PerSourceCompiler.SourceSpecProvider<T>() {
+			@Override
+			public Iterable<T> forFiles(Collection<File> files) {
+				List<T> result = new ArrayList<>();
+				for (SourceOptions.Group<NativeCompileOptions> groupedOptions : allOptions.forFiles(getObjects().fileCollection().from(files).getAsFileTree()).groupedByOptions()) {
+					NativeCompileSpec newSpec = createCompileSpec();
+
+					//region Copy default spec to new spec
+					newSpec.setTargetPlatform(spec.getTargetPlatform());
+					newSpec.setTempDir(spec.getTempDir());
+					newSpec.getArgs().addAll(spec.getArgs());
+					newSpec.getSystemArgs().addAll(spec.getSystemArgs());
+					newSpec.setOperationLogger(spec.getOperationLogger());
+
+					newSpec.setObjectFileDir(spec.getObjectFileDir());
+					newSpec.getIncludeRoots().addAll(spec.getIncludeRoots());
+					newSpec.getSystemIncludeRoots().addAll(spec.getSystemIncludeRoots());
+					newSpec.setSourceFiles(spec.getSourceFiles());
+					newSpec.setRemovedSourceFiles(spec.getRemovedSourceFiles());
+					newSpec.setMacros(spec.getMacros());
+					newSpec.setPositionIndependentCode(spec.isPositionIndependentCode());
+					newSpec.setDebuggable(spec.isDebuggable());
+					newSpec.setOptimized(spec.isOptimized());
+					newSpec.setIncrementalCompile(spec.isIncrementalCompile());
+					newSpec.setPrefixHeaderFile(spec.getPrefixHeaderFile());
+					newSpec.setPreCompiledHeaderObjectFile(spec.getPreCompiledHeaderObjectFile());
+					newSpec.setPreCompiledHeader(spec.getPreCompiledHeader());
+					newSpec.setSourceFilesForPch(spec.getSourceFilesForPch());
+					//endregion
+
+					newSpec.setSourceFiles(groupedOptions.getSourceFiles()); // set only the bucket source
+					newSpec.setRemovedSourceFiles(Collections.emptyList()); // do not remove any files
+
+					// Namespace the temporary directory (i.e. where the options.txt will be written)
+					newSpec.setTempDir(new File(spec.getTempDir(), groupedOptions.getUniqueId()));
+
+					// Configure the bucket spec from the per-source options
+					newSpec.args(groupedOptions.getOptions().getCompilerArgs().get());
+					for (CommandLineArgumentProvider argumentProvider : groupedOptions.getOptions().getCompilerArgumentProviders().get()) {
+						argumentProvider.asArguments().forEach(newSpec.getArgs()::add);
+					}
+
+					result.add((T) newSpec);
+				}
+				return result;
+			}
+		};
 	}
 
 	@Inject
@@ -361,6 +410,8 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		@Override
 		public <O extends BuildOperation> void runAll(BuildOperationWorker<O> worker, Action<BuildOperationQueue<O>> action) {
+			@Nullable WorkListenerSupport.NotifyingWorker<O> notifyingWorker = worker instanceof WorkListenerSupport.NotifyingWorker ? (WorkListenerSupport.NotifyingWorker<O>) worker : null;
+			BuildOperationWorker<O> toolWorker = notifyingWorker == null ? worker : notifyingWorker.getDelegate();
 			action.execute(new BuildOperationQueue<O>() {
 				@Override
 				public void add(O o) {
@@ -368,14 +419,17 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 					CommandLineToolInvocation invocation = (CommandLineToolInvocation) o;
 					queue.submit(CommandLineToolInvocationAction.class, spec -> {
+						if (notifyingWorker != null) {
+							spec.setExecution(notifyingWorker.newExecution(invocation));
+						}
 						spec.getEnvironment().set(invocation.getEnvironment());
 						spec.getPath().from(invocation.getPath());
 						spec.getWorkDirectory().set(invocation.getWorkDirectory());
 						spec.getArgs().addAll(invocation.getArgs());
 						spec.setLogger(invocation.getLogger());
 						spec.getDescription().set(invocation.description().build().getDisplayName());
-						spec.getExecutable().set(executableOf(worker));
-						spec.getName().set(nameOf(worker));
+						spec.getExecutable().set(executableOf(toolWorker));
+						spec.getName().set(nameOf(toolWorker));
 					});
 				}
 
@@ -494,6 +548,20 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 			public BuildOperationLogger getLogger() {
 				return IsolatableBuildOperationLogger.loggerOf(getLoggerId().get());
 			}
+
+			private static final Map<String, WorkCompletionNotifier.Execution> EXECUTIONS = new ConcurrentHashMap<>();
+
+			protected abstract Property<String> getExecutionId();
+
+			public void setExecution(WorkCompletionNotifier.Execution execution) {
+				String id = UUID.randomUUID().toString();
+				EXECUTIONS.put(id, execution);
+				getExecutionId().set(id);
+			}
+
+			public @Nullable WorkCompletionNotifier.Execution takeExecution() {
+				return getExecutionId().map(EXECUTIONS::remove).getOrNull();
+			}
 		}
 
 		private final ExecOperations execOperations;
@@ -505,6 +573,15 @@ import static dev.nokee.companion.features.TransactionalCompiler.outputFileDir;
 
 		@Override
 		public void execute() {
+			WorkCompletionNotifier.Execution execution = getParameters().takeExecution();
+			if (execution == null) {
+				invokeTool();
+			} else {
+				execution.run(this::invokeTool);
+			}
+		}
+
+		private void invokeTool() {
 			// Copied from DefaultCommandLineToolInvocationWorker#execute
 			StreamByteBuffer errOutput = new StreamByteBuffer();
 			StreamByteBuffer stdOutput = new StreamByteBuffer();

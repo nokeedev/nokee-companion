@@ -1,0 +1,28 @@
+// Quote an argument so xargs reads it back as a single argument
+def quote(String argument) {
+	return argument ==~ /[\w@%+=:,.\/-]+/ ? argument : "'" + argument.replace("'", "'\\''") + "'"
+}
+
+// Record only when the record property is present
+if (gradle.startParameter.projectProperties.containsKey('record')) {
+	def commandsFile = { gradle.rootProject.layout.buildDirectory.file('commands.txt').get().asFile }
+
+	// Start a new command file for each build
+	gradle.taskGraph.whenReady {
+		commandsFile().parentFile.mkdirs()
+		commandsFile().text = ''
+	}
+
+	// Before each task with a work plan executes, write one command per work item
+	gradle.taskGraph.beforeTask { task ->
+		if (task.hasProperty('workPlan')) {
+			def workPlan = task.workPlan.getOrNull()
+			def workItems = workPlan instanceof Collection ? workPlan : [workPlan] - null
+			workItems.each { workItem ->
+				def environment = workItem.environment.collect { key, value -> "${key}=${value}" }
+				def command = environment + [workItem.executable] + workItem.arguments
+				commandsFile() << command.collect { quote(it.toString()) }.join(' ') + '\n'
+			}
+		}
+	}
+}

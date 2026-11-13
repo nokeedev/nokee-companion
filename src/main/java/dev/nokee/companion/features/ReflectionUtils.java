@@ -1,10 +1,11 @@
 package dev.nokee.companion.features;
 
+import javax.annotation.Nullable;
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
-final class ReflectionUtils {
+public final class ReflectionUtils {
 	private ReflectionUtils() {}
 
 	public static <T extends AccessibleObject> T makeAccessible(T object) {
@@ -21,6 +22,16 @@ final class ReflectionUtils {
 		} catch (NoSuchFieldException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	public static @Nullable Field findField(Class<?> clazz, String fieldName) {
+		for (Class<?> type = clazz; type != null; type = type.getSuperclass()) {
+			try {
+				return type.getDeclaredField(fieldName);
+			} catch (NoSuchFieldException e) {
+			}
+		}
+		return null;
 	}
 
 	public static <T, R> R readFieldValue(Class<T> clazz, String fieldName, T instance) {

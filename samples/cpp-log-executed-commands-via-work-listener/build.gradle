@@ -1,0 +1,23 @@
+import dev.nokee.work.WorkCompletionListener
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
+
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.native-companion'
+}
+
+//region Register a work completion listener
+// Create the build service
+abstract class LogExecutedCommands implements BuildService<BuildServiceParameters.None>, WorkCompletionListener {
+	private static final Logger LOGGER = Logging.getLogger(LogExecutedCommands)
+
+	@Override
+	void onFinish(WorkCompletionListener.Event event) {
+		LOGGER.lifecycle(([event.workItem.executable] + event.workItem.arguments).join(' '))
+	}
+}
+
+// Register the build service under the well-known service name
+gradle.sharedServices.registerIfAbsent(WorkCompletionListener.SERVICE_NAME, LogExecutedCommands) {}
+//endregion

@@ -1,0 +1,4 @@
+plugins {
+	id 'cpp-application'
+	id 'dev.nokee.native-companion'
+}

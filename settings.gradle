@@ -21,5 +21,6 @@ sourceControlManagement {
 
 	gitRepository(uri("https://github.com/nokeedev/nokee-hamcrest.git"))
 	gitRepository(uri("https://github.com/gradle-plugins/gradle-build-script.git"))
-	gitRepository(uri("https://github.com/gradle-plugins/source-elements.git"))
+	gitRepository(uri("https://github.com/nokeedev/nokee-source-elements.git"))
+	gitRepository(uri("https://github.com/nokeedev/nokee-exemplar.git"))
 }

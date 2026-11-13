@@ -101,7 +101,7 @@ testing {
 			dependencies {
 				implementation gradleTestKit()
 				implementation 'commons-io:commons-io:latest.release'
-				implementation 'dev.gradleplugins.exemplar:commons-exemplar:latest.integration'
+				implementation 'dev.nokee.exemplar:nokee-exemplar'
 				implementation 'dev.nokee.commons:test-gradle-projects:latest.release'
 				implementation libs.hamcrest.core
 				implementation 'dev.gradleplugins:gradle-runner-kit:latest.release'
@@ -229,6 +229,9 @@ samples {
 	samples.register('cpp-with-c-sources')
 	samples.register('cpp-with-assembly-sources')
 	samples.register('cpp-link-avoidance')
+	samples.register('cpp-log-executed-commands-via-work-listener')
+	samples.register('cpp-record-replay-via-work-plan')
+	samples.register('cpp-compilation-database')
 	samples.register('cpp-gnu-coverage') {
 		source {
 			project('.').buildRoot()
