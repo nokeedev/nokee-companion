@@ -10,14 +10,14 @@ $ ./gradlew :app:outgoingVariants :lib:outgoingVariants
 > Task :app:outgoingVariants
 
 --------------------------------------------------
-Variant debugRuntimeElements (i)
+Variant debugRuntimeElements
 --------------------------------------------------
 
 Attributes
     - native-samples.built-with-toolchain = clang
 
 --------------------------------------------------
-Variant releaseRuntimeElements (i)
+Variant releaseRuntimeElements
 --------------------------------------------------
 
 Attributes
@@ -49,28 +49,28 @@ Secondary Variants (*)
         - build/headers/cpp-api-headers.zip (artifactType = zip, classifier = cpp-api-headers)
 
 --------------------------------------------------
-Variant debugLinkElements (i)
+Variant debugLinkElements
 --------------------------------------------------
 
 Attributes
     - native-samples.built-with-toolchain = clang
 
 --------------------------------------------------
-Variant debugRuntimeElements (i)
+Variant debugRuntimeElements
 --------------------------------------------------
 
 Attributes
     - native-samples.built-with-toolchain = clang
 
 --------------------------------------------------
-Variant releaseLinkElements (i)
+Variant releaseLinkElements
 --------------------------------------------------
 
 Attributes
     - native-samples.built-with-toolchain = clang
 
 --------------------------------------------------
-Variant releaseRuntimeElements (i)
+Variant releaseRuntimeElements
 --------------------------------------------------
 
 Attributes
