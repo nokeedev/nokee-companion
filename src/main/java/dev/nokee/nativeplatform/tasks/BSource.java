@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
-public class BSource {
+class BSource {
 	private final FileChannel channel;
 	private final long offset;
 

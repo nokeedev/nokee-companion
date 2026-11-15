@@ -5,7 +5,7 @@ import sun.misc.Unsafe;
 import java.lang.reflect.Field;
 import java.nio.MappedByteBuffer;
 
-public final class MappedBufferUtils {
+final class MappedBufferUtils {
     private static final Unsafe UNSAFE;
 
     static {
