@@ -128,6 +128,10 @@ public final class WorkObservabilityFixtures {
 		return withArgument(endsWith("/" + linkedFile));
 	}
 
+	public static Matcher<ObservedWorkItem> archiveOf(String archiveFile) {
+		return withArgument(endsWith("/" + archiveFile));
+	}
+
 	public static Matcher<ObservedWorkItem> withArgument(String argument) {
 		return withArgument(equalTo(argument));
 	}

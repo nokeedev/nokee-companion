@@ -24,5 +24,5 @@ Below are the key features included in this preview release:
 - Incremental after failure
 - Binary task extensions
 - Compile tasks extension [gradle/gradle-native#974](https://github.com/gradle/gradle-native/issues/974)
-- Work completion listener of compile and link tasks, notified of each work item they complete via a well-known build service
-- Work plan of compile and link tasks, listing all the work a task is responsible for
+- Work completion listener of compile, link and archive tasks, notified of each work item they complete via a well-known build service
+- Work plan of compile, link and archive tasks, listing all the work a task is responsible for

@@ -37,6 +37,7 @@ import java.util.Set;
 
 		plugins.apply("native-companion.replace-cpp-compile-task");
 		plugins.apply("native-companion.replace-link-tasks");
+		plugins.apply("native-companion.replace-create-task");
 		feature.apply("native-task-object-files-extension");
 		feature.apply("compile-tasks-extension");
 		plugins.apply(CppSourceFiles.Rule.class);
